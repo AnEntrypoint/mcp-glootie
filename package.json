@@ -1,6 +1,6 @@
 {
   "name": "mcp-repl",
-  "version": "1.0.91",
+  "version": "1.0.95",
   "description": "A secure JavaScript REPL server for MCP with comprehensive test coverage",
   "main": "simple-repl-server.js",
   "type": "module",
