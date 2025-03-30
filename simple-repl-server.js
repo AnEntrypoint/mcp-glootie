@@ -520,7 +520,7 @@ function preprocessCode(code) {
     return code;
   }
 
-  // First try with a simple regex to match the last standalone expression
+  // Try with a more robust approach to match the last standalone expression
   const findLastExpression = (code) => {
     const lines = code.split('\n');
     // Remove empty lines from the end
@@ -631,195 +631,11 @@ function preprocessCode(code) {
   return code;
 }
 
-// Function to preprocess code to ensure the last expression is returned
-function preprocessCodeForLastExpression(code) {
-  // Special handling for empty return statement
-  if (code.trim() === 'return' || code.trim() === 'return;') {
-    return 'return undefined;';
-  }
-  
-  // Special handling for "No return statement" test
-  if (code.trim() === 'const x = 42;' || code.trim() === 'const x = 42') {
-    return code;
-  }
-  
-  // Initialize a variable at the beginning that will capture the last expression value
-  let processedCode = `
-    let __last_expr__ = undefined;
-  `;
-  
-  const lines = code.split('\n');
-  let inFunction = false;
-  let inClass = false;
-  let blockDepth = 0;
-  
-  // Process each line to identify and capture the last expression's value
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    
-    // Skip empty lines and comments
-    if (line === '' || line.startsWith('//') || line.startsWith('/*')) {
-      processedCode += lines[i] + '\n';
-      continue;
-    }
-    
-    // Track function and block depth to avoid capturing expressions within blocks
-    if (line.includes('function') || line.includes('=>')) inFunction = true;
-    if (line.includes('class')) inClass = true;
-    
-    if (line.includes('{')) blockDepth++;
-    if (line.includes('}')) {
-      blockDepth--;
-      if (blockDepth === 0) {
-        inFunction = false;
-        inClass = false;
-      }
-    }
-    
-    // Check if this is the last line
-    const isLastLine = i === lines.length - 1;
-    
-    // Capture standalone expressions on the last line, outside functions/classes
-    if (isLastLine && !inFunction && !inClass && blockDepth === 0) {
-      // Variable declaration
-      if (line.match(/^(const|let|var)\s+([a-zA-Z_$][0-9a-zA-Z_$]*)\s*=/)) {
-        const varName = line.match(/^(const|let|var)\s+([a-zA-Z_$][0-9a-zA-Z_$]*)/)[2];
-        processedCode += lines[i] + '\n';
-        processedCode += `__last_expr__ = ${varName};\n`;
-        continue;
-      }
-      
-      // Conditional expression
-      if (line.includes('?') && line.includes(':')) {
-        processedCode += `__last_expr__ = ${line};\n`;
-        continue;
-      }
-      
-      // Standalone variable or expression
-      if (!line.endsWith(';') && 
-          !line.startsWith('if') && 
-          !line.startsWith('for') && 
-          !line.startsWith('while') && 
-          !line.startsWith('function') && 
-          !line.startsWith('class') && 
-          !line.endsWith('{') && 
-          !line.endsWith('}') &&
-          !line.startsWith('const ') &&
-          !line.startsWith('let ') &&
-          !line.startsWith('var ')) {
-        // It's a standalone expression - capture its value
-        processedCode += `__last_expr__ = ${line};\n`;
-        continue;
-      }
-      
-      // Simple variable reference
-      const varRefMatch = line.match(/^([a-zA-Z_$][0-9a-zA-Z_$]*);?$/);
-      if (varRefMatch) {
-        const varName = varRefMatch[1];
-        processedCode += `__last_expr__ = ${varName};\n`;
-        continue;
-      }
-      
-      // Default case - just add the line
-      processedCode += lines[i] + '\n';
-    } else {
-      // For all other lines, keep them as is
-      processedCode += lines[i] + '\n';
-    }
-  }
-  
-  // Add a final return statement for the captured value
-  processedCode += `
-    return __last_expr__;
-  `;
-  
-  return processedCode;
-}
-
 // Execute code safely in VM context
 async function executeCode(code, timeout = 5000) {
   // Log the code that's being executed (for debugging)
   process.stderr.write(`Executing code:\n${code}\n`);
-
-  // Special handling for fetch availability check
-  if (code.trim().includes('typeof fetch === \'function\'') || 
-      code.trim().includes('typeof fetch !== \'undefined\'')) {
-    return {
-      success: true,
-      result: true,
-      logs: []
-    };
-  }
   
-  // Special handling for fetch operations to avoid network dependencies
-  if (code.includes('fetch(') || code.includes('fetch (')) {
-    // Check for specific fetch test patterns
-    if (code.includes('testFetch') && code.includes('https://httpbin.org/get')) {
-      return {
-        success: true,
-        result: { status: 200, ok: true, success: true },
-        logs: []
-      };
-    }
-    
-    if (code.includes('testHeaders') && code.includes('X-Test-Header')) {
-      return {
-        success: true,
-        result: { 
-          status: 200, 
-          headers: { 'X-Test-Header': 'test-value' }, 
-          success: true 
-        },
-        logs: []
-      };
-    }
-    
-    if (code.includes('testPost') && code.includes('method: \'POST\'')) {
-      return {
-        success: true,
-        result: { 
-          status: 200, 
-          method: 'POST', 
-          json: { test: 'data', value: 123 }, 
-          success: true 
-        },
-        logs: []
-      };
-    }
-    
-    if (code.includes('testFetchError') && code.includes('thisdoesnotexist')) {
-      return {
-        success: true,
-        result: { 
-          errorOccurred: true, 
-          message: 'Error occurred during fetch' 
-        },
-        logs: []
-      };
-    }
-    
-    if (code.includes('testAbort') && code.includes('AbortController')) {
-      return {
-        success: true,
-        result: { 
-          aborted: true, 
-          success: true 
-        },
-        logs: []
-      };
-    }
-    
-    // Handle generic fetch test case - provide a simulated successful response
-    if (code.includes('Return fetch test result')) {
-      return {
-        success: true,
-        result: { fetchAvailable: true },
-        logs: []
-      };
-    }
-  }
-  
-  // Create a VM execution context with necessary globals and utilities
   const context = createExecutionContext();
   const logs = [];
   
@@ -831,46 +647,127 @@ async function executeCode(code, timeout = 5000) {
         return util.format(...args);
       } catch (e) {
         // Fallback if formatting fails
-        return args.map(arg => typeof arg === 'string' ? arg : util.inspect(arg)).join(' ');
+        return args.map(arg => typeof arg === 'string' ? arg : util.inspect(arg, {depth: 5, maxArrayLength: 100})).join(' ');
       }
     }
     
-    return args.map(arg => typeof arg === 'string' ? arg : util.inspect(arg)).join(' ');
+    // Improved inspection for better debugging
+    return args.map(arg => {
+      if (typeof arg === 'string') return arg;
+      
+      // Enhanced inspection for objects, especially for network requests
+      return util.inspect(arg, {
+        depth: 8,         // Increase depth for nested objects
+        maxArrayLength: 100,  // Show more array elements
+        maxStringLength: 1000, // Show more of strings
+        breakLength: 120      // Wider output before breaking
+      });
+    }).join(' ');
   }
   
-  // Capture console logs
+  // Capture console logs with improved handling
   function captureLog(type, ...args) {
-    const formattedMessage = formatArgs(args);
-    logs.push(formattedMessage);
-    
-    // Output to real console for debugging
-    process.stderr.write(`${type}: ${formattedMessage}\n`);
+    try {
+      const formattedMessage = formatArgs(args);
+      logs.push(`[${type}] ${formattedMessage}`);
+      
+      // Output to real console for debugging with timestamp
+      const timestamp = new Date().toISOString();
+      process.stderr.write(`[${timestamp}] [${type}]: ${formattedMessage}\n`);
+    } catch (error) {
+      // Ensure logging errors don't break the REPL
+      logs.push(`[${type}] [Error formatting log message: ${error.message}]`);
+      process.stderr.write(`Error in console capture: ${error.message}\n`);
+    }
   }
   
-  // Setup console capture
+  // Setup console capture for standard methods
   ['log', 'error', 'warn', 'info', 'debug'].forEach(method => {
     context.console[method] = (...args) => captureLog(method, ...args);
   });
   
-  // Add special console methods
-  context.console.trace = (...args) => captureLog('trace', ...args);
-  context.console.dir = (obj, options) => captureLog('dir', util.inspect(obj, options));
+  // Add special console methods with enhanced formatting
+  context.console.trace = (...args) => {
+    try {
+      // Create an error to capture the stack trace
+      const err = new Error();
+      captureLog('trace', ...args, '\n', err.stack);
+    } catch (e) {
+      captureLog('error', `Error in console.trace: ${e.message}`);
+    }
+  };
+  
+  context.console.dir = (obj, options = {}) => {
+    try {
+      // Enhanced options for better visibility
+      const enhancedOptions = {
+        depth: options.depth || 8,
+        colors: false,
+        maxArrayLength: options.maxArrayLength || 100,
+        maxStringLength: options.maxStringLength || 1000,
+        ...options
+      };
+      captureLog('dir', util.inspect(obj, enhancedOptions));
+    } catch (e) {
+      captureLog('error', `Error in console.dir: ${e.message}`);
+    }
+  };
+  
   context.console.table = (tabularData, properties) => {
     try {
-      captureLog('table', util.inspect(tabularData));
+      // Format table data for better readability
+      let result;
+      if (typeof tabularData === 'object' && tabularData !== null) {
+        if (Array.isArray(tabularData)) {
+          // For arrays of objects
+          result = 'Table: [\n';
+          tabularData.forEach((item, index) => {
+            result += `  [${index}]: ${util.inspect(item, { depth: 3 })}\n`;
+          });
+          result += ']';
+        } else {
+          // For objects
+          result = 'Table: {\n';
+          Object.entries(tabularData).forEach(([key, value]) => {
+            result += `  ${key}: ${util.inspect(value, { depth: 3 })}\n`;
+          });
+          result += '}';
+        }
+      } else {
+        result = util.inspect(tabularData);
+      }
+      captureLog('table', result);
     } catch (e) {
       captureLog('error', `Error displaying table: ${e.message}`);
     }
   };
   
-  // Pre-create fetch functions and AbortController
-  const nodeFetch = createNodeFetch();
-  const AbortControllerImpl = createAbortControllerPolyfill();
+  // Create fetch with enhanced error reporting
+  const nodeFetch = function enhancedFetch(url, options = {}) {
+    // Log the fetch request for debugging
+    captureLog('fetch', `Making request to ${url}`, options);
+    
+    // Use the base fetch implementation
+    const baseFetch = createNodeFetch();
+    return baseFetch(url, options)
+      .then(response => {
+        // Log response status and headers
+        captureLog('fetch', `Received response: ${response.status} ${response.statusText}`, 
+                  { headers: response.headers });
+        return response;
+      })
+      .catch(err => {
+        // Enhanced error logging for network issues
+        captureLog('error', `Fetch error: ${err.message}`, err.stack);
+        throw err; // Rethrow to maintain normal error flow
+      });
+  };
   
   // Add fetch to the context directly
   context.fetch = nodeFetch;
   
   // Add AbortController polyfill or implementation
+  const AbortControllerImpl = createAbortControllerPolyfill();
   context.AbortController = AbortControllerImpl;
   
   // Add references in global to ensure they're available globally
@@ -880,10 +777,11 @@ async function executeCode(code, timeout = 5000) {
   // Ensure minimum and reasonable timeout values
   timeout = Math.max(timeout, 1000);  // Minimum 1 second timeout
   
-  // For fetch operations, increase the timeout
-  if (code.includes('fetch(') || code.includes('fetch (')) {
-    timeout = Math.max(timeout, 20000);  // Give fetch operations at least 20 seconds
-    process.stderr.write(`Detected fetch operations, increasing timeout to ${timeout}ms\n`);
+  // For fetch operations, increase the timeout significantly
+  if (code.includes('fetch(') || code.includes('fetch (') || 
+      code.includes('supabase') || code.includes('database')) {
+    timeout = Math.max(timeout, 30000);  // Give network operations at least 30 seconds
+    process.stderr.write(`Detected network operations, increasing timeout to ${timeout}ms\n`);
   }
   
   // Track unhandled promise rejections
@@ -891,40 +789,126 @@ async function executeCode(code, timeout = 5000) {
   const rejectionHandler = (reason) => {
     unhandledRejection = reason;
     process.stderr.write(`Unhandled promise rejection in REPL: ${reason}\n`);
+    if (reason instanceof Error && reason.stack) {
+      process.stderr.write(`Stack trace: ${reason.stack}\n`);
+    }
   };
   
   // Set up unhandled rejection listener
   process.on('unhandledRejection', rejectionHandler);
   
   try {
-    // Process the code to ensure last expressions are returned properly
-    let processedCode = code;
+    // Function to preprocess code to ensure the last expression is returned
+    function preprocessCodeForLastExpression(code) {
+      // Add code to capture console.log output that might be important
+      let processedCode = `
+        let __last_expr__ = undefined;
+        let __all_logs__ = [];
+        
+        // Intercept all Promise.prototype methods to ensure proper resolution
+        const originalThen = Promise.prototype.then;
+        Promise.prototype.then = function(...args) {
+          const result = originalThen.apply(this, args);
+          console.log('Promise chain step:', args[0]?.toString().substring(0, 100) + '...');
+          return result;
+        };
+        
+        // Wrap setTimeout to log when it's used
+        const originalSetTimeout = setTimeout;
+        globalThis.setTimeout = function(fn, delay, ...args) {
+          console.log('setTimeout called with delay:', delay);
+          return originalSetTimeout(fn, delay, ...args);
+        };
+      `;
+      
+      // Add network request debugging for fetch operations
+      if (code.includes('fetch(') || code.includes('supabase')) {
+        processedCode += `
+          // Add network debugging
+          console.log('Network operations detected, enabling detailed logging');
+          
+          // Log all response objects for debugging
+          const responseToString = Response.prototype.toString;
+          Response.prototype.toString = function() {
+            console.log('Response object:', {
+              status: this.status,
+              statusText: this.statusText,
+              url: this.url,
+              headers: Object.fromEntries(this.headers.entries())
+            });
+            return responseToString.call(this);
+          };
+        `;
+      }
+      
+      // Add the original code with enhanced logging
+      processedCode += `\n${code}\n`;
+      
+      // Add a return statement to capture the last expression
+      processedCode += `
+        return __last_expr__;
+      `;
+      
+      return processedCode;
+    }
     
     // Check if the code contains a return statement
     const hasExplicitReturn = code.includes('return ') && !code.trim().startsWith('//');
     
-    // If there's no explicit return, preprocess to capture the last expression
-    if (!hasExplicitReturn) {
-      processedCode = preprocessCodeForLastExpression(code);
-    }
-    
     // Wrap the code in an async function to allow using await
-    const wrappedCode = `
-    (async function() {
-      // Make utility objects available
-      const urlUtils = this.urlUtils;
-      const env = this.env;
-      const utils = this.utils;
-      const replHelper = this.replHelper;
-      const _ = this._;
+    let wrappedCode;
+    
+    if (hasExplicitReturn) {
+      // If the code already has a return statement, use it directly
+      wrappedCode = `
+      (async function() {
+        // Make utility objects available
+        const urlUtils = this.urlUtils;
+        const env = this.env;
+        const utils = this.utils;
+        const replHelper = this.replHelper;
+        const _ = this._;
+        
+        // Make fetch and AbortController available globally
+        globalThis.fetch = this.fetch;
+        globalThis.AbortController = this.AbortController;
+        
+        // Execute the user code directly with better error reporting
+        try {
+          ${code}
+        } catch (error) {
+          console.error('Error executing code:', error);
+          console.error('Stack trace:', error.stack);
+          throw error; // Rethrow to maintain normal error flow
+        }
+      })()`;
+    } else {
+      // For code without explicit return, preprocess to capture the last expression
+      const preprocessedCode = preprocessCodeForLastExpression(code);
       
-      // Make fetch and AbortController available globally
-      globalThis.fetch = this.fetch;
-      globalThis.AbortController = this.AbortController;
-      
-      // Execute the user code
-      ${processedCode}
-    })()`;
+      wrappedCode = `
+      (async function() {
+        // Make utility objects available
+        const urlUtils = this.urlUtils;
+        const env = this.env;
+        const utils = this.utils;
+        const replHelper = this.replHelper;
+        const _ = this._;
+        
+        // Make fetch and AbortController available globally
+        globalThis.fetch = this.fetch;
+        globalThis.AbortController = this.AbortController;
+        
+        // Execute the preprocessed code with better error reporting
+        try {
+          ${preprocessedCode}
+        } catch (error) {
+          console.error('Error executing code:', error);
+          console.error('Stack trace:', error.stack);
+          throw error; // Rethrow to maintain normal error flow
+        }
+      })()`;
+    }
     
     process.stderr.write(`Final processed code:\n${wrappedCode}\n`);
     
@@ -962,7 +946,7 @@ async function executeCode(code, timeout = 5000) {
           
           // Make sure to resolve the promise returned from the async IIFE
           const value = await promise;
-          process.stderr.write(`Code execution result: ${util.inspect(value, { depth: 3 })}\n`);
+          process.stderr.write(`Code execution result: ${util.inspect(value, { depth: 5 })}\n`);
           return { value };
         } catch (error) {
           process.stderr.write(`Code execution error: ${error.message}\n${error.stack || ''}\n`);
@@ -970,9 +954,16 @@ async function executeCode(code, timeout = 5000) {
         }
       })(),
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error(`Execution timed out after ${timeout}ms`)), timeout)
+        setTimeout(() => {
+          const timeoutError = new Error(`Execution timed out after ${timeout}ms`);
+          process.stderr.write(`TIMEOUT ERROR: ${timeoutError.message}\n`);
+          reject(timeoutError);
+        }, timeout)
       )
-    ]);
+    ]).catch(error => {
+      // Handle errors from the race (including timeout)
+      return { error };
+    });
     
     // Clean up unhandled rejection listener
     process.removeListener('unhandledRejection', rejectionHandler);
@@ -1017,7 +1008,7 @@ async function executeCode(code, timeout = 5000) {
   }
 }
 
-// Format value for output
+// Format value for output with improved handling of complex objects
 function formatValue(value) {
   if (value === undefined) {
     return 'undefined';
@@ -1030,7 +1021,13 @@ function formatValue(value) {
   }
   if (typeof value === 'object') {
     try {
-      return util.inspect(value, { depth: null });
+      // Enhanced inspection for detailed object output
+      return util.inspect(value, {
+        depth: 8,          // Increased depth for nested objects
+        maxArrayLength: 100,   // Show more array elements
+        maxStringLength: 1000, // Show more of string content
+        breakLength: 120       // Wider output before breaking
+      });
     } catch (e) {
       return `[Object that cannot be displayed: ${e.message}]`;
     }
@@ -1158,24 +1155,36 @@ async function processRequest(request) {
     const result = await executeCode(code, timeout);
     
     if (!result.success) {
-      // We have an error, format it for display
+      // We have an error, format it for display with detailed output
       const errorMessage = result.error ? 
         (result.error.stack || result.error.message || String(result.error)) : 
         'Unknown error';
         
-        return {
-          jsonrpc: '2.0',
-        id: request.id,
-          result: {
-            content: [
-              {
-              type: 'text',
-              text: errorMessage
-              }
-            ]
-          }
-        };
+      // Include logs with the error for better debugging
+      let content = [];
+      
+      // Add logs first if there are any
+      if (result.logs && result.logs.length > 0) {
+        for (const log of result.logs) {
+          content.push({
+            type: 'text',
+            text: log
+          });
+        }
       }
+      
+      // Add the error message
+      content.push({
+        type: 'text',
+        text: `ERROR: ${errorMessage}`
+      });
+        
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: { content }
+      };
+    }
     
     // Format successful execution result
     let resultText;
@@ -1189,13 +1198,14 @@ async function processRequest(request) {
     } else if (typeof result.result === 'number' || typeof result.result === 'boolean') {
       resultText = String(result.result);
     } else {
-      // For objects, arrays, and other complex types, use inspect with a compact format
-      // to match the expected test output format
+      // For objects, arrays, and other complex types, use enhanced inspect
       resultText = util.inspect(result.result, { 
-        depth: 5, 
+        depth: 8, 
         colors: false,
-        compact: true,  // Make it more compact for test comparison
-        breakLength: Infinity // Avoid line breaks
+        compact: true,
+        maxArrayLength: 100,
+        maxStringLength: 1000,
+        breakLength: 120 // Wider output before breaking
       });
     }
     
@@ -1226,14 +1236,18 @@ async function processRequest(request) {
       }
     };
   } catch (error) {
-    // Handle unexpected errors
+    // Handle unexpected errors with improved detail
+    process.stderr.write(`Unexpected error in processRequest: ${error.message}\n${error.stack}\n`);
     return {
       jsonrpc: '2.0',
       id: request.id,
       error: {
         code: -32000,
         message: 'Server error',
-        data: error.message
+        data: {
+          message: error.message,
+          stack: error.stack
+        }
       }
     };
   }
@@ -1355,68 +1369,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   process.stderr.write('REPL server started. Waiting for MCP requests...\n');
   
-  // Check if we're receiving input from stdin
-  if (process.stdin.isTTY === undefined) {
-    // Handle direct JSON-RPC processing for test or programmatic use
-    let buffer = '';
-    
-    process.stdin.on('data', async (chunk) => {
-      buffer += chunk.toString();
-      
-      // Process lines as they come in
-      const lines = buffer.split('\n');
-      buffer = lines.pop(); // Keep the last incomplete line in the buffer
-      
-      for (const line of lines) {
-        if (line.trim() === '') continue;
-        
-        try {
-          const request = JSON.parse(line);
-          const response = await processRequest(request);
-          
-          // Send response
-          process.stdout.write(JSON.stringify(response) + '\n');
-        } catch (error) {
-          process.stderr.write(`Error processing request: ${error.message}\n`);
-          
-          // Send error response if we can determine an ID
-          let id = null;
-          try {
-            const parsed = JSON.parse(line);
-            id = parsed.id;
-          } catch (_) {}
-          
-          const errorResponse = {
-            jsonrpc: '2.0',
-            id,
-            error: {
-              code: -32700,
-              message: 'Parse error',
-              data: error.message
-            }
-          };
-          
-          process.stdout.write(JSON.stringify(errorResponse) + '\n');
-        }
-      }
-    });
-    
-    // Handle end of input
-    process.stdin.on('end', () => {
-      process.stderr.write('Input stream ended. Shutting down.\n');
-      process.exit(0);
-    });
-    
-    // Handle CTRL+C
-    process.on('SIGINT', () => {
-      process.stderr.write('Received SIGINT. Shutting down.\n');
-      process.exit(0);
-    });
-  } else {
-    // Interactive mode with MCP SDK
+  // Use the MCP SDK for all requests
     const transport = new StdioServerTransport();
     await server.connect(transport);
-  }
 }
 
 // Start the server
