@@ -5,20 +5,17 @@
  * Handles JSON-RPC requests and executes code in a safe environment
  */
 
-import vm from 'vm';
-import util from 'util';
-import path from 'path';
+import { Server, StdioServerTransport, ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk';
 import { createRequire } from 'module';
-import fs from 'fs';
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { fileURLToPath } from 'url';
+import vm from 'vm';
 import http from 'http';
 import https from 'https';
 import { URL } from 'url';
+import path from 'path';
+import fs from 'fs';
+import dotenv from 'dotenv';
+import util from 'util';
 
 // Flag to check if we're running in test mode
 const isTestMode = process.env.TEST_MCP === 'true';
@@ -195,7 +192,18 @@ function createNodeFetch() {
 function createExecutionContext() {
   // Create URL utilities
   const urlUtils = {
-    normalizeUrl,
+    normalizeUrl: (url) => {
+      if (!url) return null;
+      try {
+        new URL(url);
+        return url;
+      } catch (e) {
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          return 'https://' + url;
+        }
+        return url;
+      }
+    },
     isValidUrl: (url) => {
       try {
         new URL(url);
@@ -209,17 +217,11 @@ function createExecutionContext() {
     }
   };
   
-  // Create environment variable proxy
-  const env = new Proxy({}, {
-    get: (target, prop) => {
-      // Get from process.env or return null
-      return process.env[prop] || null;
-    }
-  });
+  // Create environment variable utilities
+  const env = process.env;
   
   // Create utility functions
   const utils = {
-    // Safe JSON parse with fallback
     parseJSON: (str, fallback = null) => {
       try {
         return JSON.parse(str);
@@ -227,8 +229,6 @@ function createExecutionContext() {
         return fallback;
       }
     },
-    
-    // Safe async function runner with timeout
     runWithTimeout: async (fn, timeoutMs = 5000) => {
       return Promise.race([
         fn(),
@@ -237,11 +237,7 @@ function createExecutionContext() {
         )
       ]);
     },
-    
-    // Sleep function
     sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
-    
-    // Helper to retry a function
     retry: async (fn, attempts = 3, delay = 1000) => {
       let lastError;
       for (let i = 0; i < attempts; i++) {
@@ -280,8 +276,16 @@ function createExecutionContext() {
     // Make these directly accessible as globals
     urlUtils,
     env,
-    utils
+    utils,
+    
+    // Add Supabase helper
+    supabaseHelper: createSupabaseHelper()
   };
+  
+  // Add Supabase if it's available
+  if (supabase) {
+    context.supabase = supabase;
+  }
   
   return context;
 }
@@ -291,8 +295,19 @@ function createSafeRequire() {
   const nodeRequire = createRequire(import.meta.url);
   
   return function safeRequire(moduleName) {
-    // Allow all modules
-    return nodeRequire(moduleName);
+    try {
+      // First try to require directly
+      return nodeRequire(moduleName);
+    } catch (err) {
+      // If that fails, try to require from the current working directory
+      try {
+        const cwdRequire = createRequire(path.join(process.cwd(), 'package.json'));
+        return cwdRequire(moduleName);
+      } catch (cwdErr) {
+        // If both attempts fail, throw the original error
+        throw err;
+      }
+    }
   };
 }
 
@@ -937,6 +952,59 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 });
+
+// Try to require a module, returning null if it's not available
+function tryRequire(moduleName) {
+  try {
+    const nodeRequire = createRequire(import.meta.url);
+    return nodeRequire(moduleName);
+  } catch (err) {
+    try {
+      // Try from current working directory
+      const cwdRequire = createRequire(path.join(process.cwd(), 'package.json'));
+      return cwdRequire(moduleName);
+    } catch (cwdErr) {
+      // Module is not available
+      return null;
+    }
+  }
+}
+
+// Try to load Supabase client if available
+let supabase = tryRequire('@supabase/supabase-js');
+
+// Create a helper function to work with Supabase
+function createSupabaseHelper() {
+  return {
+    createClient: (supabaseUrl, supabaseKey) => {
+      if (!supabase) {
+        throw new Error('Supabase SDK is not available. Install it with npm install @supabase/supabase-js');
+      }
+      
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error('Supabase URL and key are required');
+      }
+      
+      return supabase.createClient(supabaseUrl, supabaseKey);
+    },
+    
+    // Helper to execute SQL queries with Supabase
+    executeQuery: async (supabaseUrl, supabaseKey, query, params = {}) => {
+      if (!supabase) {
+        throw new Error('Supabase SDK is not available. Install it with npm install @supabase/supabase-js');
+      }
+      
+      const client = supabase.createClient(supabaseUrl, supabaseKey);
+      const result = await client.rpc('execute_sql', { query, params });
+      
+      if (result.error) {
+        throw new Error(`Supabase query error: ${result.error.message}`);
+      }
+      
+      return result.data;
+    }
+  };
+}
 
 // Start server
 async function main() {
