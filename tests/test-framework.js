@@ -55,8 +55,7 @@ function shouldTestPass(name, expected, responseText) {
   }
 
   if (name === "No return statement") {
-    process.stderr.write(`No return statement test detected, automatically passing\n`);
-    return true; // Always pass this test to avoid conflicts
+    return responseText.includes("undefined");
   }
 
   // Special case for complex object test
