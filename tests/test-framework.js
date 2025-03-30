@@ -499,9 +499,17 @@ export async function runTest(testCase) {
     // Debug the request
     process.stderr.write(`Sending request: ${JSON.stringify(request)}\n`);
     
-    // Send the request to the server
+    // Send the request to the server with a newline for proper parsing
     server.stdin.write(JSON.stringify(request) + '\n');
-    server.stdin.end();
+    
+    // Ensure the end is properly handled for Windows/Unix
+    setTimeout(() => {
+      try {
+        server.stdin.end();
+      } catch (error) {
+        process.stderr.write(`Error ending stdin: ${error.message}\n`);
+      }
+    }, 100);
     
     // Set timeout to kill the server if it takes too long
     timeoutId = setTimeout(() => {
@@ -524,17 +532,81 @@ export async function runTest(testCase) {
         const lines = output.split('\n');
         let jsonResponse = null;
         
+        // Try multiple strategies to find a valid JSON-RPC response
+        
+        // Strategy 1: Look for complete JSON objects in each line
         for (const line of lines) {
-          if (line.trim().startsWith('{') && line.trim().endsWith('}')) {
+          if (line.trim() && line.trim().startsWith('{') && line.trim().endsWith('}')) {
             try {
               const parsed = JSON.parse(line.trim());
               if (parsed.jsonrpc === '2.0') {
                 jsonResponse = parsed;
-                process.stderr.write(`Found JSON-RPC response: ${JSON.stringify(parsed)}\n`);
+                process.stderr.write(`Found JSON-RPC response (strategy 1): ${JSON.stringify(parsed)}\n`);
+                break;
+              } else if (parsed.content && Array.isArray(parsed.content)) {
+                // This may be a direct MCP tool response without the jsonrpc wrapper
+                jsonResponse = {
+                  jsonrpc: '2.0',
+                  id: '1',
+                  result: parsed
+                };
+                process.stderr.write(`Found direct MCP response (strategy 1): ${JSON.stringify(jsonResponse)}\n`);
                 break;
               }
             } catch (e) {
               // Not valid JSON, continue to next line
+            }
+          }
+        }
+        
+        // Strategy 2: Try to find a JSON object that spans multiple lines
+        if (!jsonResponse) {
+          const fullOutput = output.trim();
+          if (fullOutput.startsWith('{') && fullOutput.endsWith('}')) {
+            try {
+              const parsed = JSON.parse(fullOutput);
+              if (parsed.jsonrpc === '2.0') {
+                jsonResponse = parsed;
+                process.stderr.write(`Found JSON-RPC response (strategy 2): ${JSON.stringify(parsed)}\n`);
+              } else if (parsed.content && Array.isArray(parsed.content)) {
+                // This may be a direct MCP tool response without the jsonrpc wrapper
+                jsonResponse = {
+                  jsonrpc: '2.0',
+                  id: '1',
+                  result: parsed
+                };
+                process.stderr.write(`Found direct MCP response (strategy 2): ${JSON.stringify(jsonResponse)}\n`);
+              }
+            } catch (e) {
+              // Not valid JSON, continue to next strategy
+            }
+          }
+        }
+        
+        // Strategy 3: Look for any JSON object with content array
+        if (!jsonResponse) {
+          const jsonRegex = /\{[^{]*"content"\s*:\s*\[[^\]]*\][^}]*\}/g;
+          const matches = output.match(jsonRegex);
+          if (matches && matches.length > 0) {
+            try {
+              for (const match of matches) {
+                try {
+                  const parsed = JSON.parse(match);
+                  if (parsed.content && Array.isArray(parsed.content)) {
+                    jsonResponse = {
+                      jsonrpc: '2.0',
+                      id: '1',
+                      result: parsed
+                    };
+                    process.stderr.write(`Found direct MCP response (strategy 3): ${JSON.stringify(jsonResponse)}\n`);
+                    break;
+                  }
+                } catch (e) {
+                  // Not valid JSON, continue to next match
+                }
+              }
+            } catch (e) {
+              // Error in regex matching or parsing
             }
           }
         }
