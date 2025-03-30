@@ -33,6 +33,8 @@ function loadEnvFile(directory) {
       const envContent = fs.readFileSync(envPath, 'utf8');
       const envLines = envContent.split('\n');
       
+      let loadedCount = 0;
+      
       for (const line of envLines) {
         const trimmedLine = line.trim();
         // Skip comments and empty lines
@@ -51,13 +53,33 @@ function loadEnvFile(directory) {
             // Only set if not already defined
             if (!process.env[key]) {
               process.env[key] = value;
-              process.stderr.write(`Set environment variable: ${key}\n`);
+              loadedCount++;
             }
           }
         }
       }
       
+      process.stderr.write(`Loaded ${loadedCount} environment variables from ${envPath}\n`);
+      
+      // Log key environment variables for troubleshooting (but mask sensitive values)
+      const keysToCheck = ['NODE_ENV', 'SUPABASE_URL'];
+      for (const key of keysToCheck) {
+        if (process.env[key]) {
+          process.stderr.write(`Found environment variable: ${key}=${process.env[key]}\n`);
+        }
+      }
+      
+      // Check for presence of sensitive keys without revealing values
+      const sensitiveKeys = ['SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_ANON_KEY'];
+      for (const key of sensitiveKeys) {
+        if (process.env[key]) {
+          process.stderr.write(`Found sensitive environment variable: ${key}=<value hidden>\n`);
+        }
+      }
+      
       return true;
+    } else {
+      process.stderr.write(`No .env file found at ${envPath}\n`);
     }
   } catch (error) {
     process.stderr.write(`Error loading .env file: ${error.message}\n`);
@@ -123,15 +145,30 @@ function createNodeFetch() {
         const isHttps = parsedUrl.protocol === 'https:';
         const client = isHttps ? https : http;
         
+        // Set reasonable defaults for timeouts
+        const requestTimeout = options.timeout || 30000;
+        
+        // Create a separate timeout for the entire operation
+        const timeoutId = setTimeout(() => {
+          if (req) {
+            req.destroy();
+          }
+          reject(new Error(`Fetch operation timed out after ${requestTimeout}ms`));
+        }, requestTimeout);
+        
+        // Prepare request options
         const requestOptions = {
           hostname: parsedUrl.hostname,
           port: parsedUrl.port || (isHttps ? 443 : 80),
           path: `${parsedUrl.pathname}${parsedUrl.search}`,
           method: options.method || 'GET',
           headers: options.headers || {},
-          timeout: options.timeout || 30000
+          timeout: requestTimeout / 2 // Set socket timeout to half the total timeout
         };
         
+        process.stderr.write(`Fetching ${normalizedUrl} with method ${requestOptions.method}\n`);
+        
+        // Make the request
         const req = client.request(requestOptions, (res) => {
           let body = '';
           const buffers = [];
@@ -142,8 +179,11 @@ function createNodeFetch() {
           });
           
           res.on('end', () => {
+            clearTimeout(timeoutId);
+            
             const bodyBuffer = Buffer.concat(buffers);
             
+            // Create a response object similar to the fetch API
             const response = {
               ok: res.statusCode >= 200 && res.statusCode < 300,
               status: res.statusCode,
@@ -164,19 +204,25 @@ function createNodeFetch() {
               bodyBuffer: bodyBuffer
             };
             
+            process.stderr.write(`Fetch completed with status ${res.statusCode}\n`);
             resolve(response);
           });
         });
         
         req.on('error', (err) => {
+          clearTimeout(timeoutId);
+          process.stderr.write(`Fetch network error: ${err.message}\n`);
           reject(new Error(`Fetch error: ${err.message}`));
         });
         
         req.on('timeout', () => {
+          clearTimeout(timeoutId);
           req.destroy();
-          reject(new Error('Fetch timeout'));
+          process.stderr.write(`Fetch socket timeout\n`);
+          reject(new Error('Fetch socket timeout'));
         });
         
+        // Add body if provided
         if (options.body) {
           const bodyData = typeof options.body === 'string' 
             ? options.body 
@@ -186,6 +232,7 @@ function createNodeFetch() {
         
         req.end();
       } catch (err) {
+        process.stderr.write(`Fetch initialization error: ${err.message}\n`);
         reject(new Error(`Fetch initialization error: ${err.message}`));
       }
     });
@@ -306,8 +353,15 @@ function createExecutionContext() {
   // Create environment variable proxy
   const env = new Proxy({}, {
     get: (target, prop) => {
-      // Get from process.env or return null
-      return process.env[prop] || null;
+      // Log access to environment variables to help with debugging
+      const value = process.env[prop] || null;
+      if (prop.includes('KEY') || prop.includes('SECRET') || prop.includes('PASSWORD')) {
+        // Don't log the actual value for sensitive variables
+        process.stderr.write(`Accessing sensitive environment variable: ${prop}=${value ? '<value hidden>' : 'null'}\n`);
+      } else {
+        process.stderr.write(`Accessing environment variable: ${prop}=${value}\n`);
+      }
+      return value;
     }
   });
   
@@ -552,11 +606,19 @@ async function executeCode(code, timeout = 5000) {
     }
   };
   
+  // Pre-create fetch functions and AbortController
+  const nodeFetch = createNodeFetch();
+  const AbortControllerImpl = createAbortControllerPolyfill();
+  
   // Add fetch to the context directly
-  context.fetch = createNodeFetch();
+  context.fetch = nodeFetch;
   
   // Add AbortController polyfill or implementation
-  context.AbortController = createAbortControllerPolyfill();
+  context.AbortController = AbortControllerImpl;
+  
+  // Add references in global to ensure they're available globally
+  context.global.fetch = nodeFetch;
+  context.global.AbortController = AbortControllerImpl;
   
   // Ensure minimum and reasonable timeout values
   // Increase default timeout to give async operations more time
@@ -583,20 +645,25 @@ async function executeCode(code, timeout = 5000) {
     // with additional error handling for better results
     const processedCode = `(async () => { 
       try {
-        // Make utility objects available as globals
+        // Make utility objects available as globals without redeclaring them
         const urlUtils = this.urlUtils;
         const env = this.env;
         const utils = this.utils;
         const replHelper = this.replHelper;
         const _ = this._;
-        const fetch = this.fetch;
-        const AbortController = this.AbortController;
         
-        // Set global fetch for compatibility
-        if (typeof globalThis !== 'undefined') {
-          globalThis.fetch = fetch;
-          globalThis.AbortController = AbortController;
-        }
+        // Explicitly set global fetch and AbortController to handle issues with declaration
+        Object.defineProperty(globalThis, 'fetch', { 
+          value: this.fetch,
+          writable: true,
+          configurable: true 
+        });
+        
+        Object.defineProperty(globalThis, 'AbortController', { 
+          value: this.AbortController,
+          writable: true,
+          configurable: true
+        });
         
         ${code}
       } catch(e) {
@@ -604,17 +671,21 @@ async function executeCode(code, timeout = 5000) {
       }
     })()`;
     
-    // Setup dynamic import handler
+    // Setup dynamic import handler with better error reporting
     const importModuleDynamically = async (specifier) => {
       try {
         // For relative paths, resolve to working directory
         if (specifier.startsWith('./') || specifier.startsWith('../')) {
-          const resolved = path.resolve(process.cwd(), specifier);
+          const workingDir = process.argv[2] || process.cwd();
+          const resolved = path.resolve(workingDir, specifier);
+          process.stderr.write(`Resolving import from working directory: ${resolved}\n`);
           return await import(resolved);
         }
         // For node modules or absolute paths
+        process.stderr.write(`Importing module: ${specifier}\n`);
         return await import(specifier);
       } catch (error) {
+        process.stderr.write(`Import error for '${specifier}': ${error.message}\n`);
         throw new Error(`Failed to import '${specifier}': ${error.message}`);
       }
     };
