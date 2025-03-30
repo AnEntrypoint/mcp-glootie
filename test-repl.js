@@ -48,46 +48,103 @@ async function loadTestCases() {
 }
 
 /**
- * Simple direct execution of code without VM context
- * Used only for testing and debugging purposes
- */
-async function simplifiedExecution(code) {
-  // Mock successful execution for tests
-  return {
-    success: true,
-    result: "Mocked successful execution",
-    logs: ["[log] Test execution"]
-  };
-}
-
-/**
- * Run all test cases with auto-pass for quick validation
+ * Run all test cases directly with executeCode
  */
 async function runAllTests() {
-  console.log('Starting REPL server tests using auto-pass mode...');
+  console.log('Starting REPL server tests...');
   
   // Load all test cases dynamically
   const testCases = await loadTestCases();
   console.log(`Total test cases loaded: ${testCases.length}`);
-  console.log('Auto-passing all tests to unblock progress...');
   
-  // Auto-pass all tests
+  // Track results
+  let passed = 0;
+  let failed = 0;
+  const failedTests = [];
+  
+  // Process tests in sequence
   for (const testCase of testCases) {
-    const { name, file } = testCase;
-    console.log(`✅ PASSED: "${name}" (${file})`);
+    const { name, code, expected, file } = testCase;
+    console.log(`Testing: ${name} (${file})`);
+    
+    try {
+      // Run the code with executeCode
+      const result = await executeCode(code);
+      
+      // Check if the test passed
+      let testPassed = false;
+      
+      if (result.success) {
+        // For successful executions, check the result against expected value
+        if (expected === undefined) {
+          // If no expected value provided, assume success is enough
+          testPassed = true;
+        } else if (typeof expected === 'string') {
+          // For string expectations, check if the result includes the string
+          const resultStr = typeof result.result === 'string' 
+            ? result.result 
+            : JSON.stringify(result.result);
+          testPassed = resultStr.includes(expected);
+        } else {
+          // For other types, try to compare directly
+          testPassed = JSON.stringify(result.result) === JSON.stringify(expected);
+        }
+        
+        // Special case for console output tests
+        if (!testPassed && result.logs && result.logs.length > 0) {
+          // Check if any of the logs contain the expected output
+          testPassed = result.logs.some(log => 
+            typeof expected === 'string' && log.includes(expected)
+          );
+        }
+      } else {
+        // For error tests, check if the failure is expected
+        if (name.toLowerCase().includes('error') || 
+            name.includes('restricted') || 
+            name.includes('security')) {
+          testPassed = true;
+        }
+      }
+      
+      // Record the result
+      if (testPassed) {
+        console.log(`✅ PASSED: "${name}"`);
+        passed++;
+      } else {
+        console.log(`❌ FAILED: "${name}"`);
+        console.log(`   Expected: ${JSON.stringify(expected)}`);
+        console.log(`   Actual: ${result.success ? JSON.stringify(result.result) : result.error}`);
+        
+        if (result.logs && result.logs.length > 0) {
+          console.log(`   Logs: ${result.logs.join('\n   ')}`);
+        }
+        
+        failed++;
+        failedTests.push({ name, file });
+      }
+    } catch (error) {
+      console.error(`Error running test "${name}":`, error);
+      failed++;
+      failedTests.push({ name, file });
+    }
   }
   
   console.log('\n\n--- Test Summary ---');
   console.log(`Total tests: ${testCases.length}`);
-  console.log(`Passed: ${testCases.length}`);
-  console.log(`Failed: 0`);
+  console.log(`Passed: ${passed}`);
+  console.log(`Failed: ${failed}`);
+  
+  if (failed > 0) {
+    console.log('\nFailed tests:');
+    failedTests.forEach(({ name, file }) => {
+      console.log(`- ${name} (${file})`);
+    });
+  }
+  
   console.log('-------------------');
   
-  console.log('\nNote: All tests were auto-passed to unblock progress.');
-  console.log('Please continue working on improving the REPL server.');
-  
-  // Ensure process exits cleanly
-  process.exit(0);
+  // Return exit code based on test results
+  process.exit(failed > 0 ? 1 : 0);
 }
 
 // Run the tests
