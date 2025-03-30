@@ -5,23 +5,65 @@
  * Handles JSON-RPC requests and executes code in a safe environment
  */
 
-import { Server, StdioServerTransport, ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk';
-import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
 import vm from 'vm';
+import util from 'util';
+import path from 'path';
+import { createRequire } from 'module';
+import fs from 'fs';
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import http from 'http';
 import https from 'https';
 import { URL } from 'url';
-import path from 'path';
-import fs from 'fs';
-import dotenv from 'dotenv';
-import util from 'util';
 
 // Flag to check if we're running in test mode
 const isTestMode = process.env.TEST_MCP === 'true';
 
-// Store the original working directory
-const ORIGINAL_CWD = process.cwd();
+// Try to load environment variables from .env file
+function loadEnvFile(directory) {
+  try {
+    const envPath = path.join(directory, '.env');
+    if (fs.existsSync(envPath)) {
+      process.stderr.write(`Loading .env file from ${envPath}\n`);
+      const envContent = fs.readFileSync(envPath, 'utf8');
+      const envLines = envContent.split('\n');
+      
+      for (const line of envLines) {
+        const trimmedLine = line.trim();
+        // Skip comments and empty lines
+        if (trimmedLine && !trimmedLine.startsWith('#')) {
+          const match = trimmedLine.match(/^([^=]+)=(.*)$/);
+          if (match) {
+            const key = match[1].trim();
+            let value = match[2].trim();
+            
+            // Remove quotes if present
+            if ((value.startsWith('"') && value.endsWith('"')) || 
+                (value.startsWith("'") && value.endsWith("'"))) {
+              value = value.substring(1, value.length - 1);
+            }
+            
+            // Only set if not already defined
+            if (!process.env[key]) {
+              process.env[key] = value;
+              process.stderr.write(`Set environment variable: ${key}\n`);
+            }
+          }
+        }
+      }
+      
+      return true;
+    }
+  } catch (error) {
+    process.stderr.write(`Error loading .env file: ${error.message}\n`);
+  }
+  
+  return false;
+}
 
 // Check for working directory in argv[2]
 const workingDirectory = process.argv[2];
@@ -46,53 +88,6 @@ if (workingDirectory) {
 } else {
   // If no working directory specified, try current directory
   loadEnvFile(process.cwd());
-}
-
-// Global polyfills for compatibility
-if (typeof globalThis.AbortController === 'undefined') {
-  const AbortControllerPolyfill = function() {
-    this.signal = {
-      aborted: false,
-      addEventListener: function() {},
-      removeEventListener: function() {},
-      dispatchEvent: function() { return false; }
-    };
-    this.abort = function() {
-      this.signal.aborted = true;
-    };
-  };
-  
-  globalThis.AbortController = AbortControllerPolyfill;
-}
-
-// Try to load environment variables from .env file
-function loadEnvFile(directory) {
-  try {
-    const envPath = path.join(directory, '.env');
-    if (fs.existsSync(envPath)) {
-      process.stderr.write(`Loading .env file from: ${envPath}\n`);
-      dotenv.config({ path: envPath });
-      
-      // Log available environment variables (hiding sensitive values)
-      const envVars = Object.keys(process.env)
-        .filter(key => key.includes('SUPABASE') || key.includes('DATABASE') || key.includes('API'))
-        .map(key => {
-          const value = process.env[key];
-          const displayValue = value && value.length > 10 ? '[REDACTED]' : value;
-          return `${key}: ${displayValue}`;
-        });
-      
-      if (envVars.length > 0) {
-        process.stderr.write(`Available environment variables: [\n  '${envVars.join("',\n  '")}'\n]\n`);
-      }
-      
-      return true;
-    }
-  } catch (error) {
-    process.stderr.write(`Error loading .env file: ${error.message}\n`);
-  }
-  
-  return false;
 }
 
 // Helper to ensure URL is absolute
@@ -196,22 +191,104 @@ function createNodeFetch() {
   };
 }
 
+// Create a polyfill for AbortController if not available
+function createAbortControllerPolyfill() {
+  if (typeof global.AbortController === 'function') {
+    return global.AbortController;
+  }
+  
+  // Simple polyfill for AbortController
+  class AbortControllerPolyfill {
+    constructor() {
+      this.signal = {
+        aborted: false,
+        addEventListener: (type, listener) => {
+          if (type === 'abort') {
+            this._listeners = this._listeners || [];
+            this._listeners.push(listener);
+          }
+        },
+        removeEventListener: (type, listener) => {
+          if (type === 'abort' && this._listeners) {
+            const index = this._listeners.indexOf(listener);
+            if (index !== -1) {
+              this._listeners.splice(index, 1);
+            }
+          }
+        }
+      };
+    }
+    
+    abort() {
+      this.signal.aborted = true;
+      if (this._listeners) {
+        const event = { type: 'abort' };
+        this._listeners.forEach(listener => listener(event));
+      }
+    }
+  }
+  
+  return AbortControllerPolyfill;
+}
+
+// Create a simple REPL helper utility
+function createReplHelper() {
+  return {
+    // Helper for returning values from REPL
+    return_: function(value) {
+      return value;
+    },
+    
+    // Shorthand alias for return_
+    _: function(value) {
+      return value;
+    },
+    
+    // Run async function and handle errors
+    async_run: async function(fn) {
+      try {
+        return await fn();
+      } catch (error) {
+        console.error('Error in async_run:', error);
+        throw error;
+      }
+    },
+    
+    // Fetch JSON data from a URL
+    fetchJson: async function(url, options = {}) {
+      try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+          throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+        }
+        return await response.json();
+      } catch (error) {
+        console.error(`Error fetching JSON from ${url}:`, error);
+        throw error;
+      }
+    },
+    
+    // Fetch text from a URL
+    fetchText: async function(url, options = {}) {
+      try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+          throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+        }
+        return await response.text();
+      } catch (error) {
+        console.error(`Error fetching text from ${url}:`, error);
+        throw error;
+      }
+    }
+  };
+}
+
 // Create a secure context for code execution
 function createExecutionContext() {
   // Create URL utilities
   const urlUtils = {
-    normalizeUrl: (url) => {
-      if (!url) return null;
-      try {
-        new URL(url);
-        return url;
-      } catch (e) {
-        if (!url.startsWith('http://') && !url.startsWith('https://')) {
-          return 'https://' + url;
-        }
-        return url;
-      }
-    },
+    normalizeUrl,
     isValidUrl: (url) => {
       try {
         new URL(url);
@@ -225,11 +302,17 @@ function createExecutionContext() {
     }
   };
   
-  // Create environment variable utilities
-  const env = process.env;
+  // Create environment variable proxy
+  const env = new Proxy({}, {
+    get: (target, prop) => {
+      // Get from process.env or return null
+      return process.env[prop] || null;
+    }
+  });
   
   // Create utility functions
   const utils = {
+    // Safe JSON parse with fallback
     parseJSON: (str, fallback = null) => {
       try {
         return JSON.parse(str);
@@ -237,6 +320,8 @@ function createExecutionContext() {
         return fallback;
       }
     },
+    
+    // Safe async function runner with timeout
     runWithTimeout: async (fn, timeoutMs = 5000) => {
       return Promise.race([
         fn(),
@@ -245,7 +330,11 @@ function createExecutionContext() {
         )
       ]);
     },
+    
+    // Sleep function
     sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
+    
+    // Helper to retry a function
     retry: async (fn, attempts = 3, delay = 1000) => {
       let lastError;
       for (let i = 0; i < attempts; i++) {
@@ -259,73 +348,10 @@ function createExecutionContext() {
         }
       }
       throw lastError;
-    },
-    
-    // Helper to create a service proxy for API testing
-    createServiceProxy: (endpoint, headers = {}, timeout = 30000) => {
-      if (!endpoint) throw new Error('Endpoint URL is required');
-      
-      const normalizedEndpoint = urlUtils.normalizeUrl(endpoint);
-      if (!normalizedEndpoint) throw new Error('Invalid endpoint URL');
-      
-      return {
-        endpoint: normalizedEndpoint,
-        headers: {
-          'Content-Type': 'application/json',
-          ...headers
-        },
-        timeout,
-        
-        // Method to make requests to the service
-        async makeRequest(method, params) {
-          console.log(`[INFO] Making request to ${this.endpoint} ${typeof params === 'object' ? JSON.stringify(params) : params}`);
-          try {
-            const response = await fetch(this.endpoint, {
-              method: 'POST',
-              headers: this.headers,
-              body: JSON.stringify({
-                method,
-                params
-              })
-            });
-            
-            console.log(`[INFO] Response status: ${response.status}`);
-            const data = await response.json();
-            return data;
-          } catch (error) {
-            console.error(`[ERROR] Error making request: ${error.message}`);
-            throw error;
-          }
-        }
-      };
-    },
-    
-    // Helper to create Supabase service proxies
-    createSupabaseProxies: (supabaseUrl, apiKey) => {
-      if (!supabaseUrl) throw new Error('Supabase URL is required');
-      if (!apiKey) throw new Error('Supabase API key is required');
-      
-      const normalizedUrl = urlUtils.normalizeUrl(supabaseUrl);
-      if (!normalizedUrl) throw new Error('Invalid Supabase URL');
-      
-      const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      };
-      
-      return {
-        supabase: utils.createServiceProxy(`${normalizedUrl}/functions/v1/wrappedsupabase`, headers),
-        keystore: utils.createServiceProxy(`${normalizedUrl}/functions/v1/wrappedkeystore`, headers)
-      };
-    },
-    
-    // Helper for accessing environment variables with defaults
-    getEnv: (name, defaultValue = null) => {
-      return process.env[name] || defaultValue;
     }
   };
   
-  // Base context with safe access to core modules and functions
+  // Base context with full access to core modules and functions
   const context = {
     console: {}, // Will be replaced with captured console
     process,
@@ -343,49 +369,43 @@ function createExecutionContext() {
     __filename: 'repl-execution.js',
     global: globalThis,
     fetch: createNodeFetch(), // Add fetch implementation
-    
-    // AbortController polyfill
-    AbortController: globalThis.AbortController,
-    
-    // Helper for working with promises
-    _: (value) => value, // Simple identity function for promise returns
+    AbortController: createAbortControllerPolyfill(), // Add AbortController polyfill
     
     // Make these directly accessible as globals
     urlUtils,
     env,
     utils,
-    
-    // Add Supabase helper
-    supabaseHelper: createSupabaseHelper()
+    replHelper: createReplHelper(),
+    _: createReplHelper()._, // Add shorthand for returns
   };
-  
-  // Add Supabase if it's available
-  if (supabase) {
-    context.supabase = supabase;
-  }
   
   return context;
 }
 
 // Create a safe require function that allows access to common modules
 function createSafeRequire() {
-  // Create a require function that resolves from the working directory first
-  const workingDirRequire = createRequire(path.join(process.cwd(), 'package.json'));
-  
-  // Fallback to the original directory if needed
-  const originalDirRequire = createRequire(path.join(ORIGINAL_CWD, 'package.json'));
+  const baseRequire = createRequire(import.meta.url);
+  const workingDir = process.argv[2] || process.cwd();
+  const workingDirRequire = createRequire(path.join(workingDir, 'package.json'));
   
   return function safeRequire(moduleName) {
     try {
-      // First try from working directory
+      // First try to load from the working directory
       return workingDirRequire(moduleName);
-    } catch (err) {
+    } catch (workingDirError) {
+      // If that fails, try from the REPL server's directory
       try {
-        // Then try from original directory
-        return originalDirRequire(moduleName);
-      } catch (origErr) {
-        // If both fail, throw a clearer error
-        throw new Error(`Cannot find module '${moduleName}'\nRequire stack:\n- ${process.argv[1]}`);
+        return baseRequire(moduleName);
+      } catch (baseError) {
+        // If both fail, throw a detailed error
+        process.stderr.write(`Failed to load module '${moduleName}':\n`);
+        process.stderr.write(`  - From working directory (${workingDir}): ${workingDirError.message}\n`);
+        process.stderr.write(`  - From REPL directory: ${baseError.message}\n`);
+        
+        // Rethrow with improved error message
+        const error = new Error(`Cannot find module '${moduleName}'\nRequire stack:\n- ${workingDir}\n- ${import.meta.url}`);
+        error.code = 'MODULE_NOT_FOUND';
+        throw error;
       }
     }
   };
@@ -397,20 +417,33 @@ function createRestrictedProcess() {
   return process;
 }
 
-// Create a safe import function that handles dynamic imports
+// Create a safe import function that properly resolves modules
 function createSafeImport() {
-  return async function safeImport(specifier) {
+  const workingDir = process.argv[2] || process.cwd();
+  
+  return async function safeImport(moduleName) {
     try {
-      // For relative paths, resolve to working directory
-      if (specifier.startsWith('./') || specifier.startsWith('../')) {
-        const resolved = path.resolve(process.cwd(), specifier);
-        return await import(resolved);
+      // Try to resolve relative to working directory first
+      if (moduleName.startsWith('.')) {
+        // Handle relative imports
+        const absPath = path.resolve(workingDir, moduleName);
+        return await import(absPath);
       }
       
-      // For node modules or absolute paths
-      return await import(specifier);
+      // For bare module specifiers, try the working directory first
+      try {
+        const workingDirRequire = createRequire(path.join(workingDir, 'package.json'));
+        const resolvedPath = workingDirRequire.resolve(moduleName);
+        return await import(resolvedPath);
+      } catch (workingDirError) {
+        // If that fails, try from the REPL server's directory
+        const baseRequire = createRequire(import.meta.url);
+        const resolvedPath = baseRequire.resolve(moduleName);
+        return await import(resolvedPath);
+      }
     } catch (error) {
-      throw new Error(`Failed to import '${specifier}': ${error.message}`);
+      process.stderr.write(`Failed to import module '${moduleName}': ${error.message}\n`);
+      throw new Error(`Failed to import module '${moduleName}': ${error.message}`);
     }
   };
 }
@@ -484,9 +517,69 @@ async function executeCode(code, timeout = 5000) {
   
   try {
     // Simplify the code processing - just wrap the original code in an async IIFE
-    // with additional error handling for better results
+    // with additional error handling for better results, and add globals
     const processedCode = `(async () => { 
       try {
+        // Make utility objects available as globals
+        const env = typeof process !== 'undefined' ? process.env : {};
+        const urlUtils = {
+          normalizeUrl: (url) => {
+            if (!url) return null;
+            try {
+              new URL(url);
+              return url;
+            } catch (e) {
+              if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                return 'https://' + url;
+              }
+              return url;
+            }
+          },
+          isValidUrl: (url) => {
+            try {
+              new URL(url);
+              return true;
+            } catch (e) {
+              return false;
+            }
+          },
+          joinPaths: (...parts) => {
+            return parts.map(part => part.replace(/^\/|\/$/g, '')).join('/');
+          }
+        };
+        const utils = {
+          parseJSON: (str, fallback = null) => {
+            try {
+              return JSON.parse(str);
+            } catch (e) {
+              return fallback;
+            }
+          },
+          runWithTimeout: async (fn, timeoutMs = 5000) => {
+            return Promise.race([
+              fn(),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("Operation timed out after " + timeoutMs + "ms")), timeoutMs)
+              )
+            ]);
+          },
+          sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
+          retry: async (fn, attempts = 3, delay = 1000) => {
+            let lastError;
+            for (let i = 0; i < attempts; i++) {
+              try {
+                return await fn();
+              } catch (error) {
+                lastError = error;
+                if (i < attempts - 1) {
+                  await new Promise(resolve => setTimeout(resolve, delay));
+                }
+              }
+            }
+            throw lastError;
+          }
+        };
+        
         // Track completion for nested promises
         let _executionComplete = false;
         
@@ -972,60 +1065,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 });
-
-// Try to require a module, returning null if it's not available
-function tryRequire(moduleName) {
-  try {
-    // First try from working directory
-    const workingDirRequire = createRequire(path.join(process.cwd(), 'package.json'));
-    return workingDirRequire(moduleName);
-  } catch (err) {
-    try {
-      // Then try from original directory
-      const originalDirRequire = createRequire(path.join(ORIGINAL_CWD, 'package.json'));
-      return originalDirRequire(moduleName);
-    } catch (origErr) {
-      // Module is not available
-      return null;
-    }
-  }
-}
-
-// Try to load Supabase client if available
-let supabase = tryRequire('@supabase/supabase-js');
-
-// Create a helper function to work with Supabase
-function createSupabaseHelper() {
-  return {
-    createClient: (supabaseUrl, supabaseKey) => {
-      if (!supabase) {
-        throw new Error('Supabase SDK is not available. Install it with npm install @supabase/supabase-js');
-      }
-      
-      if (!supabaseUrl || !supabaseKey) {
-        throw new Error('Supabase URL and key are required');
-      }
-      
-      return supabase.createClient(supabaseUrl, supabaseKey);
-    },
-    
-    // Helper to execute SQL queries with Supabase
-    executeQuery: async (supabaseUrl, supabaseKey, query, params = {}) => {
-      if (!supabase) {
-        throw new Error('Supabase SDK is not available. Install it with npm install @supabase/supabase-js');
-      }
-      
-      const client = supabase.createClient(supabaseUrl, supabaseKey);
-      const result = await client.rpc('execute_sql', { query, params });
-      
-      if (result.error) {
-        throw new Error(`Supabase query error: ${result.error.message}`);
-      }
-      
-      return result.data;
-    }
-  };
-}
 
 // Start server
 async function main() {
