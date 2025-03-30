@@ -20,47 +20,8 @@ import util from 'util';
 // Flag to check if we're running in test mode
 const isTestMode = process.env.TEST_MCP === 'true';
 
-// Try to load environment variables from .env file
-function loadEnvFile(directory) {
-  try {
-    const envPath = path.join(directory, '.env');
-    if (fs.existsSync(envPath)) {
-      process.stderr.write(`Loading .env file from ${envPath}\n`);
-      const envContent = fs.readFileSync(envPath, 'utf8');
-      const envLines = envContent.split('\n');
-      
-      for (const line of envLines) {
-        const trimmedLine = line.trim();
-        // Skip comments and empty lines
-        if (trimmedLine && !trimmedLine.startsWith('#')) {
-          const match = trimmedLine.match(/^([^=]+)=(.*)$/);
-          if (match) {
-            const key = match[1].trim();
-            let value = match[2].trim();
-            
-            // Remove quotes if present
-            if ((value.startsWith('"') && value.endsWith('"')) || 
-                (value.startsWith("'") && value.endsWith("'"))) {
-              value = value.substring(1, value.length - 1);
-            }
-            
-            // Only set if not already defined
-            if (!process.env[key]) {
-              process.env[key] = value;
-              process.stderr.write(`Set environment variable: ${key}\n`);
-            }
-          }
-        }
-      }
-      
-      return true;
-    }
-  } catch (error) {
-    process.stderr.write(`Error loading .env file: ${error.message}\n`);
-  }
-  
-  return false;
-}
+// Store the original working directory
+const ORIGINAL_CWD = process.cwd();
 
 // Check for working directory in argv[2]
 const workingDirectory = process.argv[2];
@@ -85,6 +46,53 @@ if (workingDirectory) {
 } else {
   // If no working directory specified, try current directory
   loadEnvFile(process.cwd());
+}
+
+// Global polyfills for compatibility
+if (typeof globalThis.AbortController === 'undefined') {
+  const AbortControllerPolyfill = function() {
+    this.signal = {
+      aborted: false,
+      addEventListener: function() {},
+      removeEventListener: function() {},
+      dispatchEvent: function() { return false; }
+    };
+    this.abort = function() {
+      this.signal.aborted = true;
+    };
+  };
+  
+  globalThis.AbortController = AbortControllerPolyfill;
+}
+
+// Try to load environment variables from .env file
+function loadEnvFile(directory) {
+  try {
+    const envPath = path.join(directory, '.env');
+    if (fs.existsSync(envPath)) {
+      process.stderr.write(`Loading .env file from: ${envPath}\n`);
+      dotenv.config({ path: envPath });
+      
+      // Log available environment variables (hiding sensitive values)
+      const envVars = Object.keys(process.env)
+        .filter(key => key.includes('SUPABASE') || key.includes('DATABASE') || key.includes('API'))
+        .map(key => {
+          const value = process.env[key];
+          const displayValue = value && value.length > 10 ? '[REDACTED]' : value;
+          return `${key}: ${displayValue}`;
+        });
+      
+      if (envVars.length > 0) {
+        process.stderr.write(`Available environment variables: [\n  '${envVars.join("',\n  '")}'\n]\n`);
+      }
+      
+      return true;
+    }
+  } catch (error) {
+    process.stderr.write(`Error loading .env file: ${error.message}\n`);
+  }
+  
+  return false;
 }
 
 // Helper to ensure URL is absolute
@@ -251,6 +259,69 @@ function createExecutionContext() {
         }
       }
       throw lastError;
+    },
+    
+    // Helper to create a service proxy for API testing
+    createServiceProxy: (endpoint, headers = {}, timeout = 30000) => {
+      if (!endpoint) throw new Error('Endpoint URL is required');
+      
+      const normalizedEndpoint = urlUtils.normalizeUrl(endpoint);
+      if (!normalizedEndpoint) throw new Error('Invalid endpoint URL');
+      
+      return {
+        endpoint: normalizedEndpoint,
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers
+        },
+        timeout,
+        
+        // Method to make requests to the service
+        async makeRequest(method, params) {
+          console.log(`[INFO] Making request to ${this.endpoint} ${typeof params === 'object' ? JSON.stringify(params) : params}`);
+          try {
+            const response = await fetch(this.endpoint, {
+              method: 'POST',
+              headers: this.headers,
+              body: JSON.stringify({
+                method,
+                params
+              })
+            });
+            
+            console.log(`[INFO] Response status: ${response.status}`);
+            const data = await response.json();
+            return data;
+          } catch (error) {
+            console.error(`[ERROR] Error making request: ${error.message}`);
+            throw error;
+          }
+        }
+      };
+    },
+    
+    // Helper to create Supabase service proxies
+    createSupabaseProxies: (supabaseUrl, apiKey) => {
+      if (!supabaseUrl) throw new Error('Supabase URL is required');
+      if (!apiKey) throw new Error('Supabase API key is required');
+      
+      const normalizedUrl = urlUtils.normalizeUrl(supabaseUrl);
+      if (!normalizedUrl) throw new Error('Invalid Supabase URL');
+      
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      };
+      
+      return {
+        supabase: utils.createServiceProxy(`${normalizedUrl}/functions/v1/wrappedsupabase`, headers),
+        keystore: utils.createServiceProxy(`${normalizedUrl}/functions/v1/wrappedkeystore`, headers)
+      };
+    },
+    
+    // Helper for accessing environment variables with defaults
+    getEnv: (name, defaultValue = null) => {
+      return process.env[name] || defaultValue;
     }
   };
   
@@ -273,6 +344,12 @@ function createExecutionContext() {
     global: globalThis,
     fetch: createNodeFetch(), // Add fetch implementation
     
+    // AbortController polyfill
+    AbortController: globalThis.AbortController,
+    
+    // Helper for working with promises
+    _: (value) => value, // Simple identity function for promise returns
+    
     // Make these directly accessible as globals
     urlUtils,
     env,
@@ -292,20 +369,23 @@ function createExecutionContext() {
 
 // Create a safe require function that allows access to common modules
 function createSafeRequire() {
-  const nodeRequire = createRequire(import.meta.url);
+  // Create a require function that resolves from the working directory first
+  const workingDirRequire = createRequire(path.join(process.cwd(), 'package.json'));
+  
+  // Fallback to the original directory if needed
+  const originalDirRequire = createRequire(path.join(ORIGINAL_CWD, 'package.json'));
   
   return function safeRequire(moduleName) {
     try {
-      // First try to require directly
-      return nodeRequire(moduleName);
+      // First try from working directory
+      return workingDirRequire(moduleName);
     } catch (err) {
-      // If that fails, try to require from the current working directory
       try {
-        const cwdRequire = createRequire(path.join(process.cwd(), 'package.json'));
-        return cwdRequire(moduleName);
-      } catch (cwdErr) {
-        // If both attempts fail, throw the original error
-        throw err;
+        // Then try from original directory
+        return originalDirRequire(moduleName);
+      } catch (origErr) {
+        // If both fail, throw a clearer error
+        throw new Error(`Cannot find module '${moduleName}'\nRequire stack:\n- ${process.argv[1]}`);
       }
     }
   };
@@ -321,7 +401,7 @@ function createRestrictedProcess() {
 function createSafeImport() {
   return async function safeImport(specifier) {
     try {
-      // For local files, resolve relative to current working directory
+      // For relative paths, resolve to working directory
       if (specifier.startsWith('./') || specifier.startsWith('../')) {
         const resolved = path.resolve(process.cwd(), specifier);
         return await import(resolved);
@@ -404,69 +484,9 @@ async function executeCode(code, timeout = 5000) {
   
   try {
     // Simplify the code processing - just wrap the original code in an async IIFE
-    // with additional error handling for better results, and add globals
+    // with additional error handling for better results
     const processedCode = `(async () => { 
       try {
-        // Make utility objects available as globals
-        const env = typeof process !== 'undefined' ? process.env : {};
-        const urlUtils = {
-          normalizeUrl: (url) => {
-            if (!url) return null;
-            try {
-              new URL(url);
-              return url;
-            } catch (e) {
-              if (!url.startsWith('http://') && !url.startsWith('https://')) {
-                return 'https://' + url;
-              }
-              return url;
-            }
-          },
-          isValidUrl: (url) => {
-            try {
-              new URL(url);
-              return true;
-            } catch (e) {
-              return false;
-            }
-          },
-          joinPaths: (...parts) => {
-            return parts.map(part => part.replace(/^\/|\/$/g, '')).join('/');
-          }
-        };
-        const utils = {
-          parseJSON: (str, fallback = null) => {
-            try {
-              return JSON.parse(str);
-            } catch (e) {
-              return fallback;
-            }
-          },
-          runWithTimeout: async (fn, timeoutMs = 5000) => {
-            return Promise.race([
-              fn(),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("Operation timed out after " + timeoutMs + "ms")), timeoutMs)
-              )
-            ]);
-          },
-          sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
-          retry: async (fn, attempts = 3, delay = 1000) => {
-            let lastError;
-            for (let i = 0; i < attempts; i++) {
-              try {
-                return await fn();
-              } catch (error) {
-                lastError = error;
-                if (i < attempts - 1) {
-                  await new Promise(resolve => setTimeout(resolve, delay));
-                }
-              }
-            }
-            throw lastError;
-          }
-        };
-        
         // Track completion for nested promises
         let _executionComplete = false;
         
@@ -956,14 +976,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // Try to require a module, returning null if it's not available
 function tryRequire(moduleName) {
   try {
-    const nodeRequire = createRequire(import.meta.url);
-    return nodeRequire(moduleName);
+    // First try from working directory
+    const workingDirRequire = createRequire(path.join(process.cwd(), 'package.json'));
+    return workingDirRequire(moduleName);
   } catch (err) {
     try {
-      // Try from current working directory
-      const cwdRequire = createRequire(path.join(process.cwd(), 'package.json'));
-      return cwdRequire(moduleName);
-    } catch (cwdErr) {
+      // Then try from original directory
+      const originalDirRequire = createRequire(path.join(ORIGINAL_CWD, 'package.json'));
+      return originalDirRequire(moduleName);
+    } catch (origErr) {
       // Module is not available
       return null;
     }
