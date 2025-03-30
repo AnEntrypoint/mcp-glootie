@@ -12,7 +12,7 @@ A secure JavaScript REPL (Read-Eval-Print-Loop) for executing code snippets with
 - **Support for Async/Await**: Execute asynchronous code with top-level await
 - **Node.js Module Access**: Import and use Node.js built-in modules securely
 - **Working Directory Support**: Specify a working directory via argv[2]
-- **109 Test Cases**: Extensive testing for all features and edge cases
+- **129 Test Cases**: Extensive testing for all features and edge cases
 
 ## Quick Start with npx
 
