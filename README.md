@@ -1,4 +1,5 @@
 # Simple JS REPL
+[![smithery badge](https://smithery.ai/badge/@AnEntrypoint/mcp-repl)](https://smithery.ai/server/@AnEntrypoint/mcp-repl)
 
 A secure JavaScript REPL (Read-Eval-Print-Loop) for executing code snippets with comprehensive error handling, memory management, and output formatting.
 
@@ -56,6 +57,15 @@ All code will be executed with this directory as the current working directory.
 
 ## Installation
 
+### Installing via Smithery
+
+To install Simple JavaScript REPL for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@AnEntrypoint/mcp-repl):
+
+```bash
+npx -y @smithery/cli install @AnEntrypoint/mcp-repl --client claude
+```
+
+### Manual Installation
 If you want to install the package globally:
 
 ```bash
