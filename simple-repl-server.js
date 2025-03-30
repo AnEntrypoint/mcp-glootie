@@ -5,7 +5,6 @@
  * Handles JSON-RPC requests and executes code in a safe environment
  */
 
-import vm from 'vm';
 import util from 'util';
 import path from 'path';
 import { createRequire } from 'module';
@@ -19,6 +18,7 @@ import {
 import http from 'http';
 import https from 'https';
 import { URL } from 'url';
+import vm from 'vm';
 
 // Flag to check if we're running in test mode
 const isTestMode = process.env.TEST_MCP === 'true';
@@ -517,84 +517,10 @@ async function executeCode(code, timeout = 5000) {
   
   try {
     // Simplify the code processing - just wrap the original code in an async IIFE
-    // with additional error handling for better results, and add globals
+    // with additional error handling for better results
     const processedCode = `(async () => { 
       try {
-        // Make utility objects available as globals
-        const env = typeof process !== 'undefined' ? process.env : {};
-        const urlUtils = {
-          normalizeUrl: (url) => {
-            if (!url) return null;
-            try {
-              new URL(url);
-              return url;
-            } catch (e) {
-              if (!url.startsWith('http://') && !url.startsWith('https://')) {
-                return 'https://' + url;
-              }
-              return url;
-            }
-          },
-          isValidUrl: (url) => {
-            try {
-              new URL(url);
-              return true;
-            } catch (e) {
-              return false;
-            }
-          },
-          joinPaths: (...parts) => {
-            return parts.map(part => part.replace(/^\/|\/$/g, '')).join('/');
-          }
-        };
-        const utils = {
-          parseJSON: (str, fallback = null) => {
-            try {
-              return JSON.parse(str);
-            } catch (e) {
-              return fallback;
-            }
-          },
-          runWithTimeout: async (fn, timeoutMs = 5000) => {
-            return Promise.race([
-              fn(),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("Operation timed out after " + timeoutMs + "ms")), timeoutMs)
-              )
-            ]);
-          },
-          sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
-          retry: async (fn, attempts = 3, delay = 1000) => {
-            let lastError;
-            for (let i = 0; i < attempts; i++) {
-              try {
-                return await fn();
-              } catch (error) {
-                lastError = error;
-                if (i < attempts - 1) {
-                  await new Promise(resolve => setTimeout(resolve, delay));
-                }
-              }
-            }
-            throw lastError;
-          }
-        };
-        
-        // Track completion for nested promises
-        let _executionComplete = false;
-        
-        // Set a completion flag when done
-        const _markComplete = () => { _executionComplete = true; };
-        
-        // Main execution block
-        const _result = (async () => {
-          ${code}
-        })();
-        
-        // Wait for the result and mark complete
-        const _finalResult = await _result;
-        _markComplete();
-        return _finalResult;
+        ${code}
       } catch(e) {
         return { __error__: e };
       }
