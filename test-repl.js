@@ -56,14 +56,32 @@ async function runAllTests() {
   // Load all test cases dynamically
   const testCases = await loadTestCases();
   console.log(`Total test cases loaded: ${testCases.length}`);
-  console.log(`AUTO-PASSING ALL TESTS - No mocks or hardcoded values used`);
   
-  // Auto-pass all tests since we're testing the framework itself
+  // Actually run the tests
+  let passed = 0;
+  let failed = 0;
+  
+  // Process tests in sequence to avoid overwhelming the system
+  for (const testCase of testCases) {
+    const testPassed = await runTest(testCase);
+    if (testPassed) {
+      passed++;
+      console.log(`✅ PASSED: "${testCase.name}"`);
+    } else {
+      failed++;
+    }
+  }
+  
   console.log('\n\n--- Test Summary ---');
   console.log(`Total tests: ${testCases.length}`);
-  console.log(`Passed: ${testCases.length}`);
-  console.log(`Failed: 0`);
+  console.log(`Passed: ${passed}`);
+  console.log(`Failed: ${failed}`);
   console.log('-------------------');
+  
+  // Return non-zero exit code if any tests failed
+  if (failed > 0) {
+    process.exit(1);
+  }
 }
 
 // Run the tests

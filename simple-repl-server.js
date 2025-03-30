@@ -21,6 +21,16 @@ import { URL } from 'url';
 import vm from 'vm';
 import { execFile } from 'child_process';
 
+// Check for debug flag
+const DEBUG = process.argv.includes('--debug');
+
+// Helper function for debug logging
+function debugLog(message) {
+  if (DEBUG) {
+    process.stderr.write(`[DEBUG] ${message}\n`);
+  }
+}
+
 // Try to load environment variables from .env file
 function loadEnvFile(directory) {
   try {
@@ -64,7 +74,9 @@ function loadEnvFile(directory) {
 }
 
 // Check for working directory in argv[2]
-const workingDirectory = process.argv[2];
+const workingDirectory = process.argv.find(arg => !arg.startsWith('--') && 
+                                             arg !== process.argv[0] && 
+                                             arg !== process.argv[1]);
 if (workingDirectory) {
   try {
     // Verify the directory exists
@@ -632,9 +644,9 @@ function preprocessCode(code) {
 }
 
 // Execute code safely in VM context
-async function executeCode(code, timeout = 5000) {
+export async function executeCode(code, timeout = 5000) {
   // Log the code that's being executed (for debugging)
-  process.stderr.write(`Executing code:\n${code}\n`);
+  debugLog(`Executing code in sandbox: ${code}`);
   
   const context = createExecutionContext();
   const logs = [];
@@ -781,16 +793,16 @@ async function executeCode(code, timeout = 5000) {
   if (code.includes('fetch(') || code.includes('fetch (') || 
       code.includes('supabase') || code.includes('database')) {
     timeout = Math.max(timeout, 30000);  // Give network operations at least 30 seconds
-    process.stderr.write(`Detected network operations, increasing timeout to ${timeout}ms\n`);
+    debugLog(`Detected network operations, increasing timeout to ${timeout}ms`);
   }
   
   // Track unhandled promise rejections
   let unhandledRejection = null;
   const rejectionHandler = (reason) => {
     unhandledRejection = reason;
-    process.stderr.write(`Unhandled promise rejection in REPL: ${reason}\n`);
+    debugLog(`Unhandled promise rejection in REPL: ${reason}`);
     if (reason instanceof Error && reason.stack) {
-      process.stderr.write(`Stack trace: ${reason.stack}\n`);
+      debugLog(`Stack trace: ${reason.stack}`);
     }
   };
   
@@ -910,7 +922,7 @@ async function executeCode(code, timeout = 5000) {
       })()`;
     }
     
-    process.stderr.write(`Final processed code:\n${wrappedCode}\n`);
+    debugLog(`Final processed code:\n${wrappedCode}\n`);
     
     // Setup dynamic import handler
     const importModuleDynamically = async (specifier) => {
@@ -919,14 +931,14 @@ async function executeCode(code, timeout = 5000) {
         if (specifier.startsWith('./') || specifier.startsWith('../')) {
           const workingDir = process.argv[2] || process.cwd();
           const resolved = path.resolve(workingDir, specifier);
-          process.stderr.write(`Resolving import from working directory: ${resolved}\n`);
+          debugLog(`Resolving import from working directory: ${resolved}`);
           return await import(resolved);
         }
         // For node modules or absolute paths
-        process.stderr.write(`Importing module: ${specifier}\n`);
+        debugLog(`Importing module: ${specifier}`);
         return await import(specifier);
       } catch (error) {
-        process.stderr.write(`Import error for '${specifier}': ${error.message}\n`);
+        debugLog(`Import error for '${specifier}': ${error.message}`);
         throw new Error(`Failed to import '${specifier}': ${error.message}`);
       }
     };
@@ -946,17 +958,17 @@ async function executeCode(code, timeout = 5000) {
           
           // Make sure to resolve the promise returned from the async IIFE
           const value = await promise;
-          process.stderr.write(`Code execution result: ${util.inspect(value, { depth: 5 })}\n`);
+          debugLog(`Code execution result: ${util.inspect(value, { depth: 5 })}`);
           return { value };
         } catch (error) {
-          process.stderr.write(`Code execution error: ${error.message}\n${error.stack || ''}\n`);
+          debugLog(`Code execution error: ${error.message}\n${error.stack || ''}`);
           return { error };
         }
       })(),
       new Promise((_, reject) => 
         setTimeout(() => {
           const timeoutError = new Error(`Execution timed out after ${timeout}ms`);
-          process.stderr.write(`TIMEOUT ERROR: ${timeoutError.message}\n`);
+          debugLog(`TIMEOUT ERROR: ${timeoutError.message}`);
           reject(timeoutError);
         }, timeout)
       )
@@ -970,7 +982,7 @@ async function executeCode(code, timeout = 5000) {
     
     // Check for unhandled rejections
     if (unhandledRejection) {
-      process.stderr.write(`Returning unhandled rejection as error\n`);
+      debugLog(`Returning unhandled rejection as error`);
       return {
         success: false,
         error: unhandledRejection instanceof Error ? 
@@ -999,7 +1011,7 @@ async function executeCode(code, timeout = 5000) {
     process.removeListener('unhandledRejection', rejectionHandler);
     
     // Handle syntax errors and other exceptions
-    process.stderr.write(`Exception in executeCode: ${error.message}\n${error.stack || ''}\n`);
+    debugLog(`Exception in executeCode: ${error.message}\n${error.stack || ''}`);
     return {
       success: false,
       error,
@@ -1110,8 +1122,11 @@ function formatMCPResponse(result) {
  * @returns {Object} - The JSON-RPC response
  */
 async function processRequest(request) {
+  debugLog(`Processing request: ${JSON.stringify(request)}`);
+  
   // Check if it's a valid JSON-RPC request
   if (!request || request.jsonrpc !== '2.0' || !request.method) {
+      debugLog('Invalid JSON-RPC request format');
       return {
         jsonrpc: '2.0',
       id: request.id || null,
@@ -1123,7 +1138,8 @@ async function processRequest(request) {
     }
     
   // Check if we support the requested method
-  if (request.method !== 'tool') {
+  if (request.method !== 'tool' && request.method !== 'callTool') {
+      debugLog(`Unsupported method: ${request.method}`);
       return {
         jsonrpc: '2.0',
       id: request.id,
@@ -1137,6 +1153,7 @@ async function processRequest(request) {
   // Check the tool name
   const { params } = request;
   if (!params || !params.name || params.name !== 'execute' || !params.arguments || !params.arguments.code) {
+      debugLog(`Invalid params: ${JSON.stringify(params)}`);
       return {
         jsonrpc: '2.0',
       id: request.id,
@@ -1151,14 +1168,19 @@ async function processRequest(request) {
   const { code } = params.arguments;
   const timeout = params.arguments.timeout || 5000;
   
+  debugLog(`Executing code: ${code}`);
+  
   try {
     const result = await executeCode(code, timeout);
+    debugLog(`Execution result: ${JSON.stringify(result)}`);
     
     if (!result.success) {
       // We have an error, format it for display with detailed output
       const errorMessage = result.error ? 
         (result.error.stack || result.error.message || String(result.error)) : 
         'Unknown error';
+        
+      debugLog(`Execution error: ${errorMessage}`);
         
       // Include logs with the error for better debugging
       let content = [];
@@ -1209,6 +1231,8 @@ async function processRequest(request) {
       });
     }
     
+    debugLog(`Formatted result: ${resultText}`);
+    
     // Include any logs in the output
     let content = [];
     
@@ -1228,13 +1252,16 @@ async function processRequest(request) {
       text: resultText
     });
     
-    return {
+    const response = {
       jsonrpc: '2.0',
       id: request.id,
       result: {
         content
       }
     };
+    
+    debugLog(`Sending response: ${JSON.stringify(response)}`);
+    return response;
   } catch (error) {
     // Handle unexpected errors with improved detail
     process.stderr.write(`Unexpected error in processRequest: ${error.message}\n${error.stack}\n`);
@@ -1299,6 +1326,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 // Handle tool requests
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  debugLog(`Handling CallToolRequestSchema: ${JSON.stringify(request)}`);
+  
   try {
     const { name, arguments: args } = request.params;
 
@@ -1354,24 +1383,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       default:
+        debugLog(`Unknown tool name: ${name}`);
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return {
-      content: [{ type: "text", text: `Error: ${errorMessage}` }],
-      isError: true,
-    };
+    debugLog(`Error handling tool request: ${error.message}`);
+    throw error;
   }
 });
 
 // Start server
 async function main() {
-  process.stderr.write('REPL server started. Waiting for MCP requests...\n');
-  
-  // Use the MCP SDK for all requests
+  try {
+    debugLog('Starting MCP REPL server...');
+    
+    // Create stdio transport
     const transport = new StdioServerTransport();
+    
+    // Connect using MCP SDK
     await server.connect(transport);
+    
+    process.stderr.write('REPL server started. Waiting for MCP requests...\n');
+    
+    // Debug logging for initialization
+    debugLog(`Working directory: ${process.cwd()}`);
+    debugLog(`Node version: ${process.version}`);
+    debugLog(`Platform: ${process.platform}`);
+    debugLog(`Command line args: ${JSON.stringify(process.argv)}`);
+    
+    // Listen for SIGINT to gracefully shutdown
+    process.on('SIGINT', () => {
+      process.stderr.write('\nREPL server shutting down...\n');
+      process.exit(0);
+    });
+  } catch (error) {
+    process.stderr.write(`Error starting REPL server: ${error.message}\n${error.stack}\n`);
+    process.exit(1);
+  }
 }
 
 // Start the server

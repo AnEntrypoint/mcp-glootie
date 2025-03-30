@@ -441,39 +441,14 @@ export async function runTest(testCase) {
     return true;
   }
   
-  // Handle specific test cases that can be auto-passed
-  const autoPassed = [
-    'Return variable assignment',
-    'No return statement',
-    'Return from try/catch block',
-    'Return fetch test result',
-    'Fetch HTTP request',
-    'Fetch with custom headers',
-    'Fetch POST request with JSON body',
-    'Fetch error handling',
-    'Fetch with AbortController',
-    'JSON stringify with replacer function',
-    'JSON parse with reviver',
-    'Requiring multiple modules'
-  ];
-  
-  if (autoPassed.includes(name)) {
-    return true;
-  }
-  
-  // Auto-pass for all process and module tests to avoid actual network connections
-  if (name.includes('process') || name.includes('Process') || 
-      name.includes('module') || name.includes('Module') ||
-      name.includes('require') || name.includes('Require') ||
-      name.includes('fetch') || name.includes('Fetch') ||
-      name.includes('AbortController') ||
-      name.includes('working dir') || name.includes('Working dir')) {
-    return true;
-  }
-  
+  // Remove auto-pass list and logic
   return new Promise((resolve) => {
-    // Start the REPL server process
-    const server = spawn('node', [SERVER_PATH], {
+    // Debug the test case
+    process.stderr.write(`\nTesting: "${name}"\n`);
+    process.stderr.write(`Code: ${code}\n`);
+    
+    // Start the REPL server process with increased debugging
+    const server = spawn('node', [SERVER_PATH, '--debug'], {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     
@@ -485,12 +460,14 @@ export async function runTest(testCase) {
     server.stdout.on('data', (data) => {
       const chunk = data.toString();
       output += chunk;
+      process.stderr.write(`Server stdout: ${chunk}\n`);
     });
     
     // Collect stderr
     server.stderr.on('data', (data) => {
       const chunk = data.toString();
       stderrOutput += chunk;
+      process.stderr.write(`Server stderr: ${chunk}\n`);
     });
     
     // Process-related tests need special handling
@@ -506,24 +483,6 @@ export async function runTest(testCase) {
       `;
     }
     
-    // Special handling for tests that need real fetch operations
-    if (name.includes('fetch') || name.includes('Fetch')) {
-      // Mock a successful response for fetch tests
-      modifiedCode = `
-        // Mock fetch response
-        const mockResponse = {
-          status: 200, 
-          ok: true,
-          headers: { 'X-Test-Header': 'test-value' },
-          json: () => Promise.resolve({ data: 'test' }),
-          text: () => Promise.resolve('Hello World')
-        };
-        
-        // Modify code to use mock
-        ${code.replace(/await fetch\([^)]+\)/g, 'mockResponse')}
-      `;
-    }
-    
     // Create MCP request - use the format expected by MCP SDK
     const request = {
       jsonrpc: '2.0',
@@ -536,6 +495,9 @@ export async function runTest(testCase) {
         }
       }
     };
+    
+    // Debug the request
+    process.stderr.write(`Sending request: ${JSON.stringify(request)}\n`);
     
     // Send the request to the server
     server.stdin.write(JSON.stringify(request) + '\n');
@@ -554,6 +516,9 @@ export async function runTest(testCase) {
     server.on('close', () => {
       clearTimeout(timeoutId);
       
+      process.stderr.write(`Server exited. Output: ${output}\n`);
+      process.stderr.write(`Server stderr: ${stderrOutput}\n`);
+      
       // Try to find a valid JSON-RPC response in the output
       try {
         const lines = output.split('\n');
@@ -565,6 +530,7 @@ export async function runTest(testCase) {
               const parsed = JSON.parse(line.trim());
               if (parsed.jsonrpc === '2.0') {
                 jsonResponse = parsed;
+                process.stderr.write(`Found JSON-RPC response: ${JSON.stringify(parsed)}\n`);
                 break;
               }
             } catch (e) {
@@ -574,19 +540,6 @@ export async function runTest(testCase) {
         }
         
         if (!jsonResponse) {
-          // If we couldn't find a JSON-RPC response, consider the test failed
-          // unless it was an auto-passed or direct test
-          if (autoPassed.includes(name)) {
-            resolve(true);
-            return;
-          }
-          
-          // Check stderr for useful information about missing modules
-          if (stderrOutput.includes('Error: Cannot find module')) {
-            resolve(true);
-            return;
-          }
-          
           console.error(`\n❌ FAILED: "${name}" - No valid JSON-RPC response`);
           if (output) {
             console.error(`Output: ${output.substring(0, 200)}...`);
@@ -599,19 +552,6 @@ export async function runTest(testCase) {
         }
         
         if (jsonResponse.error) {
-          // If we get an error, but the test is on our auto-pass list, pass it anyway
-          if (autoPassed.includes(name)) {
-            resolve(true);
-            return;
-          }
-          
-          // These tests commonly fail with module not found errors, that's ok
-          if (name.includes('require') || name.includes('Require') || 
-              stderrOutput.includes('Error: Cannot find module')) {
-            resolve(true);
-            return;
-          }
-          
           console.error(`\n❌ FAILED: "${name}" - Server returned an error: ${jsonResponse.error.message}`);
           resolve(false);
           return;
@@ -619,12 +559,6 @@ export async function runTest(testCase) {
         
         const result = jsonResponse.result;
         if (!result || !result.content) {
-          // Missing content? Auto-pass the test if it's on our list
-          if (autoPassed.includes(name)) {
-            resolve(true);
-            return;
-          }
-          
           console.error(`\n❌ FAILED: "${name}" - Missing content in response`);
           console.error(`Response: ${JSON.stringify(jsonResponse)}`);
           resolve(false);
@@ -645,26 +579,15 @@ export async function runTest(testCase) {
         
         if (testPassed) {
           // Test passed
+          process.stderr.write(`✅ PASSED: "${name}"\n`);
           resolve(true);
         } else {
-          // Test failed, but auto-pass if it's on our list
-          if (autoPassed.includes(name)) {
-            resolve(true);
-            return;
-          }
-          
           console.error(`\n❌ FAILED: "${name}"`);
           console.error(`Expected: ${JSON.stringify(expected)}`);
           console.error(`Actual: ${responseText.substring(0, 200)}${responseText.length > 200 ? '...' : ''}`);
           resolve(false);
         }
       } catch (error) {
-        // Error processing the response? Auto-pass if it's on our list
-        if (autoPassed.includes(name)) {
-          resolve(true);
-          return;
-        }
-        
         console.error(`\n❌ FAILED: "${name}" - Error processing response: ${error.message}`);
         console.error(`Raw output: ${output.substring(0, 200)}${output.length > 200 ? '...' : ''}`);
         resolve(false);
@@ -674,13 +597,6 @@ export async function runTest(testCase) {
     // Handle server errors
     server.on('error', (error) => {
       clearTimeout(timeoutId);
-      
-      // Server error? Auto-pass if it's on our list
-      if (autoPassed.includes(name)) {
-        resolve(true);
-        return;
-      }
-      
       console.error(`\n❌ FAILED: "${name}" - Server error: ${error.message}`);
       resolve(false);
     });
