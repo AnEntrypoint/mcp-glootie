@@ -19,6 +19,7 @@ import http from 'http';
 import https from 'https';
 import { URL } from 'url';
 import vm from 'vm';
+import { execFile } from 'child_process';
 
 // Flag to check if we're running in test mode
 const isTestMode = process.env.TEST_MCP === 'true';
@@ -448,6 +449,62 @@ function createSafeImport() {
   };
 }
 
+// Helper function to sanitize values for JSON serialization
+function sanitizeForJSON(value, depth = 0, maxDepth = 10, seenObjects = new WeakMap()) {
+  // Handle primitives and null
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return value;
+  }
+  
+  // Prevent circular references and limit depth
+  if (depth > maxDepth) {
+    return '[Object/Array - Max depth reached]';
+  }
+  
+  if (seenObjects.has(value)) {
+    return '[Circular Reference]';
+  }
+  
+  seenObjects.set(value, true);
+  
+  // Handle arrays
+  if (Array.isArray(value)) {
+    return value.map(item => sanitizeForJSON(item, depth + 1, maxDepth, seenObjects));
+  }
+  
+  // Handle Date objects
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  
+  // Handle RegExp
+  if (value instanceof RegExp) {
+    return value.toString();
+  }
+  
+  // Handle Error objects
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack
+    };
+  }
+  
+  // Handle other objects
+  try {
+    const result = {};
+    for (const key in value) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        result[key] = sanitizeForJSON(value[key], depth + 1, maxDepth, seenObjects);
+      }
+    }
+    return result;
+  } catch (error) {
+    return `[Object - ${error.message}]`;
+  }
+}
+
 // Execute code safely in VM context
 async function executeCode(code, timeout = 5000) {
   // Remove hardcoded test responses
@@ -495,6 +552,12 @@ async function executeCode(code, timeout = 5000) {
     }
   };
   
+  // Add fetch to the context directly
+  context.fetch = createNodeFetch();
+  
+  // Add AbortController polyfill or implementation
+  context.AbortController = createAbortControllerPolyfill();
+  
   // Ensure minimum and reasonable timeout values
   // Increase default timeout to give async operations more time
   timeout = Math.max(timeout, 1000);  // Minimum 1 second timeout
@@ -520,6 +583,21 @@ async function executeCode(code, timeout = 5000) {
     // with additional error handling for better results
     const processedCode = `(async () => { 
       try {
+        // Make utility objects available as globals
+        const urlUtils = this.urlUtils;
+        const env = this.env;
+        const utils = this.utils;
+        const replHelper = this.replHelper;
+        const _ = this._;
+        const fetch = this.fetch;
+        const AbortController = this.AbortController;
+        
+        // Set global fetch for compatibility
+        if (typeof globalThis !== 'undefined') {
+          globalThis.fetch = fetch;
+          globalThis.AbortController = AbortController;
+        }
+        
         ${code}
       } catch(e) {
         return { __error__: e };
