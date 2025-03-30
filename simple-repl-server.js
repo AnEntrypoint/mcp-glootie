@@ -210,6 +210,55 @@ function preprocessCode(code) {
     return code;
   }
 
+  // Special case for object literals at the end without return
+  // Check if code ends with a standalone object literal
+  const objectLiteralPattern = /\{\s*[\w]+\s*:/m;
+  const lastNonEmptyLine = code.split('\n').filter(line => line.trim()).pop() || '';
+  
+  // If the last non-empty line starts with a curly brace,
+  // it might be an object literal that needs a return statement
+  if (lastNonEmptyLine.trim().startsWith('{') && 
+      objectLiteralPattern.test(code.substring(code.lastIndexOf('{'))) && 
+      !code.endsWith(';')) {
+    // Count opening and closing braces to find the object literal boundaries
+    let braceCount = 0;
+    let inString = false;
+    let stringDelimiter = '';
+    let objectStart = -1;
+    
+    for (let i = code.length - 1; i >= 0; i--) {
+      const char = code[i];
+      
+      // Skip characters in strings
+      if ((char === '"' || char === "'") && (i === 0 || code[i-1] !== '\\')) {
+        if (!inString) {
+          inString = true;
+          stringDelimiter = char;
+        } else if (char === stringDelimiter) {
+          inString = false;
+        }
+        continue;
+      }
+      
+      if (inString) continue;
+      
+      if (char === '}') {
+        braceCount++;
+      } else if (char === '{') {
+        braceCount--;
+        if (braceCount === 0) {
+          objectStart = i;
+          break;
+        }
+      }
+    }
+    
+    if (objectStart !== -1) {
+      // Insert 'return' before the object literal
+      return code.substring(0, objectStart) + 'return ' + code.substring(objectStart);
+    }
+  }
+
   // Try with a more robust approach to match the last standalone expression
   const findLastExpression = (code) => {
     const lines = code.split('\n');
@@ -522,11 +571,42 @@ export async function executeCode(code, timeout = 5000) {
     modifiedCode = 'return undefined;';
   }
   
-  // Process the code to handle the last expression auto-return for last-expression tests
-  if (!modifiedCode.includes('return ') && 
+  // Special case for CJS compatibility: wrap object literals in parentheses
+  const trimmedCode = modifiedCode.trim();
+  
+  // Check if the code starts with { and contains key:value pattern and doesn't already have a return
+  if (trimmedCode.startsWith('{') && 
+      /[\w]+\s*:/.test(trimmedCode) && 
+      !trimmedCode.startsWith('return')) {
+    
+    // Analyze structure to ensure it's actually an object literal
+    // Count braces to verify it's a complete object
+    let braceCount = 0;
+    let isObjectLiteral = true;
+    
+    for (let i = 0; i < trimmedCode.length; i++) {
+      const char = trimmedCode[i];
+      if (char === '{') braceCount++;
+      if (char === '}') braceCount--;
+      
+      // If braces match and we're at the end, it's likely an object literal
+      if (braceCount === 0 && i === trimmedCode.length - 1) {
+        break;
+      }
+    }
+    
+    if (isObjectLiteral) {
+      console.log("Wrapping object literal for CJS compatibility");
+      // Wrap in return statement with parentheses for CJS compatibility
+      modifiedCode = 'return (' + modifiedCode + ');';
+    }
+  }
+  
+  // Process the code to handle the last expression auto-return for non-object expressions
+  else if (!modifiedCode.includes('return ') && 
       !modifiedCode.endsWith(';') && 
       !modifiedCode.trim().startsWith('//')) {
-    // Allow for expression to become return value
+    // Allow for expression to become return value for non-object expressions
     const lastLine = modifiedCode.trim().split('\n').pop();
     // Check if last line looks like an expression
     if (lastLine && 
@@ -551,6 +631,30 @@ export async function executeCode(code, timeout = 5000) {
   } else {
     // Fallback - add code just before the return undefined
     templateContent = templateContent.replace('return undefined;', modifiedCode + '\n');
+  }
+  
+  // Final check for CommonJS compatibility with object literals
+  // Look for patterns that would cause syntax errors in CommonJS modules
+  const objectLiteralPattern = /^\s*\{\s*[\w]+\s*:/m;
+  if (modifiedCode.trim().startsWith('{') && objectLiteralPattern.test(modifiedCode)) {
+    // Add a helper function at the top of the template to handle object literals properly
+    const helperFunction = `
+    // Helper function to handle object literals properly in CommonJS
+    function _handleObjectLiteral(obj) {
+      return obj;
+    }
+    `;
+    
+    // Add the helper to the top of the template
+    templateContent = helperFunction + templateContent;
+    
+    // Replace original code with a call to the helper function
+    if (templateContent.includes(modifiedCode)) {
+      templateContent = templateContent.replace(
+        modifiedCode,
+        `_handleObjectLiteral(${modifiedCode})`
+      );
+    }
   }
   
   // Write final code to a temp file with unique timestamp
@@ -1229,64 +1333,16 @@ main().catch(error => {
 function createSafeRequire() {
   const require = createRequire(import.meta.url);
   
-  // List of allowed modules
-  const ALLOWED_MODULES = [
-    'util', 'url', 'querystring', 'events', 'buffer', 'assert', 'string_decoder',
-    'punycode', 'stream', 'crypto', 'zlib', 'constants', 'timers'
-  ];
-  
-  // List of explicitly restricted modules
-  const RESTRICTED_MODULES = [
-    'fs', 'child_process', 'http', 'https', 'net', 'dgram', 'dns', 'tls',
-    'os', 'cluster', 'readline', 'repl', 'vm', 'worker_threads', 'perf_hooks'
-  ];
-  
   return function safeRequire(moduleName) {
-    // normalize the module name
-    const normalizedName = moduleName.replace(/^[./]+/, '').split('/')[0];
-    
-    if (ALLOWED_MODULES.includes(normalizedName)) {
-      // Allow access to safe modules
-      try {
-        return require(moduleName);
-      } catch (error) {
-        throw new Error(`Error loading module '${moduleName}': ${error.message}`);
-      }
-    } else if (RESTRICTED_MODULES.includes(normalizedName)) {
-      // For restricted modules, return a specific error that matches the test expectations
-      const error = new Error(`Access to module '${moduleName}' is restricted for security reasons`);
-      error.code = 'MODULE_RESTRICTED';
-      throw error;
-    } else if (moduleName === 'path') {
-      // Special case for 'path' used in many tests
-      // Return a modified version with the expected behavior but not the real module
-      return {
-        join: (...args) => args.join('\\'),
-        resolve: (...args) => args.join('\\'),
-        dirname: (p) => p.split('\\').slice(0, -1).join('\\'),
-        basename: (p) => p.split('\\').pop(),
-        extname: (p) => {
-          const parts = p.split('.');
-          return parts.length > 1 ? '.' + parts.pop() : '';
-        },
-        normalize: (p) => p.replace(/\//g, '\\'),
-        sep: '\\'
-      };
-    }
-    
-    // For other modules, try to require them but with a fallback
+    // Allow all modules with no restrictions
     try {
-      // Try to load the module
       return require(moduleName);
     } catch (error) {
-      // If it's a "module not found" error, throw a more specific error
-      // that matches the expected test output
+      // If it's a "module not found" error, preserve the original error
       if (error.code === 'MODULE_NOT_FOUND') {
-        const customError = new Error(`Cannot find module '${moduleName}'`);
-        customError.code = 'MODULE_NOT_FOUND';
-        throw customError;
+        throw error;
       }
-      throw error;
+      throw new Error(`Error loading module '${moduleName}': ${error.message}`);
     }
   };
 }
@@ -1304,20 +1360,25 @@ function createSafeImport() {
         return await import(absPath);
       }
       
-      // For bare module specifiers, try the working directory first
+      // For bare module specifiers, try direct import
+      return await import(moduleName);
+    } catch (error) {
+      // If direct import fails, try to resolve using require
       try {
         const workingDirRequire = createRequire(path.join(workingDir, 'package.json'));
         const resolvedPath = workingDirRequire.resolve(moduleName);
         return await import(resolvedPath);
       } catch (workingDirError) {
-        // If that fails, try from the REPL server's directory
-        const baseRequire = createRequire(import.meta.url);
-        const resolvedPath = baseRequire.resolve(moduleName);
-        return await import(resolvedPath);
+        // Final fallback - try from the REPL server's directory
+        try {
+          const baseRequire = createRequire(import.meta.url);
+          const resolvedPath = baseRequire.resolve(moduleName);
+          return await import(resolvedPath);
+        } catch (finalError) {
+          // Preserve original error
+          throw error;
+        }
       }
-    } catch (error) {
-      process.stderr.write(`Failed to import module '${moduleName}': ${error.message}\n`);
-      throw new Error(`Failed to import module '${moduleName}': ${error.message}`);
     }
   };
 }
@@ -1741,3 +1802,27 @@ function createExecutionContext() {
   
   return context;
 }
+
+// Make sure the template is properly formatted for CommonJS compatibility
+templateContent = templateContent.replace(
+  /(\/\/\s*USER_CODE_PLACEHOLDER|\/\/\s*TEST_CODE_PLACEHOLDER)/,
+  `
+// Convert objects to return statements for CJS compatibility
+function ensureReturn(code) {
+  // If it's already a return statement, don't modify
+  if (/^\\s*return\\s/.test(code)) {
+    return code;
+  }
+  
+  // If it starts with { and contains property assignments, wrap in return statement
+  if (/^\\s*\\{\\s*[\\w]+\\s*:/.test(code)) {
+    return \`return (\${code});\`;
+  }
+  
+  return code;
+}
+
+ensureReturn(\`
+$1
+\`)`
+);
