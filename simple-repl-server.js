@@ -370,557 +370,179 @@ function preprocessCode(code) {
   return code;
 }
 
-// Execute code safely in VM context
-export async function executeCode(code, timeout = 5000) {
-  // Log the code that's being executed (for debugging)
+/**
+ * Execute JavaScript code in a secure sandbox environment
+ * @param {string} code - The code to execute
+ * @param {number} timeout - Timeout in milliseconds
+ * @returns {Object} - Execution result with success status and result/error
+ */
+async function executeCode(code, timeout = 5000) {
   debugLog(`Executing code in sandbox: ${code}`);
   
-  // Create temp directory if it doesn't exist
-  const tempDir = path.join(process.cwd(), 'temp');
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
-  }
+  // Store console output
+  let logs = [];
+
+  // Create a console wrapper to capture output
+  const consoleWrapper = {
+    log: (...args) => {
+      const formatted = args.map(arg => formatValue(arg)).join(' ');
+      logs.push(formatted);
+    },
+    error: (...args) => {
+      const formatted = 'ERROR: ' + args.map(arg => formatValue(arg)).join(' ');
+      logs.push(formatted);
+    },
+    warn: (...args) => {
+      const formatted = 'WARN: ' + args.map(arg => formatValue(arg)).join(' ');
+      logs.push(formatted);
+    },
+    info: (...args) => {
+      const formatted = 'INFO: ' + args.map(arg => formatValue(arg)).join(' ');
+      logs.push(formatted);
+    },
+    debug: (...args) => {
+      const formatted = 'DEBUG: ' + args.map(arg => formatValue(arg)).join(' ');
+      logs.push(formatted);
+    }
+  };
   
-  // Get the template file path
-  const templatePath = path.join(tempDir, 'repl-template.cjs');
-  const templateExists = fs.existsSync(templatePath);
+  // Process code to handle return statements
+  let processedCode = code;
   
-  // Read template or use fallback
-  let templateContent;
-  
-  if (templateExists) {
-    templateContent = fs.readFileSync(templatePath, 'utf8');
-    // Update working directory with current value
-    templateContent = templateContent.replace(
-      /const WORKING_DIR = "[^"]*"/,
-      `const WORKING_DIR = "${process.cwd().replace(/\\/g, '\\\\')}"`
-    );
-  } else {
-    // Use an improved template with better test compatibility
-    templateContent = `
-    // REPL execution template - CommonJS version
-    // Used for running all test cases
-
-    // Console capture setup
-    const logs = [];
-    const originalLog = console.log;
-    const originalError = console.error;
-    const originalWarn = console.warn;
-    const originalInfo = console.info;
-
-    // Override console methods to capture detailed output
-    console.log = function(...args) {
-      // Convert all args to strings properly handling objects
-      const formattedArgs = args.map(arg => {
-        if (typeof arg === 'object' && arg !== null) {
+  // Check for return statement - if present, wrap in function
+  if (code.includes('return ')) {
+    // Check if the code includes await which requires an async function wrapper
+    if (code.includes('await ')) {
+      processedCode = `
+        (async function() {
           try {
-            return JSON.stringify(arg, null, 2);
-          } catch (err) {
-            return String(arg);
+            ${code}
+          } catch (error) {
+            return { __code_execution_error__: error.message };
           }
-        }
-        return String(arg);
-      });
-      const formatted = formattedArgs.join(' ');
-      logs.push(['log', formatted]);
-      originalLog(...args);
-    };
-
-    console.error = function(...args) {
-      // Convert all args to strings properly handling objects
-      const formattedArgs = args.map(arg => {
-        if (typeof arg === 'object' && arg !== null) {
+        })()
+      `;
+      debugLog(`Code contains await and return, wrapping in async function: ${processedCode}`);
+    } else {
+      processedCode = `
+        (function() {
           try {
-            return JSON.stringify(arg, null, 2);
-          } catch (err) {
-            return String(arg);
+            ${code}
+          } catch (error) {
+            return { __code_execution_error__: error.message };
           }
-        }
-        return String(arg);
-      });
-      const formatted = formattedArgs.join(' ');
-      logs.push(['error', formatted]);
-      originalError(...args);
-    };
-
-    console.warn = function(...args) {
-      // Convert all args to strings properly handling objects
-      const formattedArgs = args.map(arg => {
-        if (typeof arg === 'object' && arg !== null) {
-          try {
-            return JSON.stringify(arg, null, 2);
-          } catch (err) {
-            return String(arg);
-          }
-        }
-        return String(arg);
-      });
-      const formatted = formattedArgs.join(' ');
-      logs.push(['warn', formatted]);
-      originalWarn(...args);
-    };
-
-    console.info = function(...args) {
-      // Convert all args to strings properly handling objects
-      const formattedArgs = args.map(arg => {
-        if (typeof arg === 'object' && arg !== null) {
-          try {
-            return JSON.stringify(arg, null, 2);
-          } catch (err) {
-            return String(arg);
-          }
-        }
-        return String(arg);
-      });
-      const formatted = formattedArgs.join(' ');
-      logs.push(['info', formatted]);
-      originalInfo(...args);
-    };
-
-    // Add more console methods for deeper test compatibility
-    console.dir = function(obj, options) {
-      let formatted;
-      try {
-        formatted = JSON.stringify(obj, null, 2);
-      } catch (err) {
-        formatted = String(obj);
-      }
-      logs.push(['dir', formatted]);
-      originalLog('[dir]', obj);
-    };
-
-    console.table = function(tabularData, properties) {
-      let formatted;
-      try {
-        formatted = JSON.stringify(tabularData, null, 2);
-      } catch (err) {
-        formatted = String(tabularData);
-      }
-      logs.push(['table', formatted]);
-      originalLog('[table]', tabularData);
-    };
-
-    // Track and capture uncaught errors
-    process.on('uncaughtException', (err) => {
-      logs.push(['error', \`Uncaught exception: \${err.message}\n\${err.stack}\`]);
-      originalError('Uncaught exception:', err);
-    });
-
-    // Track and capture unhandled promise rejections
-    process.on('unhandledRejection', (reason, promise) => {
-      logs.push(['error', \`Unhandled rejection: \${reason}\`]);
-      originalError('Unhandled rejection:', reason);
-    });
-
-    // Define fixed values for process
-    const WORKING_DIR = "${process.cwd().replace(/\\/g, '\\\\')}";
-    const PLATFORM = "${process.platform}";
-    const VERSION = "${process.version}";
-
-    // Create enhanced process object with more test-compatible properties
-    global.process = {
-      // String properties
-      platform: PLATFORM,
-      version: VERSION,
-      
-      // Return a fixed string
-      cwd: function() { return WORKING_DIR; },
-      
-      // Environment variables
-      env: { 
-        NODE_ENV: 'test', 
-        PATH: '/usr/local/bin:/usr/bin:/bin',
-        // Include some actual env vars safely
-        USER: process.env.USER || process.env.USERNAME || 'user'
-      },
-      
-      // Safe nextTick implementation
-      nextTick: function(callback) { setTimeout(callback, 0); },
-      
-      // Add hrtime support for tests
-      hrtime: function(time) {
-        const now = process.hrtime ? process.hrtime() : [0, 0];
-        if (!time) return now;
-        const diffSec = now[0] - time[0];
-        const diffNsec = now[1] - time[1];
-        return [diffSec, diffNsec];
-      },
-      
-      // Add memoryUsage stub for tests
-      memoryUsage: function() {
-        return {
-          rss: 123456789,
-          heapTotal: 987654321,
-          heapUsed: 123456789,
-          external: 12345678
-        };
-      }
-    };
-
-    // Add hrtime.bigint for tests
-    global.process.hrtime.bigint = function() {
-      return BigInt(Date.now()) * BigInt(1000000);
-    };
-
-    // Implement fetch
-    global.fetch = async function(url, options = {}) {
-      console.log(\`Fetch request to: \${url}\`);
-      const response = {
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        headers: new Map([['content-type', 'application/json'], ['x-test-header', 'test']]),
-        text: async () => '{"message":"Mock response"}',
-        json: async () => ({ message: "Mock response" })
-      };
-      return response;
-    };
-
-    // Add replHelper for tests
-    global.replHelper = {
-      return_: function(value) { return value; },
-      _: function(value) { return value; },
-      async_run: async function(fn) {
+        })()
+      `;
+      debugLog(`Code contains return statement, wrapping in function: ${processedCode}`);
+    }
+  } else if (code.includes('await ')) {
+    // Code has await but no return, wrap it in an async function and add return to the result
+    processedCode = `
+      (async function() {
         try {
-          return await fn();
+          const result = (async () => { ${code} })();
+          return result;
         } catch (error) {
-          console.error('Error in async_run:', error);
-          throw error;
+          return { __code_execution_error__: error.message };
         }
-      }
-    };
-
-    // Add common ES6 features for tests
-    global.Promise = Promise;
-    global.Map = Map;
-    global.Set = Set;
-    global.Symbol = Symbol;
-    global.Array = Array;
-    global.Object = Object;
-
-    // Execute the test code
-    (async function runTest() {
-      let result = undefined;
-      let success = true;
-      let error = null;
-      
-      try {
-        // This will be replaced with actual test code
-        result = await (async () => {
-          // USER_CODE_PLACEHOLDER
-          return undefined; // Make undefined the default
-        })();
-      } catch (err) {
-        success = false;
-        error = {
-          message: err.message,
-          stack: err.stack
-        };
-        console.error('Error:', err.message);
-      }
-      
-      // Print result for test runner to parse
-      console.log('TEST_RESULT:', JSON.stringify({
-        success,
-        result,
-        logs,
-        error
-      }));
-    })();`;
-  }
-  
-  // Allow using both placeholder styles for compatibility
-  let modifiedCode = code;
-  
-  // Handle the "Empty return" case
-  if (modifiedCode.trim() === 'return' || modifiedCode.trim() === 'return;') {
-    modifiedCode = 'return undefined;';
-  }
-  
-  // Special case for CJS compatibility: wrap object literals in parentheses
-  const trimmedCode = modifiedCode.trim();
-  
-  // Check if the code starts with { and contains key:value pattern and doesn't already have a return
-  if (trimmedCode.startsWith('{') && 
-      /[\w]+\s*:/.test(trimmedCode) && 
-      !trimmedCode.startsWith('return')) {
-    
-    // Analyze structure to ensure it's actually an object literal
-    // Count braces to verify it's a complete object
-    let braceCount = 0;
-    let isObjectLiteral = true;
-    
-    for (let i = 0; i < trimmedCode.length; i++) {
-      const char = trimmedCode[i];
-      if (char === '{') braceCount++;
-      if (char === '}') braceCount--;
-      
-      // If braces match and we're at the end, it's likely an object literal
-      if (braceCount === 0 && i === trimmedCode.length - 1) {
-        break;
-      }
-    }
-    
-    if (isObjectLiteral) {
-      console.log("Wrapping object literal for CJS compatibility");
-      // Wrap in return statement with parentheses for CJS compatibility
-      modifiedCode = 'return (' + modifiedCode + ');';
-    }
-  }
-  
-  // Process the code to handle the last expression auto-return for non-object expressions
-  else if (!modifiedCode.includes('return ') && 
-      !modifiedCode.endsWith(';') && 
-      !modifiedCode.trim().startsWith('//')) {
-    // Allow for expression to become return value for non-object expressions
-    const lastLine = modifiedCode.trim().split('\n').pop();
-    // Check if last line looks like an expression
-    if (lastLine && 
-        !lastLine.endsWith(';') && 
-        !lastLine.endsWith('}') &&
-        !lastLine.startsWith('if') &&
-        !lastLine.startsWith('for') &&
-        !lastLine.startsWith('while')) {
-      // Convert last expression to return
-      const lines = modifiedCode.split('\n');
-      const lastLineIndex = lines.length - 1;
-      lines[lastLineIndex] = `return ${lines[lastLineIndex]}`;
-      modifiedCode = lines.join('\n');
-    }
-  }
-  
-  // Replace placeholder with actual code
-  if (templateContent.includes('// USER_CODE_PLACEHOLDER')) {
-    templateContent = templateContent.replace('// USER_CODE_PLACEHOLDER', modifiedCode);
-  } else if (templateContent.includes('// TEST_CODE_PLACEHOLDER')) {
-    templateContent = templateContent.replace('// TEST_CODE_PLACEHOLDER', modifiedCode);
-  } else {
-    // Fallback - add code just before the return undefined
-    templateContent = templateContent.replace('return undefined;', modifiedCode + '\n');
-  }
-  
-  // Final check for CommonJS compatibility with object literals
-  // Look for patterns that would cause syntax errors in CommonJS modules
-  const objectLiteralPattern = /^\s*\{\s*[\w]+\s*:/m;
-  if (modifiedCode.trim().startsWith('{') && objectLiteralPattern.test(modifiedCode)) {
-    // Add a helper function at the top of the template to handle object literals properly
-    const helperFunction = `
-    // Helper function to handle object literals properly in CommonJS
-    function _handleObjectLiteral(obj) {
-      return obj;
-    }
+      })()
     `;
-    
-    // Add the helper to the top of the template
-    templateContent = helperFunction + templateContent;
-    
-    // Replace original code with a call to the helper function
-    if (templateContent.includes(modifiedCode)) {
-      templateContent = templateContent.replace(
-        modifiedCode,
-        `_handleObjectLiteral(${modifiedCode})`
-      );
-    }
+    debugLog(`Code contains await but no return, wrapping in async function: ${processedCode}`);
   }
   
-  // Write final code to a temp file with unique timestamp
-  const timestamp = Date.now();
-  const codeFilePath = path.join(tempDir, `code-${timestamp}.cjs`);
-  fs.writeFileSync(codeFilePath, templateContent);
+  // Create safe sandbox for execution
+  const sandbox = vm.createContext({
+    console: consoleWrapper,
+    process: {
+      env: process.env,
+      cwd: () => process.cwd(),
+      platform: process.platform,
+      argv: process.argv,
+      versions: process.versions
+    },
+    Buffer,
+    setTimeout: (fn, delay) => {
+      return setTimeout(() => {
+        try {
+          fn();
+        } catch (error) {
+          consoleWrapper.error(`Error in setTimeout callback: ${error.message}`);
+        }
+      }, delay);
+    },
+    clearTimeout,
+    setInterval: (fn, delay) => {
+      return setInterval(() => {
+        try {
+          fn();
+        } catch (error) {
+          consoleWrapper.error(`Error in setInterval callback: ${error.message}`);
+        }
+      }, delay);
+    },
+    clearInterval,
+    fetch: createFetch(),
+    URL,
+    URLSearchParams,
+    TextEncoder,
+    TextDecoder,
+    AbortController: createAbortControllerPolyfill(),
+    replHelper: createReplHelper()
+  });
   
+  // Add safe require functionality
+  sandbox.require = createSafeRequire();
+  
+  // Add safe import functionality
+  sandbox.import = createSafeImport();
+  
+  // Execute code in sandbox
   try {
-    // Execute code in a separate process to avoid blocking
-    return await new Promise((resolve, reject) => {
-      // Create a timeout to kill the process if it takes too long
-      const timeoutId = setTimeout(() => {
-        debugLog(`Execution timed out after ${timeout}ms`);
-        if (childProcess) {
-          childProcess.kill();
-        }
-        
-        // Clean up the temp file
-        try {
-          fs.unlinkSync(codeFilePath);
-        } catch (cleanupErr) {
-          // Ignore cleanup errors
-        }
-        
-        reject(new Error(`Execution timed out after ${timeout}ms`));
-      }, timeout);
-      
-      // Spawn a Node.js process to execute our code
-      const childProcess = spawn('node', [codeFilePath], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: timeout
-      });
-      
-      let stdout = '';
-      let stderr = '';
-      
-      // Capture output
-      childProcess.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-      
-      childProcess.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-      
-      // Handle process completion
-      childProcess.on('close', (code) => {
-        clearTimeout(timeoutId);
-        
-        // Clean up the temp file
-        try {
-          fs.unlinkSync(codeFilePath);
-        } catch (cleanupErr) {
-          // Ignore cleanup errors
-        }
-        
-        if (code !== 0) {
-          debugLog(`Process exited with code ${code}`);
-          
-          // Detailed error response
-          const errorInfo = {
-            success: false,
-            error: {
-              message: `Process exited with code ${code}`,
-              details: stderr
-            },
-            logs: [['error', `Execution failed with code ${code}`]]
-          };
-          
-          if (stderr) {
-            errorInfo.logs.push(['error', stderr]);
-          }
-          
-          resolve(errorInfo);
-          return;
-        }
-        
-        debugLog(`Process completed successfully`);
-        
-        // Try to extract the result JSON from stdout
-        try {
-          // Look for TEST_RESULT: JSON in the output
-          const resultMatch = stdout.match(/TEST_RESULT:\s*(\{[\s\S]*\})/);
-          if (resultMatch && resultMatch[1]) {
-            try {
-              const resultJson = JSON.parse(resultMatch[1]);
-              
-              // Process the logs for proper formatting
-              if (resultJson.logs && Array.isArray(resultJson.logs)) {
-                resultJson.logs = resultJson.logs.map(log => {
-                  if (Array.isArray(log) && log.length >= 2) {
-                    return `[${log[0]}] ${log[1]}`;
-                  }
-                  return String(log);
-                });
-              }
-              
-              // Handle test-specific validation quirks
-              if (typeof code === 'string' && code.includes('process.version') && !resultJson.error) {
-                resultJson.result = process.version;
-              }
-              
-              // Special case for testing environment variables
-              if (typeof code === 'string' && code.includes('process.env.NODE_ENV') && !resultJson.error) {
-                resultJson.result = 'test';
-              }
-              
-              resolve(resultJson);
-            } catch (innerParseError) {
-              debugLog(`Error parsing TEST_RESULT JSON: ${innerParseError.message}`);
-              // Return more detailed error message instead of generic success
-              resolve({
-                success: false,
-                error: {
-                  message: `Error parsing result: ${innerParseError.message}`,
-                  details: `Original result format may be invalid JSON: ${resultMatch[1].substring(0, 100)}...`
-                },
-                logs: [['error', `Error parsing TEST_RESULT JSON: ${innerParseError.message}`]]
-              });
-            }
-          } else {
-            // No TEST_RESULT marker found, look for any JSON
-            const jsonMatch = stdout.match(/\{[\s\S]*"success"[\s\S]*\}/);
-            if (jsonMatch) {
-              try {
-                const resultJson = JSON.parse(jsonMatch[0]);
-                resolve(resultJson);
-              } catch (jsonParseError) {
-                debugLog(`Error parsing JSON: ${jsonParseError.message}`);
-                // Include both stdout and stderr in the response
-                resolve({
-                  success: false,
-                  error: {
-                    message: `Error parsing output: ${jsonParseError.message}`
-                  },
-                  logs: [
-                    ['stdout', stdout],
-                    ['stderr', stderr]
-                  ]
-                });
-              }
-            } else {
-              // No valid JSON found, return stdout content instead of a generic message
-              resolve({
-                success: true,
-                result: stdout.trim() || "No output",
-                logs: stderr ? [['stderr', stderr]] : []
-              });
-            }
-          }
-        } catch (parseError) {
-          // If JSON parsing fails, return a format compatible with tests
-          debugLog(`Error parsing output: ${parseError.message}`);
-          resolve({
-            success: true,
-            result: "Test result",
-            logs: [['info', stdout.trim()]]
-          });
-        }
-      });
-      
-      // Handle process errors
-      childProcess.on('error', (err) => {
-        clearTimeout(timeoutId);
-        debugLog(`Process error: ${err.message}`);
-        
-        // Clean up the temp file
-        try {
-          fs.unlinkSync(codeFilePath);
-        } catch (cleanupErr) {
-          // Ignore cleanup errors
-        }
-        
-        resolve({
-          success: false,
-          error: {
-            message: err.message,
-            stack: err.stack
-          },
-          logs: [['error', err.message]]
-        });
-      });
+    const script = new vm.Script(processedCode, {
+      timeout,
+      displayErrors: true
     });
-  } catch (error) {
-    debugLog(`Execution error: ${error.message}`);
     
-    // Clean up the temp file
-    try {
-      fs.unlinkSync(codeFilePath);
-    } catch (cleanupErr) {
-      // Ignore cleanup errors
+    const rawResult = script.runInContext(sandbox);
+    debugLog(`Script execution completed, processing result`);
+    
+    // Check if result is a Promise and await it if needed
+    let result = rawResult;
+    if (rawResult && typeof rawResult.then === 'function') {
+      try {
+        debugLog(`Result is a Promise, awaiting resolution...`);
+        result = await rawResult;
+        debugLog(`Promise resolved successfully`);
+      } catch (promiseError) {
+        debugLog(`Promise rejected with error: ${promiseError.message}`);
+        return {
+          success: false,
+          error: promiseError,
+          logs
+        };
+      }
+    }
+    
+    // Check if result is a wrapped error
+    if (result && result.__code_execution_error__) {
+      return {
+        success: false,
+        error: new Error(result.__code_execution_error__),
+        logs
+      };
     }
     
     return {
+      success: true,
+      result,
+      logs
+    };
+  } catch (error) {
+    debugLog(`Execution error: ${error.message}`);
+    return {
       success: false,
-      error: {
-        message: error.message,
-        stack: error.stack
-      },
-      logs: [['error', error.message]]
+      error,
+      logs
     };
   }
 }
@@ -1043,7 +665,13 @@ async function processRequest(request) {
     }
     
   // Check if we support the requested method
-  if (request.method !== 'tool' && request.method !== 'callTool') {
+  // Support various method formats:
+  // - tool (current simple-repl format)
+  // - callTool (current simple-repl format)
+  // - tool/call (from MCP spec)
+  // - mcp.tool.call (alternate MCP format)
+  const supportedMethods = ['tool', 'callTool', 'tool/call', 'mcp.tool.call'];
+  if (!supportedMethods.includes(request.method)) {
       debugLog(`Unsupported method: ${request.method}`);
       return {
         jsonrpc: '2.0',
@@ -1055,8 +683,10 @@ async function processRequest(request) {
     };
   }
   
-  // Check the tool name
+  // Check the tool name and parameters structure
   const { params } = request;
+  
+  // For 'callTool', 'tool', 'tool/call' and 'mcp.tool.call' formats
   if (!params || !params.name || params.name !== 'execute' || !params.arguments || !params.arguments.code) {
       debugLog(`Invalid params: ${JSON.stringify(params)}`);
       return {
@@ -1069,64 +699,94 @@ async function processRequest(request) {
     };
   }
   
-  // Execute the code
+  // Extract code and timeout
   const { code } = params.arguments;
   const timeout = params.arguments.timeout || 5000;
   
   debugLog(`Executing code: ${code}`);
   
   try {
+    // Execute the code using our enhanced executeCode function
     const result = await executeCode(code, timeout);
-    debugLog(`Execution result summary: success=${result.success}, has logs=${Boolean(result.logs?.length)}`);
+    debugLog(`Execution result: ${JSON.stringify(result)}`);
     
-    const content = [];
-    
-    // Add console output if present
-    if (result.logs && result.logs.length > 0) {
-      debugLog(`Adding ${result.logs.length} log entries to response`);
+    if (!result.success) {
+      // We have an error, format it for display with detailed output
+      const errorMessage = result.error ? 
+        (result.error.stack || result.error.message || String(result.error)) : 
+        'Unknown error';
+        
+      debugLog(`Execution error: ${errorMessage}`);
+        
+      // Include logs with the error for better debugging
+      let content = [];
+      
+      // Add logs first if there are any
+      if (result.logs && result.logs.length > 0) {
+        for (const log of result.logs) {
+          content.push({
+            type: 'text',
+            text: log
+          });
+        }
+      }
+      
+      // Add the error message
       content.push({
-        type: "text",
-        text: result.logs.join('\n')
+        type: 'text',
+        text: `ERROR: ${errorMessage}`
       });
+        
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: { content }
+      };
     }
     
-    // Add result or error message
-    if (result.success) {
-      // For successful execution, format the result nicely
-      const resultText = formatValue(result.result);
-      debugLog(`Formatted result (${resultText.length} chars): ${resultText.substring(0, 100)}${resultText.length > 100 ? '...' : ''}`);
-      content.push({
-        type: "text",
-        text: resultText
-      });
+    // Format successful execution result
+    let resultText;
+    
+    if (result.result === undefined) {
+      resultText = 'undefined';
+    } else if (result.result === null) {
+      resultText = 'null';
+    } else if (typeof result.result === 'string') {
+      resultText = result.result;
+    } else if (typeof result.result === 'number' || typeof result.result === 'boolean') {
+      resultText = String(result.result);
     } else {
-      // For errors, include a detailed error message
-      const errorObj = result.error || { message: "Unknown error occurred" };
-      const errorMsg = formatError(errorObj);
-      debugLog(`Execution error: ${errorMsg}`);
-      
-      // Include detailed error information
-      content.push({
-        type: "text", 
-        text: `ERROR: ${errorMsg}`
+      // For objects, arrays, and other complex types, use enhanced inspect
+      resultText = util.inspect(result.result, { 
+        depth: 8, 
+        colors: false,
+        compact: true,
+        maxArrayLength: 100,
+        maxStringLength: 1000,
+        breakLength: 120 // Wider output before breaking
       });
-      
-      // Add stack trace if available
-      if (errorObj.stack) {
+    }
+    
+    debugLog(`Formatted result: ${resultText}`);
+    
+    // Include any logs in the output
+    let content = [];
+    
+    // Add logs first if there are any
+    if (result.logs && result.logs.length > 0) {
+      for (const log of result.logs) {
         content.push({
-          type: "text",
-          text: `Stack trace: ${errorObj.stack}`
-        });
-      }
-      
-      // Add additional error details if available
-      if (errorObj.details) {
-        content.push({
-          type: "text",
-          text: `Details: ${errorObj.details}`
+          type: 'text',
+          text: log
         });
       }
     }
+    
+    // Add the result value
+    content.push({
+      type: 'text',
+      text: resultText
+    });
     
     const response = {
       jsonrpc: '2.0',
@@ -1171,17 +831,18 @@ const server = new Server(
 
 // Add debug logger for all SDK communication
 if (DEBUG) {
-  // Server doesn't have .on() method - removing these listeners
-  // server.on('request', (req) => {
-  //   debugLog(`MCP SDK received request: ${JSON.stringify(req)}`);
-  // });
-  
-  // server.on('response', (res) => {
-  //   debugLog(`MCP SDK sending response: ${JSON.stringify(res)}`);
-  // });
-  
-  // Just log that we're in debug mode
-  debugLog('Debug mode enabled - detailed logging will be shown');
+  // Check if server has 'on' method before using it
+  if (typeof server.on === 'function') {
+    server.on('request', (req) => {
+      debugLog(`MCP SDK received request: ${JSON.stringify(req)}`);
+    });
+    
+    server.on('response', (res) => {
+      debugLog(`MCP SDK sending response: ${JSON.stringify(res)}`);
+    });
+  } else {
+    debugLog('Warning: server.on method not available - SDK event listeners not registered');
+  }
 }
 
 // Define available tools
@@ -1249,13 +910,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         debugLog(`Executing code via MCP SDK: ${code}`);
         
         const executionResult = await executeCode(code);
-        debugLog(`Execution result summary: success=${executionResult.success}, has logs=${Boolean(executionResult.logs?.length)}`);
+        debugLog(`Execution result: ${JSON.stringify(executionResult)}`);
         
         const content = [];
         
         // Add console output if present
         if (executionResult.logs && executionResult.logs.length > 0) {
-          debugLog(`Adding ${executionResult.logs.length} log entries to response`);
           content.push({
             type: "text",
             text: executionResult.logs.join('\n')
@@ -1264,43 +924,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         
         // Add result or error message
         if (executionResult.success) {
-          // For successful execution, format the result nicely
-          const resultText = formatValue(executionResult.result);
-          debugLog(`Formatted result (${resultText.length} chars): ${resultText.substring(0, 100)}${resultText.length > 100 ? '...' : ''}`);
           content.push({
             type: "text",
-            text: resultText
+            text: formatValue(executionResult.result)
           });
         } else {
-          // For errors, include a detailed error message
-          const errorObj = executionResult.error || { message: "Unknown error occurred" };
-          const errorMsg = formatError(errorObj);
-          debugLog(`Execution error: ${errorMsg}`);
-          
-          // Include detailed error information
+          const errorMsg = formatError(executionResult.error);
           content.push({
             type: "text", 
-            text: `ERROR: ${errorMsg}`
+            text: errorMsg
           });
-          
-          // Add stack trace if available
-          if (errorObj.stack) {
-            content.push({
-              type: "text",
-              text: `Stack trace: ${errorObj.stack}`
-            });
-          }
-          
-          // Add additional error details if available
-          if (errorObj.details) {
-            content.push({
-              type: "text",
-              text: `Details: ${errorObj.details}`
-            });
-          }
         }
         
-        debugLog(`Returning ${content.length} content items in response`);
+        debugLog(`Returning content: ${JSON.stringify(content)}`);
         return {
           content
         };
@@ -1558,9 +1194,6 @@ function createNodeFetch() {
           throw new Error('Invalid URL: URL cannot be null or empty');
         }
         
-        debugLog(`Fetch request to: ${normalizedUrl}`);
-        debugLog(`Fetch options: ${JSON.stringify(options)}`);
-        
         const parsedUrl = new URL(normalizedUrl);
         const isHttps = parsedUrl.protocol === 'https:';
         const client = isHttps ? https : http;
@@ -1574,11 +1207,7 @@ function createNodeFetch() {
           timeout: options.timeout || 30000
         };
         
-        debugLog(`HTTP request options: ${JSON.stringify(requestOptions)}`);
-        
         const req = client.request(requestOptions, (res) => {
-          debugLog(`Received response with status: ${res.statusCode}`);
-          
           let body = '';
           const buffers = [];
           
@@ -1589,13 +1218,6 @@ function createNodeFetch() {
           
           res.on('end', () => {
             const bodyBuffer = Buffer.concat(buffers);
-            
-            // Log a preview of the response body for debugging
-            if (body.length > 0) {
-              debugLog(`Response body preview (${body.length} bytes): ${body.substring(0, 200)}${body.length > 200 ? '...' : ''}`);
-            } else {
-              debugLog('Response body is empty');
-            }
             
             const response = {
               ok: res.statusCode >= 200 && res.statusCode < 300,
@@ -1608,10 +1230,7 @@ function createNodeFetch() {
                 try {
                   return JSON.parse(body);
                 } catch (e) {
-                  const errorMsg = `Failed to parse JSON: ${e.message}`;
-                  debugLog(errorMsg);
-                  debugLog(`Invalid JSON body: ${body.substring(0, 200)}${body.length > 200 ? '...' : ''}`);
-                  throw new Error(errorMsg);
+                  throw new Error(`Failed to parse JSON: ${e.message}`);
                 }
               },
               arrayBuffer: async () => bodyBuffer.buffer,
@@ -1625,35 +1244,24 @@ function createNodeFetch() {
         });
         
         req.on('error', (err) => {
-          const errorMsg = `Fetch error: ${err.message}`;
-          debugLog(errorMsg);
-          debugLog(`Error occurred during fetch to: ${normalizedUrl}`);
-          reject(new Error(errorMsg));
+          reject(new Error(`Fetch error: ${err.message}`));
         });
         
         req.on('timeout', () => {
           req.destroy();
-          const errorMsg = `Fetch timeout after ${options.timeout || 30000}ms`;
-          debugLog(errorMsg);
-          reject(new Error(errorMsg));
+          reject(new Error('Fetch timeout'));
         });
         
         if (options.body) {
           const bodyData = typeof options.body === 'string' 
             ? options.body 
             : JSON.stringify(options.body);
-          debugLog(`Request body: ${bodyData}`);
           req.write(bodyData);
         }
         
         req.end();
       } catch (err) {
-        const errorMsg = `Fetch initialization error: ${err.message}`;
-        debugLog(errorMsg);
-        if (err.stack) {
-          debugLog(`Error stack: ${err.stack}`);
-        }
-        reject(new Error(errorMsg));
+        reject(new Error(`Fetch initialization error: ${err.message}`));
       }
     });
   };

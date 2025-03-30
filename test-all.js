@@ -261,10 +261,10 @@ process.stdin.on('data', async (data) => {
         };
         
         // Check if the code contains top-level await
-        const hasTopLevelAwait = /\\bawait\\b/.test(code) && !/\\basync\\s+function\\b|\\bfunction\\s*\\([^)]*\\)\\s*{\\s*\\basync\\b/.test(code);
+        const hasTopLevelAwait = /\\bawait\\b/.test(code);
         
         // Check if code contains a return statement not inside a function
-        const hasReturnStatement = /\\breturn\\b/.test(code) && !/\\breturn\\b.*function/.test(code);
+        const hasReturnStatement = /\\breturn\\b/.test(code);
         
         let wrappedCode;
         
@@ -274,7 +274,7 @@ process.stdin.on('data', async (data) => {
           wrappedCode = \`
             (async function() {
               try {
-                \${code.replace(/\\bawait\\b/g, 'await ')}
+                \${code}
                 return undefined;
               } catch (error) {
                 return { __code_execution_error__: error.message };
