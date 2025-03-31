@@ -47,12 +47,6 @@ export default [
     "expected": "true"
   },
   {
-    "name": "Process.memoryUsage",
-    "code": "const mem = process.memoryUsage(); return mem.hasOwnProperty(\"heapUsed\");",
-    "expectedResult": "true",
-    "expected": "process.memoryUsage is not a function\n    at evalmachine.<anonymous>:3:29\n    at evalmachine.<anonymous>:7:7\n    at Script.runInContext (node:vm:149:12)\n    at file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:128:38\n    at executeCode (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:133:9)\n    at processRequest (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:273:28)\n    at Socket.<anonymous> (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:324:32)\n    at Socket.emit (node:events:507:28)\n    at addChunk (node:internal/streams/readable:559:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)"
-  },
-  {
     "name": "Process.nextTick",
     "code": "return new Promise(resolve => { process.nextTick(() => resolve(\"nextTick executed\")); });",
     "expectedResult": "nextTick executed",

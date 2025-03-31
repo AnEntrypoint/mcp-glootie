@@ -481,7 +481,7 @@ async function executeCode(code, timeout = 5000) {
       }, delay);
     },
     clearInterval,
-    fetch: createFetch(),
+    fetch: createNodeFetch(),
     URL,
     URLSearchParams,
     TextEncoder,
@@ -670,9 +670,39 @@ async function processRequest(request) {
   // - callTool (current simple-repl format)
   // - tool/call (from MCP spec)
   // - mcp.tool.call (alternate MCP format)
-  const supportedMethods = ['tool', 'callTool', 'tool/call', 'mcp.tool.call'];
-  if (!supportedMethods.includes(request.method)) {
+  // - initialize (for MCP SDK handshake)
+  // - resources/list (for MCP SDK resource access)
+  // - resources/read (for MCP SDK resource access)
+  // - execute (direct execute method)
+  const supportedMethods = [
+    'tool', 
+    'callTool', 
+    'tool/call', 
+    'mcp.tool.call',
+    'initialize',
+    'resources/list',
+    'resources/read',
+    'execute'
+  ];
+  
+  // Debug complete incoming request
+  debugLog(`FULL REQUEST: ${JSON.stringify(request, null, 2)}`);
+  
+  debugLog(`Checking method '${request.method}' against supported methods: ${JSON.stringify(supportedMethods)}`);
+  
+  // Special check for exact method name
+  let methodSupported = false;
+  for (const method of supportedMethods) {
+    if (request.method === method) {
+      methodSupported = true;
+      debugLog(`Method '${request.method}' is supported`);
+      break;
+    }
+  }
+  
+  if (!methodSupported) {
       debugLog(`Unsupported method: ${request.method}`);
+      debugLog(`FULL REQUEST THAT FAILED: ${JSON.stringify(request, null, 2)}`);
       return {
         jsonrpc: '2.0',
       id: request.id,
@@ -681,6 +711,176 @@ async function processRequest(request) {
         message: 'Method not found'
       }
     };
+  }
+  
+  // Handle the initialize method
+  if (request.method === 'initialize') {
+    debugLog(`Handling initialize request: ${JSON.stringify(request.params)}`);
+    return {
+      jsonrpc: '2.0',
+      id: request.id,
+      result: {
+        serverInfo: {
+          name: "simple-repl-server",
+          version: "1.0.0"
+        },
+        capabilities: {
+          tools: true
+        }
+      }
+    };
+  }
+  
+  // Handle the resources/list method
+  if (request.method === 'resources/list') {
+    debugLog(`Handling resources/list request`);
+    return {
+      jsonrpc: '2.0',
+      id: request.id,
+      result: {
+        resources: []
+      }
+    };
+  }
+  
+  // Handle the resources/read method
+  if (request.method === 'resources/read') {
+    debugLog(`Handling resources/read request: ${JSON.stringify(request.params)}`);
+    return {
+      jsonrpc: '2.0',
+      id: request.id,
+      result: {
+        content: [
+          {
+            type: 'text',
+            text: 'Resource not found'
+          }
+        ]
+      }
+    };
+  }
+  
+  // Handle direct execute method
+  if (request.method === 'execute') {
+    debugLog(`Handling direct execute request: ${JSON.stringify(request.params)}`);
+    
+    // Extract code from params
+    if (!request.params || !request.params.code) {
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32602,
+          message: 'Invalid params: code parameter is required'
+        }
+      };
+    }
+    
+    const code = request.params.code;
+    const timeout = request.params.timeout || 5000;
+    
+    debugLog(`Executing code directly: ${code}`);
+    
+    try {
+      // Execute the code
+      const result = await executeCode(code, timeout);
+      
+      // Format response
+      if (!result.success) {
+        // Format error response
+        const errorMessage = result.error ? 
+          (result.error.stack || result.error.message || String(result.error)) : 
+          'Unknown error';
+          
+        debugLog(`Execution error: ${errorMessage}`);
+          
+        // Include logs with the error
+        let content = [];
+        
+        // Add logs first if there are any
+        if (result.logs && result.logs.length > 0) {
+          for (const log of result.logs) {
+            content.push({
+              type: 'text',
+              text: log
+            });
+          }
+        }
+        
+        // Add the error message
+        content.push({
+          type: 'text',
+          text: `ERROR: ${errorMessage}`
+        });
+          
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: { content }
+        };
+      } else {
+        // Format success response
+        let resultText;
+        
+        if (result.result === undefined) {
+          resultText = 'undefined';
+        } else if (result.result === null) {
+          resultText = 'null';
+        } else if (typeof result.result === 'string') {
+          resultText = result.result;
+        } else if (typeof result.result === 'number' || typeof result.result === 'boolean') {
+          resultText = String(result.result);
+        } else {
+          resultText = util.inspect(result.result, { 
+            depth: 8, 
+            colors: false,
+            compact: true,
+            maxArrayLength: 100,
+            maxStringLength: 1000,
+            breakLength: 120
+          });
+        }
+        
+        debugLog(`Formatted result: ${resultText}`);
+        
+        // Include any logs in the output
+        let content = [];
+        
+        // Add logs first if there are any
+        if (result.logs && result.logs.length > 0) {
+          for (const log of result.logs) {
+            content.push({
+              type: 'text',
+              text: log
+            });
+          }
+        }
+        
+        // Add the result value
+        content.push({
+          type: 'text',
+          text: resultText
+        });
+        
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            content
+          }
+        };
+      }
+    } catch (error) {
+      debugLog(`Unexpected error executing code: ${error.message}`);
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32000,
+          message: `Server error: ${error.message}`
+        }
+      };
+    }
   }
   
   // Check the tool name and parameters structure
@@ -1005,32 +1205,56 @@ async function main() {
     debugLog(`Platform: ${process.platform}`);
     debugLog(`Command line args: ${JSON.stringify(process.argv)}`);
     
-    // Set up direct stdin processing as a fallback
-    if (DEBUG) {
-      process.stdin.on('data', async (data) => {
+    // Set up direct stdin processing as the primary method
+    process.stdin.on('data', async (data) => {
+      try {
+        const inputStr = data.toString().trim();
+        debugLog(`Direct stdin received: ${inputStr}`);
+        
+        // Try to parse as JSON-RPC
         try {
-          const inputStr = data.toString().trim();
-          debugLog(`Direct stdin received: ${inputStr}`);
+          const jsonRpc = JSON.parse(inputStr);
+          debugLog(`Parsed JSON-RPC: ${JSON.stringify(jsonRpc)}`);
           
-          // Try to parse as JSON-RPC
-          try {
-            const jsonRpc = JSON.parse(inputStr);
-            debugLog(`Parsed JSON-RPC: ${JSON.stringify(jsonRpc)}`);
-            
-            // Process the request directly
-            const response = await processRequest(jsonRpc);
-            debugLog(`Direct response: ${JSON.stringify(response)}`);
-            
-            // Write the response to stdout
-            process.stdout.write(JSON.stringify(response) + '\n');
-          } catch (parseError) {
-            debugLog(`Error parsing stdin as JSON-RPC: ${parseError.message}`);
-          }
-        } catch (stdinError) {
-          debugLog(`Error processing stdin: ${stdinError.message}`);
+          // Process request directly
+          const response = await processRequest(jsonRpc);
+          debugLog(`Direct response: ${JSON.stringify(response)}`);
+          
+          // Write the response to stdout
+          process.stdout.write(JSON.stringify(response) + '\n');
+        } catch (parseError) {
+          debugLog(`Error parsing stdin as JSON-RPC: ${parseError.message}`);
+          
+          // Send error response
+          const errorResponse = {
+            jsonrpc: '2.0',
+            id: null,
+            error: {
+              code: -32700,
+              message: 'Parse error',
+              data: parseError.message
+            }
+          };
+          
+          process.stdout.write(JSON.stringify(errorResponse) + '\n');
         }
-      });
-    }
+      } catch (stdinError) {
+        debugLog(`Error processing stdin: ${stdinError.message}`);
+        
+        // Send error response
+        const errorResponse = {
+          jsonrpc: '2.0',
+          id: null,
+          error: {
+            code: -32000,
+            message: 'Server error',
+            data: stdinError.message
+          }
+        };
+        
+        process.stdout.write(JSON.stringify(errorResponse) + '\n');
+      }
+    });
     
     // Listen for SIGINT to gracefully shutdown
     process.on('SIGINT', () => {
