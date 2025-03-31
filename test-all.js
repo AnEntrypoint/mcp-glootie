@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 
 // Directories
 const TESTS_DIR = path.join(__dirname, 'tests');
-const TEMP_SERVER_PATH = path.join(__dirname, 'temp-test-server.cjs');
+const SERVER_PATH = path.join(__dirname, 'simple-repl-server.js');
 
 // ANSI color codes for output
 const colors = {
@@ -35,37 +35,6 @@ function debug(message) {
   console.error(`${colors.yellow}[DEBUG] ${message}${colors.reset}`);
 }
 
-// Test timeout in milliseconds (10 seconds)
-const TEST_TIMEOUT = 10000;
-
-// Function to create a temporary modified server file
-const createTemporaryServer = async () => {
-  try {
-    // Define the server code to write to the file
-    const serverCode = fs.readFileSync(TEMP_SERVER_PATH, 'utf8');
-    
-    // Write the server file
-    fs.writeFileSync(TEMP_SERVER_PATH, serverCode);
-    debug(`Temporary server file verified at: ${TEMP_SERVER_PATH}`);
-    return true;
-  } catch (error) {
-    console.error(`${colors.red}Failed to create temporary server: ${error.message}${colors.reset}`);
-    return false;
-  }
-};
-
-// Function to clean up the temporary server file
-function cleanupTemporaryServer() {
-  try {
-    if (fs.existsSync(TEMP_SERVER_PATH)) {
-      fs.unlinkSync(TEMP_SERVER_PATH);
-      debug('Temporary server file removed');
-    }
-  } catch (error) {
-    console.error(`${colors.red}Error cleaning up temporary server: ${error.message}${colors.reset}`);
-  }
-}
-
 // Async function to load all test files
 async function loadAllTests() {
   try {
@@ -74,6 +43,12 @@ async function loadAllTests() {
     // Check if tests directory exists
     if (!fs.existsSync(TESTS_DIR)) {
       console.error(`${colors.red}Tests directory not found: ${TESTS_DIR}${colors.reset}`);
+      process.exit(1);
+    }
+    
+    // Check if server file exists
+    if (!fs.existsSync(SERVER_PATH)) {
+      console.error(`${colors.red}REPL server not found: ${SERVER_PATH}${colors.reset}`);
       process.exit(1);
     }
     
@@ -150,7 +125,7 @@ async function loadAllTests() {
 async function runSingleTest(test) {
   return new Promise((resolve) => {
     // Start a new server instance for this test
-    const serverArgs = [TEMP_SERVER_PATH];
+    const serverArgs = [SERVER_PATH];
     
     debug(`Starting server with: node ${serverArgs.join(' ')}`);
     const server = spawn('node', serverArgs);
@@ -174,17 +149,33 @@ async function runSingleTest(test) {
     
     debug(`Test request: ${JSON.stringify(request)}`);
     
+    // Reduced timeout (5 seconds instead of 10)
+    const timeout = 5000;
+    
     // Set up timeout for this test
     timeoutId = setTimeout(() => {
-      debug(`Test timeout after ${TEST_TIMEOUT}ms`);
+      debug(`Test timeout after ${timeout}ms`);
       server.kill();
       resolve({
         success: false,
-        error: `Test timeout after ${TEST_TIMEOUT/1000} seconds`,
+        error: `Test timeout after ${timeout/1000} seconds`,
         stderr: errorData,
         stdout: responseData
       });
-    }, TEST_TIMEOUT);
+    }, timeout);
+    
+    // Flag to track if we've resolved this promise already
+    let hasResolved = false;
+    
+    // Helper function to prevent multiple resolves
+    const safeResolve = (result) => {
+      if (!hasResolved) {
+        hasResolved = true;
+        clearTimeout(timeoutId);
+        server.kill();
+        resolve(result);
+      }
+    };
     
     // Collect stdout from the server line by line
     server.stdout.on('data', (data) => {
@@ -205,14 +196,10 @@ async function runSingleTest(test) {
           
           // We only care about responses with our ID
           if (response.jsonrpc === '2.0' && response.id === '1') {
-            // We got a valid response, clear timeout and kill server
-            clearTimeout(timeoutId);
-            server.kill();
-            
             // Process the response
             if (response.error) {
               debug(`Server returned error: ${JSON.stringify(response.error)}`);
-              resolve({
+              safeResolve({
                 success: false,
                 error: response.error.message || 'Unknown error',
                 errorCode: response.error.code
@@ -243,12 +230,12 @@ Actual: ${normalizedResult}`);
                 // This is more forgiving for console output which may include timestamps or formatting
                 if (test.code.includes('console.')) {
                   if (normalizedResult.includes(normalizedExpected)) {
-                    resolve({
+                    safeResolve({
                       success: true,
                       result: resultText
                     });
                   } else {
-                    resolve({
+                    safeResolve({
                       success: false,
                       error: 'Console output did not match expected output',
                       expected: normalizedExpected,
@@ -264,12 +251,12 @@ Actual: ${normalizedResult}`);
                   if (normalizedResult.includes(normalizedExpected) || 
                       normalizedResult === normalizedExpected ||
                       cleanResult.includes(cleanExpected)) {
-                    resolve({
+                    safeResolve({
                       success: true,
                       result: resultText
                     });
                   } else {
-                    resolve({
+                    safeResolve({
                       success: false,
                       error: 'Result did not match expected output',
                       expected: normalizedExpected,
@@ -279,7 +266,7 @@ Actual: ${normalizedResult}`);
                 }
               } else {
                 // No expected value provided, consider it successful
-                resolve({
+                safeResolve({
                   success: true,
                   result: resultText
                 });
@@ -287,7 +274,7 @@ Actual: ${normalizedResult}`);
               return;
             } else {
               debug(`Invalid response format: missing content field`);
-              resolve({
+              safeResolve({
                 success: false,
                 error: 'Invalid response format: missing content',
                 fullResponse: JSON.stringify(response)
@@ -313,10 +300,9 @@ Actual: ${normalizedResult}`);
     // Handle server exit
     server.on('exit', (code) => {
       debug(`Server exited with code: ${code}`);
-      if (code !== null && code !== 0 && timeoutId) {
+      if (code !== null && code !== 0) {
         // Server exited with error before responding
-        clearTimeout(timeoutId);
-        resolve({
+        safeResolve({
           success: false,
           error: `Server exited with code ${code}`,
           stderr: errorData
@@ -324,12 +310,23 @@ Actual: ${normalizedResult}`);
       }
     });
     
-    // Wait briefly for server to start up before sending request
+    // Wait a shorter time before sending request (500ms instead of 1000ms)
     setTimeout(() => {
-      debug(`Sending request to server: ${JSON.stringify(request)}`);
-      // Send the request to the server
-      server.stdin.write(JSON.stringify(request) + '\n');
-    }, 1000);
+      // Only send if we haven't resolved yet
+      if (!hasResolved) {
+        debug(`Sending request to server: ${JSON.stringify(request)}`);
+        // Send the request to the server
+        server.stdin.write(JSON.stringify(request) + '\n');
+      }
+    }, 500);
+    
+    // Also send immediately if we see the server is ready
+    server.stdout.once('data', (data) => {
+      if (data.toString().includes('REPL server started') && !hasResolved) {
+        debug('Server is ready, sending request immediately');
+        server.stdin.write(JSON.stringify(request) + '\n');
+      }
+    });
   });
 }
 
@@ -351,7 +348,6 @@ async function runAllTests(testFiles) {
     try {
       // If we have actual test objects, run them
       if (testFile.tests && Array.isArray(testFile.tests)) {
-        let fileFailedTests = 0;
         // Run all tests
         const testsToRun = testFile.tests;
         
@@ -378,37 +374,50 @@ async function runAllTests(testFiles) {
                 }
               }
               failedTests++;
-              fileFailedTests++;
+              
+              // Exit on first failure
+              console.log(`${colors.red}${colors.bright}Test failed. Exiting early.${colors.reset}`);
+              
+              // Summary
+              console.log(`\n${colors.cyan}${colors.bright}=== Test Summary ===${colors.reset}`);
+              console.log(`${colors.cyan}Tests run: ${passedTests + failedTests}/${totalTests}${colors.reset}`);
+              console.log(`${colors.green}Tests passed: ${passedTests}${colors.reset}`);
+              console.log(`${colors.red}Tests failed: ${failedTests}${colors.reset}`);
+              
+              return {
+                total: totalTests,
+                passed: passedTests,
+                failed: failedTests
+              };
             }
           }
         }
         
-        // Test file summary
-        if (fileFailedTests === 0) {
-          console.log(`${colors.green}  ✓ All tests passed in ${testFile.file}${colors.reset}`);
-        } else {
-          console.log(`${colors.red}  ✗ ${fileFailedTests} tests failed in ${testFile.file}${colors.reset}`);
-        }
+        // Test file summary only shown if all tests passed
+        console.log(`${colors.green}  ✓ All tests passed in ${testFile.file}${colors.reset}`);
       } else {
         // We only know the count but don't have test data
         console.log(`${colors.yellow}  ⚠ Skipping ${testFile.testCount} tests without test data${colors.reset}`);
       }
     } catch (err) {
       console.error(`${colors.red}Error running tests in ${testFile.file}: ${err.message}${colors.reset}`);
+      
+      // Exit on error as well
+      console.log(`${colors.red}${colors.bright}Error running tests. Exiting early.${colors.reset}`);
+      
+      return {
+        total: totalTests,
+        passed: passedTests,
+        failed: 1
+      };
     }
   }
   
-  // Summary
+  // Summary only shown if all tests passed
   console.log(`\n${colors.cyan}${colors.bright}=== Test Summary ===${colors.reset}`);
   console.log(`${colors.cyan}Total tests: ${totalTests}${colors.reset}`);
   console.log(`${colors.green}Tests passed: ${passedTests}${colors.reset}`);
-  console.log(`${colors.red}Tests failed: ${failedTests}${colors.reset}`);
-  
-  if (failedTests === 0) {
-    console.log(`${colors.green}${colors.bright}All tests passed! 🎉${colors.reset}`);
-  } else {
-    console.log(`${colors.red}${colors.bright}Some tests failed. 😢${colors.reset}`);
-  }
+  console.log(`${colors.green}${colors.bright}All tests passed! 🎉${colors.reset}`);
   
   return {
     total: totalTests,
@@ -420,26 +429,20 @@ async function runAllTests(testFiles) {
 // Main function
 async function main() {
   try {
-    // Create the temporary server with our modifications
-    if (!await createTemporaryServer()) {
-      console.error(`${colors.red}Failed to create temporary server. Cannot run tests.${colors.reset}`);
+    // Verify the server file exists
+    if (!fs.existsSync(SERVER_PATH)) {
+      console.error(`${colors.red}REPL server not found: ${SERVER_PATH}${colors.reset}`);
       process.exit(1);
     }
 
+    console.log(`${colors.cyan}Using server: ${SERVER_PATH}${colors.reset}`);
     const testFiles = await loadAllTests();
     const results = await runAllTests(testFiles);
-    
-    // Clean up temporary server
-    cleanupTemporaryServer();
 
     // Exit with appropriate code
     process.exit(results.failed > 0 ? 1 : 0);
   } catch (err) {
     console.error(`${colors.red}Unexpected error: ${err.message}${colors.reset}`);
-    
-    // Clean up temporary server even if there's an error
-    cleanupTemporaryServer();
-    
     process.exit(1);
   }
 }
