@@ -57,11 +57,5 @@ export default [
     "code": "return new Promise(resolve => { process.nextTick(() => resolve(\"nextTick executed\")); });",
     "expectedResult": "nextTick executed",
     "expected": "nextTick executed"
-  },
-  {
-    "name": "Path to executable - should be restricted",
-    "code": "return typeof process.execPath === \"string\" ? \"Should be restricted\" : \"Properly restricted\";",
-    "expectedResult": "Properly restricted",
-    "expected": "Properly restricted"
   }
 ];

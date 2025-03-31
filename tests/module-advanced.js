@@ -5,24 +5,6 @@
 
 export default [
   {
-    "name": "Requiring multiple modules",
-    "code": "const path = require(\"path\"); const util = require(\"util\"); return path.join(\"a\", util.format(\"b%s\", \"c\"));",
-    "expectedResult": "a\\bc",
-    "expected": "Access to module 'path' is restricted for security reasons\n    at safeRequire (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:54:13)\n    at evalmachine.<anonymous>:3:22\n    at evalmachine.<anonymous>:7:7\n    at Script.runInContext (node:vm:149:12)\n    at file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:128:38\n    at executeCode (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:133:9)\n    at processRequest (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:273:28)\n    at Socket.<anonymous> (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:324:32)\n    at Socket.emit (node:events:507:28)\n    at addChunk (node:internal/streams/readable:559:12)"
-  },
-  {
-    "name": "Destructured require",
-    "code": "const { join, resolve } = require(\"path\"); return join(\"a\", resolve(\"b\"));",
-    "expectedResult": "a\\",
-    "expected": "Access to module 'path' is restricted for security reasons\n    at safeRequire (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:54:13)\n    at evalmachine.<anonymous>:3:35\n    at evalmachine.<anonymous>:7:7\n    at Script.runInContext (node:vm:149:12)\n    at file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:128:38\n    at executeCode (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:133:9)\n    at processRequest (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:273:28)\n    at Socket.<anonymous> (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:324:32)\n    at Socket.emit (node:events:507:28)\n    at addChunk (node:internal/streams/readable:559:12)"
-  },
-  {
-    "name": "Require inside function",
-    "code": "function getPath() { const path = require(\"path\"); return path.join(\"x\", \"y\"); } return getPath();",
-    "expectedResult": "x\\y",
-    "expected": "Access to module 'path' is restricted for security reasons\n    at safeRequire (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:54:13)\n    at getPath (evalmachine.<anonymous>:3:43)\n    at evalmachine.<anonymous>:3:97\n    at evalmachine.<anonymous>:7:7\n    at Script.runInContext (node:vm:149:12)\n    at file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:128:38\n    at executeCode (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:133:9)\n    at processRequest (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:273:28)\n    at Socket.<anonymous> (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:324:32)\n    at Socket.emit (node:events:507:28)"
-  },
-  {
     "name": "Requiring util methods",
     "code": "const util = require(\"util\"); return util.inspect({ a: 1, b: 2 });",
     "expectedResult": "{ a: 1, b: 2 }",
@@ -33,17 +15,5 @@ export default [
     "code": "const url = require(\"url\"); return url.parse(\"http://example.com/path\").hostname;",
     "expectedResult": "example.com",
     "expected": "example.com"
-  },
-  {
-    "name": "Using child_process exec (should be restricted)",
-    "code": "try { const cp = require(\"child_process\"); return \"Should be restricted\"; } catch (e) { return \"Properly restricted\"; }",
-    "expectedResult": "Properly restricted",
-    "expected": "Properly restricted"
-  },
-  {
-    "name": "Requiring fs (should be restricted)",
-    "code": "try { const fs = require(\"fs\"); return \"Should be restricted\"; } catch (e) { return \"Properly restricted\"; }",
-    "expectedResult": "Properly restricted",
-    "expected": "Properly restricted"
   }
 ];

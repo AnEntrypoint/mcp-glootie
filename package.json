@@ -1,6 +1,6 @@
 {
   "name": "mcp-repl",
-  "version": "1.0.95",
+  "version": "1.0.96",
   "description": "A secure JavaScript REPL server for MCP with comprehensive test coverage",
   "main": "simple-repl-server.js",
   "type": "module",
@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node simple-repl-server.js",
-    "test": "node test-repl.js",
+    "test": "node test-all.js",
     "mcp-test": "node mcp-tester.js",
     "prepublishOnly": "npm test"
   },

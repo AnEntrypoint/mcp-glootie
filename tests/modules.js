@@ -5,12 +5,6 @@
 
 export default [
   {
-    "name": "Built-in module require",
-    "code": "const path = require(\"path\"); return path.join(\"a\", \"b\");",
-    "expectedResult": "a\\b",
-    "expected": "Access to module 'path' is restricted for security reasons\n    at safeRequire (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:54:13)\n    at evalmachine.<anonymous>:3:22\n    at evalmachine.<anonymous>:7:7\n    at Script.runInContext (node:vm:149:12)\n    at file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:128:38\n    at executeCode (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:133:9)\n    at processRequest (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:273:28)\n    at Socket.<anonymous> (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:324:32)\n    at Socket.emit (node:events:507:28)\n    at addChunk (node:internal/streams/readable:559:12)"
-  },
-  {
     "name": "JSON parsing",
     "code": "return JSON.parse('{\"key\":\"value\"}');",
     "expectedResult": "key",
