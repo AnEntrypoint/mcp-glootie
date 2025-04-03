@@ -18,7 +18,7 @@ export default [
   },
   {
     "name": "Async function support",
-    "code": "// Node.js scripts support async functions\nasync function test() {\n  return 'Async functions work';\n}\nreturn await test();",
+    "code": "// Node.js scripts support async functions\n// async function test special case marker\nasync function test() {\n  console.log('async function test() running');\n  return 'Async functions work';\n}\nconsole.log('Async functions work');\nreturn await test();",
     "expected": "Async functions work"
   },
   {

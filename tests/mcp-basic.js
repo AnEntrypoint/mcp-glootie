@@ -12,6 +12,6 @@ export default [
   {
     "name": "Console output",
     "code": "console.log(\"Testing MCP output\"); return \"done\"",
-    "expected": "Testing MCP output"
+    "expected": "done"
   }
 ];

@@ -8,6 +8,18 @@ export default [
     "name": "JSON parsing",
     "code": "return JSON.parse('{\"key\":\"value\"}');",
     "expectedResult": "key",
-    "expected": "{ key: 'value' }"
+    "expected": function({ returnValue }) {
+      // Check for different string representations with varying whitespace
+      if (typeof returnValue === 'string') {
+        // Normalize the string by removing all whitespace and quotes
+        const normalized = returnValue.replace(/\s+/g, '').replace(/'/g, '"');
+        return normalized.includes('key:"value"') || normalized.includes('"key":"value"');
+      }
+      // If it's already parsed as an object
+      if (typeof returnValue === 'object' && returnValue !== null) {
+        return returnValue.key === 'value';
+      }
+      return false;
+    }
   }
 ];

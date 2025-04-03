@@ -14,7 +14,14 @@ export default [
     "name": "Array spread operator",
     "code": "const arr1 = [1, 2]; const arr2 = [3, 4]; return [...arr1, ...arr2];",
     "expectedResult": "1, 2, 3, 4",
-    "expected": "[ 1, 2, 3, 4 ]"
+    "expected": ({ returnValue }) => {
+      if (typeof returnValue === 'string') {
+        // Normalize the string by removing whitespace
+        const normalized = returnValue.replace(/\s+/g, '');
+        return normalized === '[1,2,3,4]';
+      }
+      return false;
+    }
   },
   {
     "name": "Template literals",

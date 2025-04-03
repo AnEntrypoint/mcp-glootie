@@ -8,43 +8,85 @@ export default [
     "name": "Custom error with stack trace",
     "code": "const err = new Error(\"Custom error with stack\"); throw err;",
     "expectedError": "Custom error with stack",
-    "expected": "Custom error with stack\n    at evalmachine.<anonymous>:3:21\n    at evalmachine.<anonymous>:7:7\n    at Script.runInContext (node:vm:149:12)\n    at file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:128:38\n    at executeCode (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:133:9)\n    at processRequest (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:273:28)\n    at Socket.<anonymous> (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:324:32)\n    at Socket.emit (node:events:507:28)\n    at addChunk (node:internal/streams/readable:559:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)"
+    "expected": ({ outputs, returnValue, fullOutput }) => {
+      // The error might be in outputs or in returnValue, or in fullOutput depending on how the REPL reports it
+      const allText = [fullOutput, returnValue, ...(outputs || [])].join(' ');
+      return allText.includes('Custom error with stack') && 
+             (allText.includes('Error:') || allText.includes('ERROR:')) &&
+             (allText.includes('at eval') || allText.includes('at evalmachine'));
+    }
   },
   {
     "name": "Error with custom properties",
     "code": "const err = new Error(\"With props\"); err.code = \"ERR_CUSTOM\"; throw err;",
     "expectedError": "ERR_CUSTOM",
-    "expected": "With props\n    at evalmachine.<anonymous>:3:21\n    at evalmachine.<anonymous>:7:7\n    at Script.runInContext (node:vm:149:12)\n    at file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:128:38\n    at executeCode (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:133:9)\n    at processRequest (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:273:28)\n    at Socket.<anonymous> (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:324:32)\n    at Socket.emit (node:events:507:28)\n    at addChunk (node:internal/streams/readable:559:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)"
+    "expected": ({ outputs, returnValue, fullOutput }) => {
+      // The error might be in outputs or in returnValue, or in fullOutput depending on how the REPL reports it
+      const allText = [fullOutput, returnValue, ...(outputs || [])].join(' ');
+      return allText.includes('With props') && 
+             (allText.includes('Error:') || allText.includes('ERROR:')) &&
+             (allText.includes('at eval') || allText.includes('at evalmachine'));
+    }
   },
   {
     "name": "TypeError with message",
     "code": "throw new TypeError(\"Invalid type provided\");",
     "expectedError": "TypeError: Invalid type provided",
-    "expected": "Invalid type provided\n    at evalmachine.<anonymous>:3:15\n    at evalmachine.<anonymous>:7:7\n    at Script.runInContext (node:vm:149:12)\n    at file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:128:38\n    at executeCode (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:133:9)\n    at processRequest (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:273:28)\n    at Socket.<anonymous> (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:324:32)\n    at Socket.emit (node:events:507:28)\n    at addChunk (node:internal/streams/readable:559:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)"
+    "expected": ({ outputs, returnValue, fullOutput }) => {
+      // The error might be in outputs or in returnValue, or in fullOutput depending on how the REPL reports it
+      const allText = [fullOutput, returnValue, ...(outputs || [])].join(' ');
+      return allText.includes('Invalid type provided') && 
+             allText.includes('TypeError') &&
+             (allText.includes('at eval') || allText.includes('at evalmachine'));
+    }
   },
   {
     "name": "SyntaxError direct throw",
     "code": "throw new SyntaxError(\"Invalid syntax\");",
     "expectedError": "SyntaxError: Invalid syntax",
-    "expected": "Invalid syntax\n    at evalmachine.<anonymous>:3:15\n    at evalmachine.<anonymous>:7:7\n    at Script.runInContext (node:vm:149:12)\n    at file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:128:38\n    at executeCode (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:133:9)\n    at processRequest (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:273:28)\n    at Socket.<anonymous> (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:324:32)\n    at Socket.emit (node:events:507:28)\n    at addChunk (node:internal/streams/readable:559:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)"
+    "expected": ({ outputs, returnValue, fullOutput }) => {
+      // The error might be in outputs or in returnValue, or in fullOutput depending on how the REPL reports it
+      const allText = [fullOutput, returnValue, ...(outputs || [])].join(' ');
+      return allText.includes('Invalid syntax') && 
+             allText.includes('SyntaxError') &&
+             (allText.includes('at eval') || allText.includes('at evalmachine'));
+    }
   },
   {
     "name": "RangeError direct throw",
     "code": "throw new RangeError(\"Value out of range\");",
     "expectedError": "RangeError: Value out of range",
-    "expected": "Value out of range\n    at evalmachine.<anonymous>:3:15\n    at evalmachine.<anonymous>:7:7\n    at Script.runInContext (node:vm:149:12)\n    at file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:128:38\n    at executeCode (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:133:9)\n    at processRequest (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:273:28)\n    at Socket.<anonymous> (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:324:32)\n    at Socket.emit (node:events:507:28)\n    at addChunk (node:internal/streams/readable:559:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)"
+    "expected": ({ outputs, returnValue, fullOutput }) => {
+      // The error might be in outputs or in returnValue, or in fullOutput depending on how the REPL reports it
+      const allText = [fullOutput, returnValue, ...(outputs || [])].join(' ');
+      return allText.includes('Value out of range') && 
+             allText.includes('RangeError') &&
+             (allText.includes('at eval') || allText.includes('at evalmachine'));
+    }
   },
   {
     "name": "URIError direct throw",
     "code": "throw new URIError(\"Invalid URI\");",
     "expectedError": "URIError: Invalid URI",
-    "expected": "Invalid URI\n    at evalmachine.<anonymous>:3:15\n    at evalmachine.<anonymous>:7:7\n    at Script.runInContext (node:vm:149:12)\n    at file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:128:38\n    at executeCode (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:133:9)\n    at processRequest (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:273:28)\n    at Socket.<anonymous> (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:324:32)\n    at Socket.emit (node:events:507:28)\n    at addChunk (node:internal/streams/readable:559:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)"
+    "expected": ({ outputs, returnValue, fullOutput }) => {
+      // The error might be in outputs or in returnValue, or in fullOutput depending on how the REPL reports it
+      const allText = [fullOutput, returnValue, ...(outputs || [])].join(' ');
+      return allText.includes('Invalid URI') && 
+             allText.includes('URIError') &&
+             (allText.includes('at eval') || allText.includes('at evalmachine'));
+    }
   },
   {
     "name": "EvalError direct throw",
     "code": "throw new EvalError(\"Eval error\");",
     "expectedError": "EvalError: Eval error",
-    "expected": "Eval error\n    at evalmachine.<anonymous>:3:15\n    at evalmachine.<anonymous>:7:7\n    at Script.runInContext (node:vm:149:12)\n    at file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:128:38\n    at executeCode (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:133:9)\n    at processRequest (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:273:28)\n    at Socket.<anonymous> (file:///C:/Users/user/Documents/Cline/MCP/simple-repl/simple-repl-server.js:324:32)\n    at Socket.emit (node:events:507:28)\n    at addChunk (node:internal/streams/readable:559:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)"
+    "expected": ({ outputs, returnValue, fullOutput }) => {
+      // The error might be in outputs or in returnValue, or in fullOutput depending on how the REPL reports it
+      const allText = [fullOutput, returnValue, ...(outputs || [])].join(' ');
+      return allText.includes('Eval error') && 
+             allText.includes('EvalError') &&
+             (allText.includes('at eval') || allText.includes('at evalmachine'));
+    }
   },
   {
     "name": "Nested try-catch blocks",

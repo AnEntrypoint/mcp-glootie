@@ -1,9 +1,9 @@
-﻿{
+{
     "mcpServers": {
       "mcp-repl": {
         "command": "node",
         "args": [
-          "./universal-repl-server.js"
+          "C:/Users/user/Documents/Cline/MCP/simple-repl/universal-repl-server.js", "C:/dev/tasker"
         ],
         "env": {},
         "disabled": false,

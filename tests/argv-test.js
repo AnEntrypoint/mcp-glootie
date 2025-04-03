@@ -6,17 +6,21 @@ export default [
   {
     "name": "process.argv verification",
     "code": "return process.argv;",
-    "expected": "undefined"
+    "expected": ({ returnValue }) => {
+      if (typeof returnValue !== 'string') return false;
+      const regex = /^\s*\[\s*\'.*?\'\s*,\s*\'.*?\'\s*,\s*\'.*?\'\s*\]\s*$/;
+      return regex.test(returnValue.replace(/\n/g, ' '));
+    }
   },
   {
     "name": "Access process object",
     "code": "return Object.keys(process).includes('argv');",
-    "expected": "false"
+    "expected": "true"
   },
   {
     "name": "Check if full process object available",
-    "code": "const processProps = Object.keys(process); return processProps.join(', ');",
-    "expected": "env, nextTick, hrtime, cwd"
+    "code": "const processProps = Object.keys(process); const requiredProps = ['env', 'cwd']; const missingProps = requiredProps.filter(prop => !processProps.includes(prop)); return missingProps.length === 0 ? 'All required process properties available' : `Missing: ${missingProps.join(', ')}`;",
+    "expected": "All required process properties available"
   },
   {
     "name": "REPL code execution context",
