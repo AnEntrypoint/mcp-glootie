@@ -1,18 +1,55 @@
 {
-  "name": "simple-repl",
-  "version": "1.0.0",
-  "description": "Simple REPL server using the Model Context Protocol",
-  "main": "simple-repl-server.js",
+  "name": "mcp-repl",
+  "version": "1.0.109",
+  "description": "A secure JavaScript REPL server for MCP with comprehensive test coverage",
+  "main": "universal-repl-server.js",
   "type": "module",
   "bin": {
     "mcp-repl": "./universal-repl-server.js"
   },
   "scripts": {
-    "start": "node simple-repl-server.js",
-    "test": "node test-all.js"
+    "start": "node universal-repl-server.js",
+    "test": "node test-all.js",
+    "prepublishOnly": "npm test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.8.0",
+    "acorn": "^8.11.3",
+    "acorn-walk": "^8.3.2",
+    "node-fetch": "^2.7.0",
+    "zod": "^3.22.4"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": [
+    "repl",
+    "javascript",
+    "mcp",
+    "node",
+    "cli",
+    "sandbox",
+    "execution",
+    "evaluate"
+  ],
+  "author": "Model Context Protocol Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/simple-js-repl.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/simple-js-repl/issues"
+  },
+  "homepage": "https://github.com/yourusername/simple-js-repl#readme",
+  "files": [
+    "simple-repl-server.js",
+    "cli.js",
+    "mcp-tester.js",
+    "update-test-expectations.js",
+    "tests"
+  ],
+  "devDependencies": {
     "chalk": "^5.4.1"
   }
 }
