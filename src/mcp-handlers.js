@@ -158,8 +158,11 @@ export const callToolHandler = async (request, defaultWorkingDir = process.cwd()
             
             debugLog(`Executing code via MCP SDK: ${code} with timeout ${adjustedTimeout} in dir ${workingDir}`);
 
+            // Set up process.argv properly for this execution
+            const processArgv = ['node', 'script.js', workingDir];
+            
             // Execute the code with enhanced handling
-            const executionResult = await executeCode(code, adjustedTimeout, workingDir); 
+            const executionResult = await executeCode(code, adjustedTimeout, workingDir, processArgv); 
             debugLog(`Execution completed with ${executionResult.logs?.length || 0} logs and result: ${executionResult.success ? 'success' : 'error'}`);
             
             // Log raw result for debugging

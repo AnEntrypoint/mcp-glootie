@@ -2,22 +2,18 @@ import * as path from 'node:path';
 import * as util from 'node:util';
 import * as fs from 'node:fs';
 import { debugLog } from '../utils.js';
-
-// Set of modules that are considered safe for loading in the VM context
-const SAFE_MODULES = new Set([
-  'fs', 'path', 'util', 'crypto', 'stream', 'events',
-  'assert', 'buffer', 'child_process', 'console', 'constants',
-  'string_decoder', 'timers', 'tty', 'url', 'querystring',
-  'zlib', 'http', 'https', 'net', 'dgram', 'dns', 'tls', 'os'
-]);
+import * as vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 /**
  * Create an execution context for the VM with enhanced resource tracking and safer module loading
  * @param {Array} capturedLogs - Array to capture logs during execution
  * @param {string} workingDir - Working directory for execution
+ * @param {Array} processArgv - Process argv array to use for execution
  * @returns {Object} Context object with globals for VM execution
  */
-export function createExecutionContext(capturedLogs, workingDir) {
+export function createExecutionContext(capturedLogs, workingDir, processArgv = ['node', 'script.js']) {
   const resources = {
     timers: new Set(),
     intervals: new Set(),
@@ -787,115 +783,27 @@ export function createExecutionContext(capturedLogs, workingDir) {
   
   // Safe require function that only allows certain modules
   function safeRequire(moduleName) {
-    if (!SAFE_MODULES.has(moduleName)) {
-      debugLog(`Attempt to load unsafe module: ${moduleName}`);
-      capturedLogs.push(`${timestamp()} SECURITY WARNING: Attempted to load unsafe module: ${moduleName}`);
-      throw new Error(`Module '${moduleName}' is not allowed in this environment. Only the following modules are allowed: ${Array.from(SAFE_MODULES).join(', ')}`);
-    }
-    
-    debugLog(`Loading safe module: ${moduleName}`);
+    debugLog(`Loading module: ${moduleName}`);
     
     try {
-      // Handle special modules
-      if (moduleName === 'buffer') {
-        return { Buffer: SafeBuffer };
-      }
+      // Create a proper require function for the working directory
+      const customRequire = createRequire(path.join(workingDir, 'index.js'));
       
-      if (moduleName === 'util') {
-        return {
-          inspect: util.inspect,
-          format: util.format,
-          promisify: util.promisify,
-          types: {
-            isBuffer: (obj) => obj instanceof SafeBuffer,
-            isDate: (obj) => obj instanceof Date,
-            isRegExp: (obj) => obj instanceof RegExp
-          }
-        };
-      }
+      capturedLogs.push(`${timestamp()} Loading module: ${moduleName} from ${workingDir}`);
       
-      if (moduleName === 'fs') {
-        // Return simplified fs functions that work with the workingDir
-        return {
-          readFileSync: (filePath, options) => {
-            try {
-              const fullPath = path.isAbsolute(filePath) 
-                ? filePath 
-                : path.join(workingDir, filePath);
-              
-              const content = fs.readFileSync(fullPath, options);
-              capturedLogs.push(`${timestamp()} Read file synchronously: ${fullPath}`);
-              return content;
-            } catch (error) {
-              capturedLogs.push(`${timestamp()} Error reading file: ${error.message}`);
-              throw error;
-            }
-          },
-          writeFileSync: (filePath, data, options) => {
-            try {
-              const fullPath = path.isAbsolute(filePath) 
-                ? filePath 
-                : path.join(workingDir, filePath);
-              
-              capturedLogs.push(`${timestamp()} Write file synchronously: ${fullPath}`);
-              // For test safety, prevent writing outside workingDir
-              if (!fullPath.startsWith(workingDir)) {
-                throw new Error('Cannot write outside working directory');
-              }
-              
-              return fs.writeFileSync(fullPath, data, options);
-            } catch (error) {
-              capturedLogs.push(`${timestamp()} Error writing file: ${error.message}`);
-              throw error;
-            }
-          },
-          existsSync: (filePath) => {
-            try {
-              const fullPath = path.isAbsolute(filePath)
-                ? filePath
-                : path.join(workingDir, filePath);
-              
-              return fs.existsSync(fullPath);
-            } catch (error) {
-              return false;
-            }
-          }
-        };
-      }
-      
-      if (moduleName === 'path') {
-        return {
-          join: path.join,
-          resolve: path.resolve,
-          basename: path.basename,
-          dirname: path.dirname,
-          extname: path.extname,
-          isAbsolute: path.isAbsolute
-        };
-      }
-      
-      if (moduleName === 'url') {
-        return { 
-          URL: globalThis.URL,
-          URLSearchParams: globalThis.URLSearchParams,
-          parse: (url) => new URL(url),
-          format: (urlObj) => urlObj.toString()
-        };
-      }
-      
-      // Use the node: prefix to ensure we get the built-in module
-      return require(`node:${moduleName}`);
+      // Just use the native require directly with no restrictions
+      return customRequire(moduleName);
     } catch (error) {
       debugLog(`Error loading module ${moduleName}: ${error.message}`);
       capturedLogs.push(`${timestamp()} ERROR: Failed to load module ${moduleName}: ${error.message}`);
-      throw new Error(`Cannot find module '${moduleName}'`);
+      throw error;
     }
   }
   
   // Create mock process object with enhanced functionality
   const process = {
     cwd: () => workingDir,
-    argv: ['node', 'script.js'],
+    argv: processArgv || ['node', 'script.js', workingDir],
     env: { ...global.process.env, NODE_ENV: 'development' },
     // Enhanced resourceUsage method
     resourceUsage: () => {
@@ -1086,7 +994,7 @@ export function createExecutionContext(capturedLogs, workingDir) {
     setImmediate: trackedSetImmediate,
     clearImmediate: trackedClearImmediate,
     Promise: TrackedPromise,
-    require: safeRequire,
+    require: createRequire(path.join(workingDir, 'index.js')),
     fetch: trackedFetch,
     AbortController: TrackedAbortController,
     Headers,

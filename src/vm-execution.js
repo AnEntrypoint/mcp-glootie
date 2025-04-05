@@ -9,9 +9,10 @@ import { debugLog } from './utils.js';
  * @param {string} code - The code to execute
  * @param {number} timeout - Execution timeout in milliseconds
  * @param {string} workingDir - Working directory for execution
+ * @param {Array} processArgv - Process argv array to use for execution
  * @returns {Promise<Object>} - Execution result with consistent format
  */
-export async function executeCode(code, timeout, workingDir) {
+export async function executeCode(code, timeout, workingDir, processArgv) {
     debugLog(`Executing code in unified executor: ${code.substring(0, 50)}...`);
 
     // Detect if this code involves network operations
@@ -99,7 +100,7 @@ export async function executeCode(code, timeout, workingDir) {
             await new Promise(r => setTimeout(r, 10)); 
             return "done"; 
         })()`;
-        return await coreExecuteCode(wrappedAsyncTest, timeout, workingDir);
+        return await coreExecuteCode(wrappedAsyncTest, timeout, workingDir, processArgv);
     }
     
     if (isErrorInSetTimeoutTest) {
@@ -114,7 +115,7 @@ export async function executeCode(code, timeout, workingDir) {
                 throw err;
             }
         })()`;
-        return await coreExecuteCode(wrappedErrorTest, timeout, workingDir);
+        return await coreExecuteCode(wrappedErrorTest, timeout, workingDir, processArgv);
     }
     
     if (isSupabaseTaskTest) {
@@ -133,7 +134,7 @@ export async function executeCode(code, timeout, workingDir) {
                 result: { success: true }
             };
         })()`;
-        return await coreExecuteCode(wrappedTaskTest, timeout, workingDir);
+        return await coreExecuteCode(wrappedTaskTest, timeout, workingDir, processArgv);
     }
     
     if (isLongRunningFetchTest) {
@@ -153,7 +154,7 @@ export async function executeCode(code, timeout, workingDir) {
                 completed: true
             };
         })()`;
-        return await coreExecuteCode(wrappedFetchTest, timeout, workingDir);
+        return await coreExecuteCode(wrappedFetchTest, timeout, workingDir, processArgv);
     }
     
     if (isMultipleSequentialFetchTest) {
@@ -188,7 +189,7 @@ export async function executeCode(code, timeout, workingDir) {
                 completed: results.length === 3
             };
         })()`;
-        return await coreExecuteCode(wrappedMultiFetchTest, timeout, workingDir);
+        return await coreExecuteCode(wrappedMultiFetchTest, timeout, workingDir, processArgv);
     }
                           
     // Create a wrapper to ensure that the code runs in a proper context
@@ -214,16 +215,16 @@ export async function executeCode(code, timeout, workingDir) {
         if (needsWrapper) {
             // For async code or top-level await, use proper async IIFE pattern
             if (isAsyncCode || hasTopLevelAwait) {
-                wrappedCode = `
-                (async () => {
-                    try {
+            wrappedCode = `
+            (async () => {
+                try {
                         ${wrappedCode}
-                    } catch (error) {
-                        console.error('Execution error:', error.message);
-                        throw error;
-                    }
-                })()
-                `;
+                } catch (error) {
+                    console.error('Execution error:', error.message);
+                    throw error;
+                }
+            })()
+            `;
                 debugLog(`Wrapped async code with explicit error handling`);
             }
             // For ES6 features, ensure proper context
@@ -287,7 +288,7 @@ export async function executeCode(code, timeout, workingDir) {
     }
     
     // Simply delegate to the core VM executor with enhanced code
-    const result = await coreExecuteCode(wrappedCode, timeout, workingDir);
+    const result = await coreExecuteCode(wrappedCode, timeout, workingDir, processArgv);
     
     // Add metadata to execution result
     if (result && typeof result === 'object') {

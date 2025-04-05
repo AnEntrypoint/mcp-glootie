@@ -1,9 +1,9 @@
 ﻿{
     "mcpServers": {
       "mcp-repl": {
-        "command": "node",
+        "command": "nodemon",
         "args": [
-          "./universal-repl-server.js"
+          "./universal-repl-server.js C:/Users/user/Documents/Cline/MCP/simple-repl"
         ],
         "env": {},
         "disabled": false,

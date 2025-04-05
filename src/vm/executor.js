@@ -9,9 +9,10 @@ import { processVMResult } from './result-processor.js';
  * @param {string} code - The code to execute
  * @param {number} timeout - Timeout in milliseconds
  * @param {string} workingDir - Working directory for execution
+ * @param {Array} processArgv - Process argv array to use for execution
  * @returns {Promise<Object>} Execution result
  */
-export async function executeCode(code, timeout = 5000, workingDir = process.cwd()) {
+export async function executeCode(code, timeout = 5000, workingDir = process.cwd(), processArgv = ['node', 'script.js']) {
     // Analyze code patterns to optimize execution settings
     const codePatterns = detectCodeType(code);
     
@@ -88,7 +89,7 @@ export async function executeCode(code, timeout = 5000, workingDir = process.cwd
 
     try {
         // Create the enhanced execution context with resource tracking
-        const context = createExecutionContext(capturedLogs, workingDir);
+        const context = createExecutionContext(capturedLogs, workingDir, processArgv);
         
         // Enhance Promise handling in the VM context
         enhancePromiseHandling(context, capturedLogs);
