@@ -34,4 +34,3 @@ for cursor this would be in your .cursor/mcp.json
 - 🔄 **Resource Tracking**: Monitors timers, promises, and network requests for comprehensive debugging
 - 🌐 **Universal Compatibility**: Works seamlessly with both CLI and web applications through SSE
 
-## 🚀 Quick Start
