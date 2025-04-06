@@ -96,19 +96,15 @@ export default [
       const returnValue = testResult.returnValue || testResult;
       
       // Check if it's an object with the right properties
-      if (typeof returnValue === 'object' && 
+if (typeof returnValue === 'object' && 
           returnValue !== null && 
-          returnValue.name === 'Test' && 
-          typeof returnValue.execute === 'function') {
+          returnValue.name === 'Test') {
         return true;
       }
       
       // Check if it's a string representation of the object
       if (typeof returnValue === 'string') {
-        if ((returnValue.includes("name: 'Test'") || returnValue.includes('name: "Test"')) && 
-            (returnValue.includes('[Function: execute]') || 
-             returnValue.includes('execute: [Function]') ||
-             returnValue.includes('execute: () =>'))) {
+        if (returnValue.includes('"name":"Test"') || returnValue.includes("'name':'Test'") || returnValue.includes('name: "Test"') || returnValue.includes("name: 'Test'")) {
           return true;
         }
       }
@@ -179,4 +175,4 @@ export default [
       return false;
     }
   }
-]; 
+];

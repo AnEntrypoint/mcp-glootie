@@ -2,20 +2,19 @@
 // Universal REPL server using MCP SDK v2.0
 
 import * as path from 'node:path';
-import * as util from 'node:util';
-import * as fs from 'node:fs'; // Ensure fs is imported
 import { Server as McpServer } from "@modelcontextprotocol/sdk/server/index.js"; 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { debugLog, formatError } from './src/utils.js';
 import { listToolsHandler, callToolHandler } from './src/mcp-handlers.js';
-
+import express from "express";
 // Debug mode flag
 const DEBUG = process.argv.includes('--debug');
-
+const argv = process.argv;
 // Determine the default working directory from argv[2] or fallback to cwd
 const defaultWorkingDirectory = process.argv[2] 
     ? path.resolve(process.argv[2]) 
@@ -87,21 +86,56 @@ async function main() {
     debugLog(`Full command-line args: ${JSON.stringify(process.argv)}`);
     
     process.stderr.write('Universal REPL server started. Waiting for MCP requests...\n');
-    
-    // Create stdio transport
-    const transport = new StdioServerTransport();
-
-    // Connect the server to the transport
-    await server.connect(transport);
-    debugLog('Successfully connected to MCP transport');
-    
+    const app = express();
     // Listen for SIGINT to gracefully shutdown
     process.on('SIGINT', () => {
       process.stderr.write('\nREPL server shutting down...\n');
-      server.dispose(); // Cleanly dispose server resources
       process.exit(0);
     });
 
+    // Create transports - stdio for CLI and SSE for web connections
+    if(!argv[3]) {  
+      const stdioTransport = new StdioServerTransport();
+      await server.connect(stdioTransport);
+    } else if(argv[3] === "sse") {
+      console.log("SSE transport");
+      let transport;
+      
+      app.get("/sse", (req, res) => {
+        transport = new SSEServerTransport("/messages", res);
+        console.log("Transport created");
+        server.connect(transport);
+      });
+      
+      app.post("/messages", (req, res) => {
+        if (transport) {
+          transport.handlePostMessage(req, res);
+        }
+      });
+      
+      // Start the express server with proper error handling
+      // Express errors are emitted as events, not thrown as exceptions
+      const httpServer = app.listen(31337);
+      
+      // Handle server errors
+      httpServer.on('error', async (err) => {
+        debugLog(`Express server error: ${err.message}. Continuing with stdio transport...`);
+        // Fall back to stdio transport if express fails
+        const stdioTransport = new StdioServerTransport();
+        await server.connect(stdioTransport);
+      });
+      
+      httpServer.on('listening', () => {
+        debugLog('Successfully started express server on port 31337');
+      });
+    } else {
+      // Default to stdio if no transport specified
+      const stdioTransport = new StdioServerTransport();
+      await server.connect(stdioTransport);
+    }
+    
+    debugLog('Successfully connected to MCP transport');
+    
   } catch (error) {
     const errorMsg = `Error starting REPL server: ${formatError(error)}`;
     process.stderr.write(`${errorMsg}\n`);

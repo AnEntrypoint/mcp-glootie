@@ -127,58 +127,6 @@ async function runTest(test) {
     // Compare result with expected value
     const { expected, expectedError } = test;
 
-    // Special case for specific troublesome test
-    if (test.name === "Async function with await") {
-      console.log(`${colors.green}  ✓ ${test.name}${colors.reset}`);
-      return true;
-    }
-
-    // Special handling for object-literal with function tests
-    if (test.name.includes("object literal with function") ||
-        test.name.includes("complex object without return keyword")) {
-      console.log(`${colors.green}  ✓ ${test.name} (skipped - function in object)${colors.reset}`);
-      return true;
-    }
-
-    // Skip some consistently failing test patterns
-    if (test.name.includes("fetch test") ||
-        test.name.includes("Fetch HTTP") ||
-        test.name.includes("format specifiers") ||
-        test.name.includes("process.argv verification") ||
-        test.name.includes("multi-statement code without explicit return") ||
-        test.name.includes("try/catch block") ||
-        test.name.includes("temporary .env file") ||
-        test.name.includes("Map data structure") ||
-        test.name.includes("Set data structure") ||
-        test.name.includes("Class syntax") ||
-        test.name.includes("Class inheritance") ||
-        test.name.includes("Promise.race") ||
-        test.name.includes("Promise.all") ||
-        test.name.includes("Promise chain") ||
-        test.name.includes("Complex error handling in async")) {
-      console.log(`${colors.green}  ✓ ${test.name} (skipped - environment limitation)${colors.reset}`);
-      return true;
-    }
-
-    // Skip env-loading tests that fail consistently
-    if (
-      (test.name.includes("env") && test.name.includes("access")) ||
-      (test.name.includes("working directory") && test.name.includes("argv")) ||
-      test.name.includes("Spread operator with objects")
-    ) {
-      console.log(`${colors.green}  ✓ ${test.name} (skipped - environment limitation)${colors.reset}`);
-      return true;
-    }
-
-    // More generalized handling of object format differences
-    if (test.name.includes("Object declaration") || test.name.includes("object declaration")) {
-      if (typeof result.result === 'string' && result.result.includes('{') && result.result.includes('}')) {
-        // For object tests, if we got a string that contains braces, consider it a pass
-        console.log(`${colors.green}  ✓ ${test.name} (format normalized)${colors.reset}`);
-        return true;
-      }
-    }
-
     // Generalized boolean return handling - handles both string "true" and boolean true
     if (expected === true &&
         (result.result === "true" || result.result === true)) {
@@ -460,17 +408,41 @@ async function loadTests() {
     process.exit(1);
   }
 
-  // Get all test files
-  const testFiles = fs.readdirSync(TESTS_DIR)
-    .filter(file => file.endsWith('.js') && !file.startsWith('_'))
-    .sort();
+  // Parse optional test file argument (skip flags starting with --)
+  const testFileArg = process.argv.slice(2).find(arg => !arg.startsWith('--'));
 
-  if (testFiles.length === 0) {
-    console.error(`${colors.red}No test files found${colors.reset}`);
-    process.exit(1);
+  let testFiles = [];
+
+  if (testFileArg) {
+    const resolvedPath = path.isAbsolute(testFileArg)
+      ? testFileArg
+      : path.join(TESTS_DIR, testFileArg);
+
+    if (!fs.existsSync(resolvedPath)) {
+      console.error(`${colors.red}Specified test file not found: ${resolvedPath}${colors.reset}`);
+      process.exit(1);
+    }
+
+    if (!resolvedPath.endsWith('.js')) {
+      console.error(`${colors.red}Specified test file must be a .js file${colors.reset}`);
+      process.exit(1);
+    }
+
+    testFiles = [path.basename(resolvedPath)];
+    console.log(`Running specified test file: ${testFiles[0]}`);
+  } else {
+    // Get all test files
+    testFiles = fs.readdirSync(TESTS_DIR)
+      .filter(file => file.endsWith('.js') && !file.startsWith('_'))
+      .sort();
+
+    if (testFiles.length === 0) {
+      console.error(`${colors.red}No test files found${colors.reset}`);
+      process.exit(1);
+    }
+
+    console.log(`Found ${testFiles.length} test files`);
   }
-
-  console.log(`Found ${testFiles.length} test files`);
 
   const allTestFiles = [];
 
@@ -613,5 +585,3 @@ async function main() {
 
 // Run main
 main();
-
-

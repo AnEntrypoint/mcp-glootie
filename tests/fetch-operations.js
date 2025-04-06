@@ -26,6 +26,17 @@ export default [
           returnValue.status === 200 && returnValue.ok === true && returnValue.success === true) {
         return true;
       }
+      // Parse JSON string output
+      if (typeof returnValue === 'string') {
+        try {
+          const parsed = JSON.parse(returnValue);
+          if (parsed && parsed.status === 200 && parsed.ok === true && parsed.success === true) {
+            return true;
+          }
+        } catch {
+          // Not JSON, continue checks
+        }
+      }
       // 2. Check if it's the literal string '[object Object]'
       if (returnValue === '[object Object]') {
         return true; // Consider this a pass as a workaround for the runner issue
@@ -215,4 +226,4 @@ export default [
       return false;
     }
   }
-]; 
+];

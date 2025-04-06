@@ -5,11 +5,15 @@
 export default [
   {
     "name": "process.argv verification",
-    "code": "return process.argv;",
-    "expected": ({ returnValue }) => {
+"code": "return JSON.stringify(process.argv);",
+"expected": ({ returnValue }) => {
       if (typeof returnValue !== 'string') return false;
-      const regex = /^\s*\[\s*\'.*?\'\s*,\s*\'.*?\'\s*,\s*\'.*?\'\s*\]\s*$/;
-      return regex.test(returnValue.replace(/\n/g, ' '));
+      try {
+        const arr = JSON.parse(returnValue);
+        return Array.isArray(arr) && arr.length >= 3;
+      } catch {
+        return false;
+      }
     }
   },
   {
@@ -37,4 +41,4 @@ export default [
     "code": "// Code in argv[2] would have these globals available\nreturn typeof Buffer !== 'undefined' && typeof setTimeout !== 'undefined' && typeof console !== 'undefined';",
     "expected": "true"
   }
-]; 
+];

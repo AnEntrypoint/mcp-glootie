@@ -6,7 +6,7 @@
 export default [
   {
     "name": "Async function with await",
-    "code": "async function test() { return \"async result\"; } const result = await test(); result;",
+    "code": "async function test() { return \"async result\"; } return await test();",
     "expectedResult": "async result",
     "expected": "async result"
   },

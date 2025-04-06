@@ -75,15 +75,24 @@ result.fetchAvailable = typeof fetch === 'function';
 return result;`,
     expected: ({ returnValue }) => {
       // 1. If returnValue is an object with the expected property
-      if (typeof returnValue === 'object' && returnValue !== null) {
+if (typeof returnValue === 'object' && returnValue !== null) {
         return returnValue.fetchAvailable === true;
       }
-      
+      // Parse JSON string output
+      if (typeof returnValue === 'string') {
+        try {
+          const parsed = JSON.parse(returnValue);
+          if (parsed && parsed.fetchAvailable === true) {
+            return true;
+          }
+        } catch {
+          // Not JSON, continue checks
+        }
+      }
       // 2. If returnValue is the literal string '[object Object]'
       if (returnValue === '[object Object]') {
         return true; // Pass as a workaround
       }
-      
       // 3. If returnValue is a string representation containing the expected property
       const stringValue = String(returnValue);
       if (stringValue.includes('fetchAvailable: true')) {
@@ -115,18 +124,27 @@ result.modified = true;
 return result;`,
     expected: ({ returnValue }) => {
       // 1. If it's an object with the expected properties
-      if (typeof returnValue === 'object' && returnValue !== null) {
+if (typeof returnValue === 'object' && returnValue !== null) {
         return returnValue.sum === 3 && 
                returnValue.difference === -1 &&
                returnValue.product === 2 && 
                returnValue.modified === true;
       }
-      
+      // Parse JSON string output
+      if (typeof returnValue === 'string') {
+        try {
+          const parsed = JSON.parse(returnValue);
+          if (parsed && parsed.sum === 3 && parsed.difference === -1 && parsed.product === 2 && parsed.modified === true) {
+            return true;
+          }
+        } catch {
+          // Not JSON, continue checks
+        }
+      }
       // 2. If it's the literal string '[object Object]'
       if (returnValue === '[object Object]') {
         return true; // Pass as a workaround
       }
-      
       // 3. If it's a string representation containing key properties
       const stringValue = String(returnValue);
       if (stringValue.includes('sum:') && 
@@ -152,15 +170,24 @@ try {
 return result;`,
     expected: ({ returnValue }) => {
       // 1. If it's an object with the expected properties
-      if (typeof returnValue === 'object' && returnValue !== null) {
+if (typeof returnValue === 'object' && returnValue !== null) {
         return returnValue.success === true && returnValue.message === 'OK';
       }
-      
+      // Parse JSON string output
+      if (typeof returnValue === 'string') {
+        try {
+          const parsed = JSON.parse(returnValue);
+          if (parsed && parsed.success === true && parsed.message === 'OK') {
+            return true;
+          }
+        } catch {
+          // Not JSON, continue checks
+        }
+      }
       // 2. If it's the literal string '[object Object]'
       if (returnValue === '[object Object]') {
         return true; // Pass as a workaround
       }
-      
       // 3. If it's a string representation containing key properties
       const stringValue = String(returnValue);
       if (stringValue.includes('success: true') && stringValue.includes('message: \'OK\'')) {
@@ -201,4 +228,4 @@ return result;`,
 return condition ? 'truthy result' : 'falsy result';`,
     expected: 'truthy result'
   }
-]; 
+];

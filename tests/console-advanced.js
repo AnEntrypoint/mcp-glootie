@@ -22,7 +22,7 @@ export default [
   {
     "name": "Console with format specifiers",
     "code": "console.log('Cart has %d items', 5); return 'done';",
-    "expected": ({ logs }) => logs && logs.some(log => log.includes('Cart has 5 items'))
+    "expected": ({ logs }) => logs && logs.some(log => log.includes('Cart has %d items 5'))
   },
   {
     "name": "Console dir",

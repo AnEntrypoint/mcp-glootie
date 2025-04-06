@@ -58,9 +58,20 @@ export default [
     `,
     expected: ({ returnValue }) => {
       // 1. Check if it's a real object with the properties
-      if (typeof returnValue === 'object' && returnValue !== null && 
+if (typeof returnValue === 'object' && returnValue !== null && 
           returnValue.testVarLoaded === true && returnValue.anotherVarLoaded === true) {
         return true;
+      }
+      // Parse JSON string output
+      if (typeof returnValue === 'string') {
+        try {
+          const parsed = JSON.parse(returnValue);
+          if (parsed && parsed.testVarLoaded === true && parsed.anotherVarLoaded === true) {
+            return true;
+          }
+        } catch {
+          // Not JSON, continue checks
+        }
       }
       // 2. Check if it's the string representation '{...}' (less likely now)
       const stringValue = String(returnValue);
@@ -75,4 +86,4 @@ export default [
       return false;
     }
   }
-]; 
+];

@@ -18,12 +18,13 @@ export default [
     "name": "Object declaration",
     "code": "return { a: 1, b: 2 }",
     "expected": ({ returnValue }) => {
-      if (typeof returnValue === 'string') {
-        // Remove all whitespace and check if the content matches
-        const normalized = returnValue.replace(/\s+/g, '');
-        return normalized === '{a:1,b:2}';
+      if (typeof returnValue !== 'string') return false;
+      try {
+        const obj = JSON.parse(returnValue);
+        return obj.a === 1 && obj.b === 2;
+      } catch {
+        return false;
       }
-      return false;
     }
   },
   {
