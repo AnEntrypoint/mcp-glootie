@@ -8,7 +8,6 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
 
 // The path to the server
 const SERVER_PATH = path.join(process.cwd(), 'universal-repl-server.js');
