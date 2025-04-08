@@ -18,7 +18,7 @@ const DEBUG = process.argv.includes('--debug');
 // Debug logging function
 function debug(message) {
   if (DEBUG) {
-    console.error(`[DEBUG] ${message}`);
+    //console.error(`[DEBUG] ${message}`);
   }
 }
 
