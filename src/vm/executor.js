@@ -1,7 +1,6 @@
 import * as vm from 'node:vm';
 import { debugLog, detectCodeType } from '../utils.js';
 import { createExecutionContext } from './context-builder.js';
-import { wrapCode } from './code-wrapper.js';
 import { processVMResult } from './result-processor.js';
 import path from 'path';
 

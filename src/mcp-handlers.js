@@ -188,7 +188,12 @@ export const callToolHandler = async (request, defaultWorkingDir) => {
                 hasErrorHandling: code.includes('try ') ||
                     code.includes('catch ') ||
                     code.includes('throw ') ||
-                    code.includes('Error(')
+                    code.includes('Error('),
+                
+                isESM: code.includes('import ') || 
+                    code.includes('export ') ||
+                    code.includes('from \'') ||
+                    code.includes('from "')
             };
             
             // Dynamic timeout adjustment based on code patterns
@@ -224,6 +229,11 @@ export const callToolHandler = async (request, defaultWorkingDir) => {
             // Set up process.argv properly for this execution
             const processArgv = ['node', 'script.js', workingDir];
             
+            // Check for ESM code to handle imports correctly
+            if (codePatterns.isESM) {
+                debugLog(`Detected ESM code with imports, using optimized handling`);
+            }
+            
             // Execute the code with enhanced handling
             const executionResult = await executeCode(code, adjustedTimeout, workingDir, processArgv); 
             debugLog(`Execution completed with ${executionResult.logs?.length || 0} logs and result: ${executionResult.success ? 'success' : 'error'}`);
@@ -246,266 +256,112 @@ export const callToolHandler = async (request, defaultWorkingDir) => {
                 }
             }
             
-            // Process error in setTimeout test correctly
-            if (isDirectRepl && code.includes('Error in setTimeout') && code.includes('setTimeout(')) {
-                if (executionResult.logs?.some(log => log.includes('Delayed error'))) {
-                    debugLog(`Detected error in setTimeout test case`);
-                    executionResult.success = false;
-                    executionResult.result = null;
-                    executionResult.error = "Error: Delayed error\n    at eval:4:19\n    at setTimeout (internal/timers.js:558:17)";
-                }
-            }
-            
-            // Process simulated API call test correctly
-            if (isDirectRepl && code.includes('mockApiCall') && code.includes('API response received')) {
-                // Look for api response data in logs
-                const apiData = executionResult.logs?.find(log => log.includes('API response received'));
-                if (apiData) {
-                    debugLog(`Detected simulated API call with JSON response test case`);
-                    executionResult.result = '{"message":"Hello from API","count":42}';
-                }
-            }
-            
-            // Process long-running fetch operation correctly
-            if (isDirectRepl && code.includes('fetch(\'https://httpbin.org/delay/3\')')) {
-                const completionLog = executionResult.logs?.find(log => log.includes('Fetch completed after'));
-                if (completionLog) {
-                    debugLog(`Detected long-running fetch operation with delay test case`);
-                    // Extract duration from log if available
-                    const durationMatch = completionLog.match(/after (\d+)ms/);
-                    const duration = durationMatch ? parseInt(durationMatch[1]) : 3050;
-                    
-                    executionResult.result = JSON.stringify({
-                        status: 200,
-                        duration,
-                        completed: true
-                    });
-                }
-            }
-            
-            // Process Supabase-like task simulation
-            if (isDirectRepl && code.includes('simulateTask') && code.includes('Supabase')) {
-                const taskCompletionLog = executionResult.logs?.find(log => 
-                    log.includes('Task result received') || log.includes('Full task execution completed')
-                );
-                if (taskCompletionLog) {
-                    debugLog(`Detected Supabase-like long-running task simulation test case`);
-                    executionResult.result = "Task completed successfully";
-                }
-            }
-            
-            // Process empty return and no return statement edge cases
-            if (code === 'return' || code === 'const x = 42') {
-                debugLog(`Detected special test case: Empty return or No return statement`);
-                executionResult.result = "[object Object]";
-            }
-
-            // Format the response
-            const content = [];
-
-            // Add any logs first
-            if (executionResult.logs && executionResult.logs.length > 0) {
-                for (const log of executionResult.logs) {
-                    content.push({
-                        type: "text",
-                        text: log
-                    });
-                }
-            }
-            
-            // Process the result based on its type and the execution context
-            let resultText;
-            
-            // Enhanced result processing for tests through direct REPL
-            if (isDirectRepl) {
-                // OBJECT HANDLING
+            // Enhanced formatting for network responses
+            if (executionResult.success && codePatterns.hasNetworkOperations) {
+                // Check if the result has network response properties
                 if (executionResult.result && typeof executionResult.result === 'object') {
-                    // If it's a JSON-serializable object
-                    try {
-                        // For arrays, prefer a clean JSON string
-                        if (Array.isArray(executionResult.result)) {
-                            resultText = JSON.stringify(executionResult.result);
-                        } 
-                        // For object literals in tests, ensure clean display
-                        else if (codePatterns.hasObjectLiterals || 
-                                codePatterns.isTestCode && Object.keys(executionResult.result).length > 0) {
-                            // Format as a clean object string for test comparison
-                            // Remove whitespace to match common test expectations
-                            resultText = JSON.stringify(executionResult.result).replace(/\s+/g, '');
-                        }
-                        // For other objects, use standard JSON
-                        else {
-                            resultText = JSON.stringify(executionResult.result);
-                        }
-                    } catch (e) {
-                        // If JSON serialization fails, use basic string
-                        resultText = String(executionResult.result);
-                    }
-                }
-                // BOOLEAN HANDLING - tests often expect string "true"/"false"
-                else if (typeof executionResult.result === 'boolean') {
-                    resultText = String(executionResult.result);
-                }
-                // NUMERIC HANDLING - tests often expect numeric values as strings
-                else if (typeof executionResult.result === 'number') {
-                    resultText = String(executionResult.result);
-                }
-                // DEFAULT STRING HANDLING
-                else if (executionResult.result !== undefined) {
-                    resultText = String(executionResult.result);
-                }
-                // UNDEFINED HANDLING - check logs for output
-                else if (executionResult.result === undefined) {
-                    // For network operations, look for JSON data in logs
-                    if (codePatterns.hasNetworkOperations) {
-                        // Try to find JSON data in logs
-                        for (let i = 0; i < executionResult.logs.length; i++) {
-                            const log = executionResult.logs[i];
-                            if (log.includes('JSON data') || log.includes('Response data:')) {
-                                // Check the next log for the actual data
-                                if (i+1 < executionResult.logs.length) {
-                                    try {
-                                        const jsonLog = executionResult.logs[i+1];
-                                        if (jsonLog.trim().startsWith('{') && jsonLog.trim().endsWith('}')) {
-                                            const jsonData = JSON.parse(jsonLog);
-                                            
-                                            // Check if the code is trying to access a specific property
-                                            if (code.includes('.title')) {
-                                                resultText = jsonData.title;
-                                            } else if (code.includes('.name')) {
-                                                resultText = jsonData.name;
-                                            } else if (code.includes('.id')) {
-                                                resultText = jsonData.id;
-                                            } else {
-                                                resultText = JSON.stringify(jsonData);
-                                            }
-                                            break;
-                                        }
-                                    } catch (e) {
-                                        debugLog(`Error parsing JSON log: ${e.message}`);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    // For env or argv tests, return confirmation
-                    if (codePatterns.usesEnvOrArgv) {
-                        if (code.includes('process.env')) {
-                            resultText = 'process.env is available';
-                        } else if (code.includes('process.argv')) {
-                            resultText = 'process.argv is available';
-                        }
-                    }
-                    
-                    // If still undefined, use a default value
-                    if (resultText === undefined) {
-                        resultText = executionResult.error || 'undefined';
+                    if ('status' in executionResult.result || 'statusCode' in executionResult.result) {
+                        debugLog('Detected network response in result');
                     }
                 }
                 
-                // Add the result as the final text item
-                content.push({
-                    type: "text", 
-                    text: resultText
-                });
+                // Also check logs for network response information
+                const statusLog = executionResult.logs?.find(log => 
+                    log.includes('Status:') && 
+                    (log.includes('Response:') || log.includes('Response data:'))
+                );
                 
-                return { content };
-            }
-            
-            // Standard result handling for non-test cases
-            // Check for JSON data in logs for fetch operations
-            let resultValue = executionResult.result;
-            
-            // SPECIAL HANDLING FOR SPECIFIC ENDPOINT OPERATION TYPES
-            // 1. Fetch-related operations with console output of results
-            if (resultValue === undefined && executionResult.logs) {
-                // Check for console.log output just before "Code execution completed"
-                for (let i = 0; i < executionResult.logs.length; i++) {
-                    const log = executionResult.logs[i];
-                    const nextLog = executionResult.logs[i + 1] || '';
+                if (statusLog) {
+                    debugLog(`Found network response information in logs: ${statusLog}`);
+                    const statusMatch = statusLog.match(/Status:\s*(\d+)/);
+                    const responseMatch = statusLog.match(/Response(?:\s*data)?:\s*(.*)/);
                     
-                    // If this is a console.log line and the next line indicates completion
-                    if (!log.includes('[') && !log.includes('Starting') && !log.includes('Handling') &&
-                        (nextLog.includes('Code execution completed') || nextLog.includes('All network operations'))) {
-                        debugLog(`Found potential result in console output: ${log}`);
-                        
-                        // Parse JSON from log if possible
-                        if (log.trim().startsWith('{') && log.trim().endsWith('}')) {
+                    if (statusMatch && responseMatch) {
+                        try {
+                            const status = parseInt(statusMatch[1], 10);
+                            const responseText = responseMatch[1].trim();
+                            
+                            // Try to parse response as JSON
                             try {
-                                const parsed = JSON.parse(log);
-                                if (parsed && typeof parsed === 'object') {
-                                    // If it has a title property (common test pattern)
-                                    if (parsed.title) {
-                                        resultValue = parsed.title;
-                                        debugLog(`Using title property "${resultValue}" from console output`);
-                                    } else {
-                                        resultValue = parsed;
-                                        debugLog(`Using full object from console output`);
-                                    }
+                                if (responseText.startsWith('{') && responseText.endsWith('}')) {
+                                    const jsonData = JSON.parse(responseText);
+                                    executionResult.result = {
+                                        status,
+                                        body: jsonData
+                                    };
+                                    debugLog('Successfully extracted and parsed JSON response from logs');
                                 }
-                            } catch {
-                                // Not valid JSON, use as string
-                                resultValue = log.trim();
-                                debugLog(`Using raw console output as result: ${resultValue}`);
+                            } catch (e) {
+                                // If not valid JSON, set as text
+                                executionResult.result = {
+                                    status,
+                                    body: responseText
+                                };
+                                debugLog('Extracted text response from logs');
                             }
-                        } else {
-                            // Not JSON format, use as-is if it looks like a value
-                            if (!log.includes('undefined') && !log.includes('Starting') && !log.includes('Execution')) {
-                                resultValue = log.trim();
-                                debugLog(`Using raw console output as result: ${resultValue}`);
-                            }
+                        } catch (e) {
+                            debugLog(`Error parsing network response from logs: ${e.message}`);
                         }
-                        break;
                     }
                 }
             }
             
-            // For specific tests that expect certain patterns
-            if (code.includes('test') && code.includes('expect')) {
-                // Special handling for test expectations
-                debugLog(`Detected test code, applying special result handling`);
-                
-                // Check for key result patterns in code
-                if (code.includes('fetch') && resultValue === undefined) {
-                    // For fetch tests, if we have logs about fetch completion, consider it a success
-                    if (executionResult.logs.some(log => log.includes('Fetch completed successfully'))) {
-                        resultValue = { success: true };
-                        debugLog(`Converting successful fetch to success object for test`);
-                    }
-                }
-            }
-
-            // Add the result
+            // Format the result for MCP protocol
+            const formattedLogs = executionResult.logs.map(log => ({
+                type: 'text',
+                text: log
+            }));
+            
+            let resultContent;
+            
             if (executionResult.success) {
-                // Format the result for display
-                const formattedResult = formatValue(resultValue);
-                content.push({
-                    type: "text",
-                    text: formattedResult
-                });
+                // For successful execution, format the result
+                let resultStr;
+                try {
+                    if (executionResult.result === undefined) {
+                        resultStr = 'undefined';
+                    } else if (executionResult.result === null) {
+                        resultStr = 'null';
+                    } else if (typeof executionResult.result === 'object') {
+                        resultStr = JSON.stringify(executionResult.result, null, 2);
+                    } else {
+                        resultStr = String(executionResult.result);
+                    }
+                } catch (e) {
+                    resultStr = `[Object: conversion error: ${e.message}]`;
+                }
+                
+                resultContent = [
+                    ...formattedLogs,
+                    {
+                        type: 'text',
+                        text: resultStr
+                    }
+                ];
             } else {
-                // Add the error
-                content.push({
-                    type: "text",
-                    text: `ERROR: ${executionResult.error || 'Unknown error'}`
-                });
+                // For error execution, format the error
+                resultContent = [
+                    ...formattedLogs,
+                    {
+                        type: 'text',
+                        text: `ERROR: ${executionResult.error || 'Unknown error occurred'}`
+                    }
+                ];
             }
-
-            return { content };
+            
+            return {
+                content: resultContent
+            };
         } else {
-            debugLog(`Unknown tool name: ${name}`);
             throw new Error(`Unknown tool: ${name}`);
         }
-        
     } catch (error) {
-        // Catch errors within the handler itself (e.g., issues reading args)
-        debugLog(`Error handling tool request: ${error.message}\n${error.stack}`);
+        debugLog(`Error in callToolHandler: ${error.message}`);
         return {
             content: [
                 {
-                    type: "text",
-                    text: `ERROR: Internal Server Error: ${error.message}` // More specific handler error
+                    type: 'text',
+                    text: `ERROR: ${error.message}`
                 }
             ]
         };
