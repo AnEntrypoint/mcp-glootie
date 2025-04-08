@@ -636,4 +636,156 @@ function enhancePromiseHandling(context, capturedLogs) {
             });
         };
     }
+}
+
+/**
+ * Function to detect if code has fetch operations
+ * @param {string} code - The code to check
+ * @returns {boolean} - Whether the code has fetch operations
+ */
+function hasFetchOperations(code) {
+  return /fetch\s*\(/.test(code);
+}
+
+/**
+ * Function to detect if code has async operations
+ * @param {string} code - The code to check
+ * @returns {boolean} - Whether the code has async operations
+ */
+function hasAsyncOperations(code) {
+  return /\basync\b|\bawait\b|\.then\(|\.catch\(|\.finally\(|new\s+Promise/.test(code);
+}
+
+/**
+ * Execute code in a VM with the provided context
+ * @param {string} code - The code to execute
+ * @param {Object} options - Execution options
+ * @returns {Object} Execution result with logs and value
+ */
+export async function executeInVM(code, options = {}) {
+  const {
+    timeout = 5000,
+    workingDir = process.cwd(),
+    processArgv = ['node', 'script.js'],
+  } = options;
+
+  // Create array to store logs
+  const capturedLogs = [];
+  
+  // Detect if the code contains network operations
+  const containsFetch = hasFetchOperations(code);
+  const containsAsync = hasAsyncOperations(code);
+  
+  debugLog(`Code execution requested: ${code.substring(0, 100)}${code.length > 100 ? '...' : ''}`);
+  debugLog(`Working directory: ${workingDir}`);
+  debugLog(`Contains fetch: ${containsFetch}, Contains async: ${containsAsync}`);
+  
+  // Create context with the captured logs array
+  const context = createExecutionContext(capturedLogs, workingDir, processArgv);
+  
+  // Start timing execution
+  const startTime = process.hrtime();
+  let result;
+
+  try {
+    // If code contains fetch or is async, wrap it properly
+    if (containsFetch || containsAsync) {
+      debugLog('Executing code with async wrapper');
+      // Initialize global tracking for fetch operations
+      const wrappedCode = `
+      (async () => {
+        // Initialize tracking for fetch operations
+        if (!global.__pendingFetchOperations) {
+          global.__pendingFetchOperations = [];
+        }
+        
+        // Helper to track fetch operations
+        const originalFetch = fetch;
+        if (originalFetch) {
+          global.fetch = (...args) => {
+            const fetchPromise = originalFetch(...args);
+            global.__pendingFetchOperations.push(fetchPromise);
+            return fetchPromise;
+          };
+        }
+        
+        try {
+          const result = await (async () => { ${code} })();
+          
+          // Wait for all pending fetch operations to complete
+          if (global.__pendingFetchOperations && global.__pendingFetchOperations.length > 0) {
+            //console.log(\`Waiting for \${global.__pendingFetchOperations.length} pending fetch operations to complete...\`);
+            await Promise.allSettled(global.__pendingFetchOperations);
+            //console.log('All fetch operations completed');
+          }
+          
+          return result;
+        } catch (error) {
+          console.error('Execution error:', error);
+          throw error;
+        } finally {
+          // Reset fetch to original implementation
+          if (originalFetch) {
+            global.fetch = originalFetch;
+          }
+        }
+      })()`;
+      
+      // Execute the wrapped code
+      result = await vm.runInContext(wrappedCode, context, {
+        timeout,
+        displayErrors: true,
+        breakOnSigint: true,
+        filename: path.join(workingDir, 'script.js'),
+      });
+    } else {
+      // For simple synchronous code, execute directly
+      debugLog('Executing synchronous code directly');
+      result = vm.runInContext(code, context, {
+        timeout,
+        displayErrors: true,
+        breakOnSigint: true,
+        filename: path.join(workingDir, 'script.js'),
+      });
+    }
+    
+    debugLog('Code execution completed successfully');
+  } catch (error) {
+    debugLog(`Code execution failed: ${error.message}`);
+    capturedLogs.push(`Execution error: ${error.message}`);
+    
+    if (error.stack) {
+      // Format the stack trace to be more readable and remove internal details
+      const formattedStack = error.stack
+        .split('\n')
+        .filter(line => !line.includes('node:internal') && !line.includes('node:vm'))
+        .join('\n');
+      
+      capturedLogs.push(`Stack trace: ${formattedStack}`);
+    }
+    
+    // Provide result as the error for consistency
+    result = { error: error.message };
+  }
+  
+  // Calculate execution time
+  const hrend = process.hrtime(startTime);
+  const executionTimeMs = hrend[0] * 1000 + hrend[1] / 1000000;
+  
+  // Get memory usage
+  const memoryUsage = process.memoryUsage();
+  const usedMemoryMB = (memoryUsage.heapUsed / 1024 / 1024).toFixed(2);
+  
+  // Add execution metadata to logs
+  capturedLogs.push(`Execution completed in ${executionTimeMs.toFixed(0)}ms with memory usage ${usedMemoryMB}MB`);
+  
+  // Return the execution result with metadata
+  return {
+    result,
+    logs: capturedLogs,
+    executionTimeMs,
+    memoryUsageMB: parseFloat(usedMemoryMB),
+    containsFetch,
+    containsAsync,
+  };
 } 

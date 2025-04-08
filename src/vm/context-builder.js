@@ -61,6 +61,90 @@ export function createExecutionContext(capturedLogs, workingDir, processArgv = [
     }
   };
   
+  // Override console methods to capture output
+  const originalConsole = { ...console };
+  sandbox.console = {
+    log: (...args) => {
+      const formattedMessage = args.map(arg => {
+        if (typeof arg === 'object') {
+          try {
+            return util.inspect(arg, { depth: 2, colors: false });
+          } catch (e) {
+            return String(arg);
+          }
+        }
+        return String(arg);
+      }).join(' ');
+      
+      capturedLogs.push(formattedMessage);
+      originalConsole.log(...args);
+    },
+    
+    error: (...args) => {
+      const formattedMessage = args.map(arg => {
+        if (typeof arg === 'object') {
+          try {
+            return util.inspect(arg, { depth: 2, colors: false });
+          } catch (e) {
+            return String(arg);
+          }
+        }
+        return String(arg);
+      }).join(' ');
+      
+      capturedLogs.push(`ERROR: ${formattedMessage}`);
+      originalConsole.error(...args);
+    },
+    
+    warn: (...args) => {
+      const formattedMessage = args.map(arg => {
+        if (typeof arg === 'object') {
+          try {
+            return util.inspect(arg, { depth: 2, colors: false });
+          } catch (e) {
+            return String(arg);
+          }
+        }
+        return String(arg);
+      }).join(' ');
+      
+      capturedLogs.push(`WARNING: ${formattedMessage}`);
+      originalConsole.warn(...args);
+    },
+    
+    info: (...args) => {
+      const formattedMessage = args.map(arg => {
+        if (typeof arg === 'object') {
+          try {
+            return util.inspect(arg, { depth: 2, colors: false });
+          } catch (e) {
+            return String(arg);
+          }
+        }
+        return String(arg);
+      }).join(' ');
+      
+      capturedLogs.push(`INFO: ${formattedMessage}`);
+      originalConsole.info(...args);
+    },
+    
+    debug: (...args) => {
+      const formattedMessage = args.map(arg => {
+        if (typeof arg === 'object') {
+          try {
+            return util.inspect(arg, { depth: 2, colors: false });
+          } catch (e) {
+            return String(arg);
+          }
+        }
+        return String(arg);
+      }).join(' ');
+      
+      capturedLogs.push(`DEBUG: ${formattedMessage}`);
+      originalConsole.debug(...args);
+    }
+  };
+  
   // Add special ESM wrapper function that can handle dynamic imports
   sandbox.__importESM = async (code) => {
     try {
@@ -139,14 +223,110 @@ export function createExecutionContext(capturedLogs, workingDir, processArgv = [
     // Check if global fetch is available (Node.js 18+)
     if (typeof global.fetch === 'function') {
       debugLog('Global fetch is available, adding to sandbox');
-      sandbox.fetch = global.fetch;
+      // Wrap fetch to capture the requests and responses
+      sandbox.fetch = async (...args) => {
+        try {
+          capturedLogs.push(`${timestamp()} Fetch request to: ${args[0]}`);
+          
+          if (args[1] && args[1].method) {
+            capturedLogs.push(`${timestamp()} Method: ${args[1].method}`);
+          }
+          
+          if (args[1] && args[1].headers) {
+            capturedLogs.push(`${timestamp()} Headers: ${JSON.stringify(args[1].headers)}`);
+          }
+          
+          const response = await global.fetch(...args);
+          
+          capturedLogs.push(`${timestamp()} Fetch response status: ${response.status}`);
+          capturedLogs.push(`${timestamp()} Response headers: ${JSON.stringify(Object.fromEntries([...response.headers]))}`);
+          
+          // Create a proxy for the response to capture body reading
+          const responseProxy = new Proxy(response, {
+            get: function(target, prop) {
+              const value = target[prop];
+              
+              // Special handling for text() and json() methods
+              if (prop === 'text' && typeof value === 'function') {
+                return async function() {
+                  const text = await value.apply(target);
+                  capturedLogs.push(`${timestamp()} Response body text: ${text.substring(0, 1000)}${text.length > 1000 ? '...(truncated)' : ''}`);
+                  return text;
+                };
+              } else if (prop === 'json' && typeof value === 'function') {
+                return async function() {
+                  const data = await value.apply(target);
+                  capturedLogs.push(`${timestamp()} Response body JSON: ${JSON.stringify(data, null, 2).substring(0, 1000)}${JSON.stringify(data).length > 1000 ? '...(truncated)' : ''}`);
+                  return data;
+                };
+              }
+              
+              return typeof value === 'function' ? value.bind(target) : value;
+            }
+          });
+          
+          return responseProxy;
+        } catch (error) {
+          capturedLogs.push(`${timestamp()} Fetch error: ${error.message}`);
+          throw error;
+        }
+      };
       capturedLogs.push(`${timestamp()} Using global fetch API`);
     } else {
       // Try to require node-fetch as a fallback
       try {
         const require = createRequire(import.meta.url);
         const nodeFetch = require('node-fetch');
-        sandbox.fetch = nodeFetch;
+        
+        // Wrap node-fetch to capture requests and responses
+        sandbox.fetch = async (...args) => {
+          try {
+            capturedLogs.push(`${timestamp()} Fetch request to: ${args[0]}`);
+            
+            if (args[1] && args[1].method) {
+              capturedLogs.push(`${timestamp()} Method: ${args[1].method}`);
+            }
+            
+            if (args[1] && args[1].headers) {
+              capturedLogs.push(`${timestamp()} Headers: ${JSON.stringify(args[1].headers)}`);
+            }
+            
+            const response = await nodeFetch(...args);
+            
+            capturedLogs.push(`${timestamp()} Fetch response status: ${response.status}`);
+            capturedLogs.push(`${timestamp()} Response headers: ${JSON.stringify(Object.fromEntries([...response.headers]))}`);
+            
+            // Create a proxy for the response to capture body reading
+            const responseProxy = new Proxy(response, {
+              get: function(target, prop) {
+                const value = target[prop];
+                
+                // Special handling for text() and json() methods
+                if (prop === 'text' && typeof value === 'function') {
+                  return async function() {
+                    const text = await value.apply(target);
+                    capturedLogs.push(`${timestamp()} Response body text: ${text.substring(0, 1000)}${text.length > 1000 ? '...(truncated)' : ''}`);
+                    return text;
+                  };
+                } else if (prop === 'json' && typeof value === 'function') {
+                  return async function() {
+                    const data = await value.apply(target);
+                    capturedLogs.push(`${timestamp()} Response body JSON: ${JSON.stringify(data, null, 2).substring(0, 1000)}${JSON.stringify(data).length > 1000 ? '...(truncated)' : ''}`);
+                    return data;
+                  };
+                }
+                
+                return typeof value === 'function' ? value.bind(target) : value;
+              }
+            });
+            
+            return responseProxy;
+          } catch (error) {
+            capturedLogs.push(`${timestamp()} Fetch error: ${error.message}`);
+            throw error;
+          }
+        };
+        
         debugLog('Added node-fetch to sandbox');
         capturedLogs.push(`${timestamp()} Using node-fetch as fetch API`);
       } catch (fetchErr) {
