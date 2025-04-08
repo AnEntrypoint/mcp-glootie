@@ -45,6 +45,7 @@ export function createExecutionContext(capturedLogs, workingDir, processArgv = [
 
   // Add self-reference to global
   sandbox.global = sandbox;
+  sandbox.globalThis = sandbox;
   
   // Add special direct eval capability
   sandbox.__directEval = directEval;
@@ -132,6 +133,30 @@ export function createExecutionContext(capturedLogs, workingDir, processArgv = [
   
   // Add working directory reference
   sandbox.__workingDir = workingDir;
+  
+  // Add fetch support to the sandbox context
+  try {
+    // Check if global fetch is available (Node.js 18+)
+    if (typeof global.fetch === 'function') {
+      debugLog('Global fetch is available, adding to sandbox');
+      sandbox.fetch = global.fetch;
+      capturedLogs.push(`${timestamp()} Using global fetch API`);
+    } else {
+      // Try to require node-fetch as a fallback
+      try {
+        const require = createRequire(import.meta.url);
+        const nodeFetch = require('node-fetch');
+        sandbox.fetch = nodeFetch;
+        debugLog('Added node-fetch to sandbox');
+        capturedLogs.push(`${timestamp()} Using node-fetch as fetch API`);
+      } catch (fetchErr) {
+        debugLog(`Could not add node-fetch to sandbox: ${fetchErr.message}`);
+        capturedLogs.push(`${timestamp()} Warning: fetch API is not available`);
+      }
+    }
+  } catch (fetchSetupErr) {
+    debugLog(`Error setting up fetch in sandbox: ${fetchSetupErr.message}`);
+  }
   
   // Create and return the VM context
   return vm.createContext(sandbox);

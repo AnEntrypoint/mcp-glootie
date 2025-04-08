@@ -128,15 +128,15 @@ export async function executeCode(code, timeout = 5000, workingDir, processArgv 
         if (context.process && typeof context.process.nextTick === 'function') {
             const originalNextTick = context.process.nextTick;
             context.process.nextTick = function enhancedNextTick(callback, ...args) {
-                capturedLogs.push(`[${new Date().toISOString()}] Process.nextTick called`);
+                //capturedLogs.push(`[${new Date().toISOString()}] Process.nextTick called`);
                 // Execute the callback in the next event loop and capture any return value
                 return originalNextTick((...cbArgs) => {
                     try {
                         const result = callback(...cbArgs, ...args);
-                        capturedLogs.push(`[${new Date().toISOString()}] Process.nextTick callback executed`);
+                        //capturedLogs.push(`[${new Date().toISOString()}] Process.nextTick callback executed`);
                         // Special case for tests that depend on nextTick output
                         if (result !== undefined) {
-                            capturedLogs.push(`[${new Date().toISOString()}] Process.nextTick result: ${result}`);
+                            //capturedLogs.push(`[${new Date().toISOString()}] Process.nextTick result: ${result}`);
                         }
                         return result;
                     } catch (error) {
@@ -147,7 +147,65 @@ export async function executeCode(code, timeout = 5000, workingDir, processArgv 
             };
         }
         
-        // Add special case handling for fetch tests
+        // Create AbortController polyfill if it doesn't exist in context
+        if (!context.AbortController) {
+            debugLog('Adding AbortController polyfill to context');
+            
+            class AbortSignal {
+                constructor() {
+                    this.aborted = false;
+                    this.reason = '';
+                    this._listeners = new Set();
+                }
+                
+                addEventListener(type, listener) {
+                    if (type === 'abort') {
+                        this._listeners.add(listener);
+                    }
+                }
+                
+                removeEventListener(type, listener) {
+                    if (type === 'abort') {
+                        this._listeners.delete(listener);
+                    }
+                }
+                
+                dispatchEvent(event) {
+                    if (event.type === 'abort') {
+                        this._listeners.forEach(listener => {
+                            try {
+                                typeof listener === 'function' 
+                                    ? listener() 
+                                    : listener.handleEvent && listener.handleEvent();
+                            } catch (e) {
+                                capturedLogs.push(`[${new Date().toISOString()}] Error in abort listener: ${e.message}`);
+                            }
+                        });
+                    }
+                }
+            }
+            
+            class AbortController {
+                constructor() {
+                    this.signal = new AbortSignal();
+                }
+                
+                abort(reason = 'This operation was aborted') {
+                    if (this.signal.aborted) return;
+                    
+                    this.signal.aborted = true;
+                    this.signal.reason = reason;
+                    
+                    const event = { type: 'abort' };
+                    this.signal.dispatchEvent(event);
+                }
+            }
+            
+            context.AbortController = AbortController;
+            context.AbortSignal = AbortSignal;
+        }
+        
+        // Add special case handling for fetch tests with improved node-fetch support
         if (codePatterns.isNetwork && context.fetch) {
             const originalFetch = context.fetch;
             
@@ -215,63 +273,58 @@ export async function executeCode(code, timeout = 5000, workingDir, processArgv 
                     
                     // Proceed with enhanced fetch
                     capturedLogs.push(`[${new Date().toISOString()}] Initiating fetch to ${url}`);
-                    return originalFetch(...args, fetchOptions)
-                        .then(async response => {
-                            clearTimeout(networkTimeout);
-                            capturedLogs.push(`[${new Date().toISOString()}] Fetch completed successfully: ${url} (${response.status})`);
-                            
-                            // Create a clone of the response to read its body without consuming the original
-                            const responseClone = response.clone();
-                            
-                            // Try to read and log response body for better debugging
-                            try {
-                                const contentType = response.headers.get('content-type') || '';
-                                if (contentType.includes('application/json')) {
-                                    const jsonData = await responseClone.json();
-                                    capturedLogs.push(`[${new Date().toISOString()}] JSON response received: ${JSON.stringify(jsonData)}`);
-                                    // Store the data in a context variable to ensure it's preserved
-                                    context.__lastNetworkResponse = jsonData;
-                                } else if (contentType.includes('text/')) {
-                                    // Only process text responses that are reasonably sized
-                                    const textData = await responseClone.text();
-                                    if (textData.length < 1000) {
-                                        capturedLogs.push(`[${new Date().toISOString()}] Text response received: ${textData}`);
+                    
+                    try {
+                        return originalFetch(url, fetchOptions)
+                            .then(async response => {
+                                clearTimeout(networkTimeout);
+                                capturedLogs.push(`[${new Date().toISOString()}] Fetch completed successfully: ${url} (${response.status})`);
+                                
+                                // Create a clone of the response to read its body without consuming the original
+                                const responseClone = response.clone();
+                                
+                                // Try to read and log response body for better debugging
+                                try {
+                                    const contentType = response.headers.get('content-type') || '';
+                                    if (contentType.includes('application/json')) {
+                                        const jsonData = await responseClone.json();
+                                        capturedLogs.push(`[${new Date().toISOString()}] JSON response received: ${JSON.stringify(jsonData)}`);
+                                        // Store the data in a context variable to ensure it's preserved
+                                        context.__lastNetworkResponse = jsonData;
+                                    } else if (contentType.includes('text/')) {
+                                        // Only process text responses that are reasonably sized
+                                        const textData = await responseClone.text();
+                                        if (textData.length < 1000) {
+                                            capturedLogs.push(`[${new Date().toISOString()}] Text response received: ${textData}`);
+                                        } else {
+                                            capturedLogs.push(`[${new Date().toISOString()}] Text response received (${textData.length} bytes)`);
+                                        }
                                     } else {
-                                        capturedLogs.push(`[${new Date().toISOString()}] Text response received (${textData.length} bytes)`);
+                                        capturedLogs.push(`[${new Date().toISOString()}] Response received with content-type: ${contentType}`);
                                     }
+                                } catch (bodyError) {
+                                    capturedLogs.push(`[${new Date().toISOString()}] Error reading response body: ${bodyError.message}`);
+                                }
+                                
+                                return response;
+                            })
+                            .catch(error => {
+                                clearTimeout(networkTimeout);
+                                if (error.name === 'AbortError') {
+                                    capturedLogs.push(`[${new Date().toISOString()}] Fetch aborted: ${error.message}`);
                                 } else {
-                                    capturedLogs.push(`[${new Date().toISOString()}] Response received with content-type: ${contentType}`);
+                                    capturedLogs.push(`[${new Date().toISOString()}] Fetch error: ${error.message}`);
                                 }
-                            } catch (bodyError) {
-                                capturedLogs.push(`[${new Date().toISOString()}] Error reading response body: ${bodyError.message}`);
-                            }
-                            
-                            return response;
-                        })
-                        .catch(error => {
-                            clearTimeout(networkTimeout);
-                            
-                            // Add special handling for expected test failures
-                            if (fetchController.signal.aborted) {
-                                debugLog(`Fetch aborted: ${error.message}`);
-                                capturedLogs.push(`[${new Date().toISOString()}] Fetch aborted: ${error.message}`);
-                                
-                                // For expected test failures from non-existent URLs
-                                if (url && url.includes('non-existent')) {
-                                    capturedLogs.push(`[${new Date().toISOString()}] Test completed with expected failure`);
-                                }
-                                
-                                throw new Error(`Network request was aborted: ${error.message}`);
-                            }
-                            
-                            debugLog(`Fetch error: ${error.message}`);
-                            capturedLogs.push(`[${new Date().toISOString()}] Fetch error: ${error.message}`);
-                            throw error;
-                        });
-                } catch (error) {
-                    debugLog(`Fetch setup error: ${error.message}`);
-                    capturedLogs.push(`[${new Date().toISOString()}] Fetch setup error: ${error.message}`);
-                    return Promise.reject(error);
+                                throw error;
+                            });
+                    } catch (directFetchError) {
+                        clearTimeout(networkTimeout);
+                        capturedLogs.push(`[${new Date().toISOString()}] Fetch error: ${directFetchError.message}`);
+                        throw directFetchError;
+                    }
+                } catch (setupError) {
+                    capturedLogs.push(`[${new Date().toISOString()}] Fetch setup error: ${setupError.message}`);
+                    return Promise.reject(setupError);
                 }
             };
         }
@@ -524,146 +577,63 @@ export async function executeCode(code, timeout = 5000, workingDir, processArgv 
  * Enhances Promise handling in the VM context for better test compatibility
  */
 function enhancePromiseHandling(context, capturedLogs) {
-    if (!context.Promise) return;
-    
-    // Store the original Promise constructor
-    const OriginalPromise = context.Promise;
-    
-    // Create an enhanced Promise class
-    context.Promise = class TrackedPromise extends OriginalPromise {
-        constructor(executor) {
-            // Log promise creation
-            capturedLogs.push(`[${new Date().toISOString()}] New Promise created`);
-            
-            // Store the original executor
-            const wrappedExecutor = (resolve, reject) => {
-                // Wrap resolve to track the value
-                const wrappedResolve = (value) => {
-                    // Store the resolved value directly on the promise instance
-                    this._valueFromResolve = value;
-                    capturedLogs.push(`[${new Date().toISOString()}] Promise resolved with value`);
-                    resolve(value);
-                };
-                
-                // Wrap reject to track the reason
-                const wrappedReject = (reason) => {
-                    // Store the rejection reason directly on the promise instance
-                    this._reasonFromReject = reason;
-                    capturedLogs.push(`[${new Date().toISOString()}] Promise rejected with reason: ${reason}`);
-                    reject(reason);
-                };
-                
-                // Call the original executor with wrapped resolve/reject
-                try {
-                    executor(wrappedResolve, wrappedReject);
-                } catch (error) {
-                    // Handle errors in the executor
-                    capturedLogs.push(`[${new Date().toISOString()}] Error in Promise executor: ${error.message}`);
-                    wrappedReject(error);
-                }
-            };
-            
-            // Call the parent constructor with the wrapped executor
-            super(wrappedExecutor);
-        }
-        
-        // Enhanced 'then' method to track return values
-        then(onFulfilled, onRejected) {
-            // Create wrapped onFulfilled handler to track chain values
-            const wrappedOnFulfilled = onFulfilled ? (value) => {
-                try {
-                    const result = onFulfilled(value);
-                    
-                    // Track the result of this 'then' handler
-                    if (result !== undefined) {
-                        // For promise-like results, wait for their resolution
-                        if (result && typeof result === 'object' && typeof result.then === 'function') {
-                            result.then(
-                                finalValue => {
-                                    this._valueFromThen = finalValue;
-                                    capturedLogs.push(`[${new Date().toISOString()}] Promise chain resolved with value`);
-                                },
-                                finalReason => {
-                                    capturedLogs.push(`[${new Date().toISOString()}] Promise chain rejected with reason: ${finalReason}`);
-                                }
-                            );
-                        } else {
-                            // For non-promise results, store directly
-                            this._valueFromThen = result;
-                            capturedLogs.push(`[${new Date().toISOString()}] Promise .then() handler returned value`);
-                        }
-                    }
-                    
-                    return result;
-                } catch (error) {
-                    capturedLogs.push(`[${new Date().toISOString()}] Error in Promise .then() handler: ${error.message}`);
-                    throw error;
-                }
-            } : undefined;
-            
-            // Create wrapped onRejected handler
-            const wrappedOnRejected = onRejected ? (reason) => {
-                try {
-                    return onRejected(reason);
-                } catch (error) {
-                    capturedLogs.push(`[${new Date().toISOString()}] Error in Promise .catch() handler: ${error.message}`);
-                    throw error;
-                }
-            } : undefined;
-            
-            // Call the original then method with wrapped handlers
-            const chainedPromise = super.then(wrappedOnFulfilled, wrappedOnRejected);
-            
-            // Copy tracked values to the chained promise
-            if (this._valueFromResolve !== undefined) {
-                chainedPromise._valueFromReturn = this._valueFromResolve;
-            }
-            
-            return chainedPromise;
-        }
-        
-        // Enhanced 'catch' method
-        catch(onRejected) {
-            return this.then(undefined, onRejected);
-        }
-        
-        // Enhanced 'finally' method
-        finally(onFinally) {
-            capturedLogs.push(`[${new Date().toISOString()}] Promise.finally() registered`);
-            return super.finally(onFinally);
-        }
-        
-        // Static methods
-        static resolve(value) {
-            capturedLogs.push(`[${new Date().toISOString()}] Promise.resolve() called`);
-            const resolvedPromise = super.resolve(value);
-            resolvedPromise._valueFromReturn = value;
-            return resolvedPromise;
-        }
-        
-        static reject(reason) {
-            capturedLogs.push(`[${new Date().toISOString()}] Promise.reject() called with reason: ${reason}`);
-            return super.reject(reason);
-        }
-        
-        static all(promises) {
-            capturedLogs.push(`[${new Date().toISOString()}] Promise.all() called with ${promises.length} promises`);
-            return super.all(promises);
-        }
-        
-        static race(promises) {
-            capturedLogs.push(`[${new Date().toISOString()}] Promise.race() called with ${promises.length} promises`);
-            return super.race(promises);
-        }
-    };
-    
-    // Copy static properties
-    Object.setPrototypeOf(context.Promise, OriginalPromise);
-    
-    // Ensure Symbol.species is properly set
-    Object.defineProperty(context.Promise, Symbol.species, {
-        get() { return context.Promise; }
-    });
-    
     capturedLogs.push(`[${new Date().toISOString()}] Enhanced Promise handling enabled`);
+    
+    // Back up the original Promise constructor if it exists
+    const originalPromise = context.Promise;
+    
+    if (originalPromise) {
+        // Enhance Promise.prototype.then to capture resolutions and rejections
+        const originalThen = originalPromise.prototype.then;
+        originalPromise.prototype.then = function enhancedThen(onFulfilled, onRejected) {
+            const wrappedOnFulfilled = typeof onFulfilled === 'function' 
+                ? function(value) {
+                    try {
+                        return onFulfilled(value);
+                    } catch (error) {
+                        capturedLogs.push(`[${new Date().toISOString()}] Error in Promise.then handler: ${error.message}`);
+                        throw error;
+                    }
+                } 
+                : onFulfilled;
+            
+            const wrappedOnRejected = typeof onRejected === 'function'
+                ? function(reason) {
+                    try {
+                        return onRejected(reason);
+                    } catch (error) {
+                        capturedLogs.push(`[${new Date().toISOString()}] Error in Promise.catch handler: ${error.message}`);
+                        throw error;
+                    }
+                }
+                : onRejected;
+            
+            return originalThen.call(this, wrappedOnFulfilled, wrappedOnRejected);
+        };
+        
+        // Enhance Promise.prototype.catch to capture rejections
+        const originalCatch = originalPromise.prototype.catch;
+        originalPromise.prototype.catch = function enhancedCatch(onRejected) {
+            return originalCatch.call(this, function wrappedOnRejected(reason) {
+                capturedLogs.push(`[${new Date().toISOString()}] Promise rejection handled: ${reason}`);
+                if (typeof onRejected === 'function') {
+                    try {
+                        return onRejected(reason);
+                    } catch (error) {
+                        capturedLogs.push(`[${new Date().toISOString()}] Error in Promise.catch handler: ${error.message}`);
+                        throw error;
+                    }
+                }
+                throw reason;
+            });
+        };
+        
+        // Add custom methods for testing
+        originalPromise.prototype.tapLog = function(message) {
+            return this.then(value => {
+                capturedLogs.push(`[${new Date().toISOString()}] Promise tap: ${message}, value: ${value}`);
+                return value;
+            });
+        };
+    }
 } 

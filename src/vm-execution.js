@@ -4,6 +4,7 @@
 import { executeCode as coreExecuteCode } from './vm/index.js';
 import { debugLog } from './utils.js';
 import fs from 'fs';
+import path from 'path';
 
 /**
  * Execute code with a unified approach that handles all patterns naturally
@@ -46,6 +47,114 @@ export async function executeCode(code, timeout, workingDir, processArgv) {
         const adjustedTimeout = Math.max(timeout, 15000);
         debugLog(`Network operations detected, using adjusted timeout: ${adjustedTimeout}ms`);
         timeout = adjustedTimeout;
+
+        // Check if fetch is being used and prepare for node-fetch injection
+        if (code.includes('fetch(')) {
+            // If fetch operations are detected, make sure code can access node-fetch
+            // We'll modify the code to ensure node-fetch is available
+            debugLog(`Fetch detected in code, ensuring node-fetch is available`);
+            
+            // Only add the require if not already present
+            if (!code.includes('require(\'node-fetch\')') && 
+                !code.includes('require("node-fetch")') && 
+                !code.includes('import') && !code.includes('from \'node-fetch\'')) {
+                
+                // Determine if code is already using ESM imports
+                const isESM = code.includes('import') || code.includes('export');
+                
+                // For ESM modules, we'll need to use dynamic import
+                if (isESM) {
+                    debugLog('ESM imports detected, using dynamic import for node-fetch');
+                    // Wrap the code in an async IIFE if not already wrapped
+                    if (!code.includes('async () =>') && !code.startsWith('(async () =>')) {
+                        code = `(async () => {
+                            try {
+                                // First try to use global fetch
+                                let fetchFunc = globalThis.fetch;
+                                
+                                // If not available, import node-fetch
+                                if (!fetchFunc) {
+                                    try {
+                                        const nodeFetch = await import('node-fetch');
+                                        globalThis.fetch = nodeFetch.default;
+                                        console.log('node-fetch has been made globally available');
+                                    } catch (e) {
+                                        console.error('Could not import node-fetch:', e.message);
+                                    }
+                                }
+                                
+                                ${code}
+                            } catch (error) {
+                                console.error('Execution error:', error.message);
+                                throw error;
+                            }
+                        })()`;
+                    } else {
+                        // If already wrapped in an async function, just add the fetch handling
+                        code = code.replace(/\(\s*async\s*\(\s*\)\s*=>\s*\{/, 
+                            `(async () => {
+                                try {
+                                    // First try to use global fetch
+                                    let fetchFunc = globalThis.fetch;
+                                    
+                                    // If not available, import node-fetch
+                                    if (!fetchFunc) {
+                                        try {
+                                            const nodeFetch = await import('node-fetch');
+                                            globalThis.fetch = nodeFetch.default;
+                                            console.log('node-fetch has been made globally available');
+                                        } catch (e) {
+                                            console.error('Could not import node-fetch:', e.message);
+                                        }
+                                    }`);
+                    }
+                } else {
+                    // For CommonJS, we'll use require
+                    if (!code.includes('async () =>') && !code.startsWith('(async () =>')) {
+                        code = `(async () => {
+                            try {
+                                // First try to use global fetch
+                                let fetchFunc = globalThis.fetch;
+                                
+                                // If not available, use require
+                                if (!fetchFunc) {
+                                    try {
+                                        const nodeFetch = require('node-fetch');
+                                        globalThis.fetch = nodeFetch;
+                                        console.log('node-fetch has been made globally available');
+                                    } catch (e) {
+                                        console.error('Could not require node-fetch:', e.message);
+                                    }
+                                }
+                                
+                                ${code}
+                            } catch (error) {
+                                console.error('Execution error:', error.message);
+                                throw error;
+                            }
+                        })()`;
+                    } else {
+                        // If already wrapped in an async function, just add the fetch handling
+                        code = code.replace(/\(\s*async\s*\(\s*\)\s*=>\s*\{/, 
+                            `(async () => {
+                                try {
+                                    // First try to use global fetch
+                                    let fetchFunc = globalThis.fetch;
+                                    
+                                    // If not available, use require
+                                    if (!fetchFunc) {
+                                        try {
+                                            const nodeFetch = require('node-fetch');
+                                            globalThis.fetch = nodeFetch;
+                                            console.log('node-fetch has been made globally available');
+                                        } catch (e) {
+                                            console.error('Could not require node-fetch:', e.message);
+                                        }
+                                    }`);
+                    }
+                }
+            }
+        }
     }
     
     // More comprehensive test detection
@@ -89,28 +198,6 @@ export async function executeCode(code, timeout, workingDir, processArgv) {
                           code.trim().startsWith('return\n') ||
                           code.includes(';\nreturn\n') ||
                           code.includes('; return\n');
-                          
-    // Special pattern detection for problematic test cases
-    const isAsyncWithTimeoutsTest = code.includes('return (async') && 
-                                   code.includes('setTimeout') && 
-                                   code.includes('done');
-                                   
-    const isErrorInSetTimeoutTest = code.includes('await new Promise(resolve =>') && 
-                                  code.includes('setTimeout(() => {') &&
-                                  code.includes('Delayed error');
-                                  
-    const isSupabaseTaskTest = code.includes('simulateTask') && 
-                              code.includes('Supabase') && 
-                              code.includes('task: \'simulation\'');
-                              
-    const isLongRunningFetchTest = code.includes('fetch(\'https://httpbin.org/delay/3\')') &&
-                                 code.includes('Fetch completed after');
-                                 
-    const isMultipleSequentialFetchTest = code.includes('Multiple sequential fetch operations') &&
-                                        code.includes('results.push(data1.args.req)') &&
-                                        code.includes('results.push(data2.args.req)') &&
-                                        code.includes('results.push(data3.args.req)');
-    
     
                           
     // Create a wrapper to ensure that the code runs in a proper context
