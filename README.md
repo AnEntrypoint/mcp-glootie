@@ -32,5 +32,4 @@ for cursor this would be in your .cursor/mcp.json
 - 🔍 **Real-time Debugging**: Quickly identify and fix issues with immediate execution feedback
 - 🧠 **Smart Code Analysis**: Automatically detects code patterns to optimize execution settings
 - 🔄 **Resource Tracking**: Monitors timers, promises, and network requests for comprehensive debugging
-- 🌐 **Universal Compatibility**: Works seamlessly with both CLI and web applications through SSE
 
