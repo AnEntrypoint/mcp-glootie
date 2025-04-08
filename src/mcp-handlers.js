@@ -16,7 +16,7 @@ export const listToolsHandler = async () => {
         tools: [
             {
                 name: "execute",
-                description: "Execute JavaScript code in the universal sandbox and return the result.",
+                description: "Execute JavaScript code in the universal ESM sandbox, importing code from the current repository is encouraged for testing their functionality.",
                 inputSchema: {
                     type: "object",
                     properties: {
@@ -44,10 +44,18 @@ export const listToolsHandler = async () => {
     };
 };
 
-export const callToolHandler = async (request, defaultWorkingDir = process.cwd()) => {
+export const callToolHandler = async (request, defaultWorkingDir) => {
     debugLog(`Handling CallToolRequestSchema: ${JSON.stringify(request)}`);
 
     try {
+        // Ensure defaultWorkingDir is always provided
+        if (!defaultWorkingDir) {
+            debugLog('Warning: defaultWorkingDir not provided, using the directory specified by argv[2] or process.cwd()');
+            const argv2Dir = process.argv[2] ? path.resolve(process.argv[2]) : process.cwd();
+            defaultWorkingDir = argv2Dir;
+            debugLog(`Using defaultWorkingDir: ${defaultWorkingDir}`);
+        }
+
         const { name, arguments: args = {} } = request.params;
         
         // Extract the tool name
@@ -118,9 +126,9 @@ export const callToolHandler = async (request, defaultWorkingDir = process.cwd()
                 
                 // Also try to load .env from the current workspace directory
                 // This provides compatibility with dotenv which looks for .env in cwd()
-                const currentDirEnvPath = path.join(process.cwd(), '.env');
+                const currentDirEnvPath = path.join(workingDir, '.env');
                 if (fs.existsSync(currentDirEnvPath) && currentDirEnvPath !== envPath) {
-                    debugLog(`Loading .env file from current directory: ${currentDirEnvPath}`);
+                    debugLog(`Loading .env file from working directory: ${currentDirEnvPath}`);
                     const envContent = fs.readFileSync(currentDirEnvPath, 'utf8');
                     envContent.split('\n').forEach(line => {
                         const match = line.match(/^([^=]+)=(.*)$/);

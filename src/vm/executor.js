@@ -3,6 +3,7 @@ import { debugLog, detectCodeType } from '../utils.js';
 import { createExecutionContext } from './context-builder.js';
 import { wrapCode } from './code-wrapper.js';
 import { processVMResult } from './result-processor.js';
+import path from 'path';
 
 /**
  * Execute JavaScript code in a VM sandbox with improved resource tracking
@@ -12,7 +13,17 @@ import { processVMResult } from './result-processor.js';
  * @param {Array} processArgv - Process argv array to use for execution
  * @returns {Promise<Object>} Execution result
  */
-export async function executeCode(code, timeout = 5000, workingDir = process.cwd(), processArgv = ['node', 'script.js']) {
+export async function executeCode(code, timeout = 5000, workingDir, processArgv = ['node', 'script.js']) {
+    debugLog(`Executing code in dir: ${workingDir || 'current directory'}`);
+    
+    // Ensure workingDir is always provided
+    if (!workingDir) {
+        debugLog('Warning: workingDir not provided, using the directory specified by argv[2] or process.cwd()');
+        const defaultWorkingDir = process.argv[2] ? path.resolve(process.argv[2]) : process.cwd();
+        workingDir = defaultWorkingDir;
+        debugLog(`Using workingDir: ${workingDir}`);
+    }
+    
     // Analyze code patterns to optimize execution settings
     const codePatterns = detectCodeType(code);
     
@@ -250,10 +261,36 @@ export async function executeCode(code, timeout = 5000, workingDir = process.cwd
                 capturedLogs.push(`[${new Date().toISOString()}] Dynamic import: ${specifier}`);
                 
                 try {
-                    // ... existing import handling code ...
+                    debugLog(`Attempting dynamic import for: ${specifier}`);
+                    
+                    // If the context already has a specialized import function, use that
+                    if (context.import && typeof context.import === 'function') {
+                        debugLog(`Using context-provided import function for: ${specifier}`);
+                        return await context.import(specifier);
+                    }
+                    
+                    // Otherwise use Node's native import
+                    return await import(specifier);
                 }
                 catch (error) {
-                    // ... existing import error handling ...
+                    debugLog(`Dynamic import error: ${error.message}`);
+                    capturedLogs.push(`[${new Date().toISOString()}] Dynamic import failed: ${error.message}`);
+                    
+                    // Provide better error message for common errors
+                    if (error.code === 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG') {
+                        capturedLogs.push(`[${new Date().toISOString()}] Trying fallback import method`);
+                        try {
+                            // Try direct import
+                            const result = await import(specifier);
+                            capturedLogs.push(`[${new Date().toISOString()}] Fallback import succeeded`);
+                            return result;
+                        } catch (fallbackError) {
+                            capturedLogs.push(`[${new Date().toISOString()}] Fallback import failed: ${fallbackError.message}`);
+                            throw fallbackError;
+                        }
+                    }
+                    
+                    throw error;
                 }
             }
         };
@@ -264,12 +301,25 @@ export async function executeCode(code, timeout = 5000, workingDir = process.cwd
         
         // Execute the script in the prepared context
         try {
-            // Create a VM context from our execution context object
-            const vmContext = vm.createContext(context);
-            
-            // Run the script in the VM context
-            rawResult = script.runInContext(vmContext, scriptOptions);
-            debugLog(`Initial raw result type: ${typeof rawResult}`);
+            // Handle ESM code with imports
+            if (code.includes('import(') || code.includes('import {') || code.includes('from \'')) {
+                // Handle ESM code with imports
+                debugLog('Detected ESM code with imports, using ESM wrapper');
+                capturedLogs.push(`[${new Date().toISOString()}] Detected ESM code with imports, using optimized handling`);
+                
+                try {
+                    rawResult = await context.__importESM(code);
+                    debugLog(`ESM wrapper execution successful`);
+                } catch (esmError) {
+                    debugLog(`ESM wrapper execution failed: ${esmError.message}`);
+                    throw esmError;
+                }
+            } else {
+                // Regular VM script execution
+                // Run the script in the VM context
+                rawResult = script.runInContext(context, scriptOptions);
+                debugLog(`Initial raw result type: ${typeof rawResult}`);
+            }
             
             // Handle Promise results from async code
             if (rawResult && typeof rawResult === 'object' && typeof rawResult.then === 'function') {
