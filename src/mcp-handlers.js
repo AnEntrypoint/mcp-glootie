@@ -210,6 +210,15 @@ export const callToolHandler = async (request, defaultWorkingDir) => {
                 adjustedTimeout = Math.max(adjustedTimeout, 15000); // Ensure tests have adequate time
             }
             
+            // Special handling for network requests
+            if (code.includes('fetch(') && code.includes('localhost')) {
+                debugLog('Local network request detected, applying enhanced network handling');
+                adjustedTimeout = Math.max(adjustedTimeout, 10000); // Local requests shouldn't take too long
+            } else if (code.includes('fetch(') && code.includes('http')) {
+                debugLog('External network request detected, applying enhanced network handling');
+                adjustedTimeout = Math.max(adjustedTimeout, 25000); // External requests might take longer
+            }
+            
             debugLog(`Executing code via MCP SDK: ${code} with timeout ${adjustedTimeout} in dir ${workingDir}`);
 
             // Set up process.argv properly for this execution

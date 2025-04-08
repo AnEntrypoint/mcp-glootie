@@ -216,9 +216,36 @@ export async function executeCode(code, timeout = 5000, workingDir, processArgv 
                     // Proceed with enhanced fetch
                     capturedLogs.push(`[${new Date().toISOString()}] Initiating fetch to ${url}`);
                     return originalFetch(...args, fetchOptions)
-                        .then(response => {
+                        .then(async response => {
                             clearTimeout(networkTimeout);
                             capturedLogs.push(`[${new Date().toISOString()}] Fetch completed successfully: ${url} (${response.status})`);
+                            
+                            // Create a clone of the response to read its body without consuming the original
+                            const responseClone = response.clone();
+                            
+                            // Try to read and log response body for better debugging
+                            try {
+                                const contentType = response.headers.get('content-type') || '';
+                                if (contentType.includes('application/json')) {
+                                    const jsonData = await responseClone.json();
+                                    capturedLogs.push(`[${new Date().toISOString()}] JSON response received: ${JSON.stringify(jsonData)}`);
+                                    // Store the data in a context variable to ensure it's preserved
+                                    context.__lastNetworkResponse = jsonData;
+                                } else if (contentType.includes('text/')) {
+                                    // Only process text responses that are reasonably sized
+                                    const textData = await responseClone.text();
+                                    if (textData.length < 1000) {
+                                        capturedLogs.push(`[${new Date().toISOString()}] Text response received: ${textData}`);
+                                    } else {
+                                        capturedLogs.push(`[${new Date().toISOString()}] Text response received (${textData.length} bytes)`);
+                                    }
+                                } else {
+                                    capturedLogs.push(`[${new Date().toISOString()}] Response received with content-type: ${contentType}`);
+                                }
+                            } catch (bodyError) {
+                                capturedLogs.push(`[${new Date().toISOString()}] Error reading response body: ${bodyError.message}`);
+                            }
+                            
                             return response;
                         })
                         .catch(error => {

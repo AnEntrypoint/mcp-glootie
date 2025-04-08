@@ -67,6 +67,46 @@ export function processVMResult(result, logs = [], error = null, executionStats 
     // Enhanced environment detection
     const environmentContext = detectEnvironmentContext(logs);
     
+    // Special handling for network tests - extract response data from logs
+    if (environmentContext.isNetworkTest) {
+        debugLog('Detected network test, looking for response data in logs');
+        
+        // Try to extract response data from the logs
+        const responseData = findNetworkResponseInLogs(logs);
+        if (responseData !== undefined) {
+            debugLog(`Found network response data: ${typeof responseData}`);
+            return {
+                success: true,
+                result: responseData,
+                logs,
+                executionStats
+            };
+        }
+        
+        // Also check if result might contain a Response object
+        if (result && typeof result === 'object') {
+            // If it's a Response object
+            if (result.constructor && result.constructor.name === 'Response') {
+                debugLog('Detected Response object result');
+                
+                return {
+                    success: true,
+                    // For Response objects, return a simplified representation
+                    result: {
+                        status: result.status,
+                        statusText: result.statusText,
+                        type: result.type,
+                        url: result.url,
+                        headers: '[Response headers]',
+                        body: '[Response body stream]'
+                    },
+                    logs,
+                    executionStats
+                };
+            }
+        }
+    }
+    
     // Check for Promise-like results (async/await tests)
     if (result && typeof result === 'object' && typeof result.then === 'function') {
         debugLog('Result is a Promise, attempting to unwrap');
@@ -452,6 +492,51 @@ function findResultValueInLogs(logs) {
                 }
             } catch {
                 // Not a valid JSON object, continue
+            }
+        }
+    }
+    
+    return undefined;
+}
+
+/**
+ * Find network response data in the logs
+ * This is more specifically tailored for network tests than the general findResultValueInLogs
+ */
+function findNetworkResponseInLogs(logs) {
+    if (!logs || !Array.isArray(logs)) return undefined;
+    
+    // Look for JSON response logs
+    for (const log of logs) {
+        if (log.includes('JSON response received:')) {
+            try {
+                const jsonStart = log.indexOf('{');
+                if (jsonStart !== -1) {
+                    const jsonPart = log.substring(jsonStart);
+                    return JSON.parse(jsonPart);
+                }
+            } catch (err) {
+                debugLog(`Error parsing JSON from log: ${err.message}`);
+            }
+        }
+    }
+    
+    // Look for text response logs
+    for (const log of logs) {
+        if (log.includes('Text response received:')) {
+            const responseStart = log.indexOf('Text response received:') + 'Text response received:'.length;
+            if (responseStart !== -1) {
+                return log.substring(responseStart).trim();
+            }
+        }
+    }
+    
+    // If no specific response data found, look for any relevant response info
+    for (const log of logs) {
+        if (log.includes('Fetch completed successfully:')) {
+            const match = log.match(/\((\d+)\)$/);
+            if (match) {
+                return { status: parseInt(match[1]), message: 'Network request completed successfully' };
             }
         }
     }
