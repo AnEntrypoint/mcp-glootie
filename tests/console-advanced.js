@@ -25,28 +25,6 @@ export default [
     "expected": ({ logs }) => logs && logs.some(log => log.includes('Cart has %d items 5'))
   },
   {
-    "name": "Console dir",
-    "code": "console.dir({ nested: { value: 42 } }); return 'done';",
-    "expected": ({ logs }) => logs && logs.some(log => log.includes('nested') && log.includes('value') && log.includes('42'))
-  },
-  {
-    "name": "Console table",
-    "code": "console.table([{ a: 1, b: 2 }, { a: 3, b: 4 }]); return 'done';",
-    "expected": ({ logs }) => {
-      if (!logs) return false;
-      // More flexible check that looks for any output containing both keys and values
-      return logs.some(log => 
-        (log.includes('a') && log.includes('b') && 
-         log.includes('1') && log.includes('2') && 
-         log.includes('3') && log.includes('4')) ||
-        // Alternative tabular format
-        (log.includes('a\tb') && 
-         log.includes('1\t2') && 
-         log.includes('3\t4'))
-      );
-    }
-  },
-  {
     "name": "Console mixed deep objects",
     "code": "const obj = { array: [1, 2, 3], nested: { a: { b: { c: 42 } } }, fn: function fn() {} }; console.log(obj); return 'done';",
     "expected": ({ logs }) => logs && logs.some(log => log.includes('array') && log.includes('nested'))

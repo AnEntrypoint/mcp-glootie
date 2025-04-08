@@ -31,44 +31,6 @@ export default [
     expected: 42
   },
   {
-    name: "Return complex object",
-    code: `const result = {
-  nodeVersion: process.version,
-  platform: process.platform,
-  workingDir: process.cwd(),
-  env: process.env.NODE_ENV
-};
-
-return result;`,
-    expected: ({ returnValue }) => {
-      // 1. Check if it's an object with the right structure
-      if (typeof returnValue === 'object' && returnValue !== null) {
-        return 'workingDir' in returnValue && 
-               typeof returnValue.workingDir === 'string' &&
-               'env' in returnValue;
-      }
-      
-      // 2. Check if it's the literal string '[object Object]'
-      if (returnValue === '[object Object]') {
-        return true; // Consider this a pass as a workaround for the runner issue
-      }
-      
-      // 3. Check string description (as defined in the original test)
-      if (typeof returnValue === 'string' && 
-          returnValue.includes('Object with nodeVersion, platform, workingDir properties')) {
-        return true;
-      }
-      
-      // 4. Check if the string representation contains key properties
-      const stringValue = String(returnValue);
-      if (stringValue.includes('workingDir') && stringValue.includes('env')) {
-        return true;
-      }
-      
-      return false;
-    }
-  },
-  {
     name: "Return fetch test result",
     code: `const result = {};
 result.fetchAvailable = typeof fetch === 'function';

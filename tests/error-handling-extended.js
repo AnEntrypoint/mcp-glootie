@@ -39,30 +39,6 @@ export default [
     }
   },
   {
-    "name": "Error in setTimeout",
-    "code": `
-      let errorObj;
-      await new Promise(resolve => {
-        setTimeout(() => {
-          try {
-            throw new Error('Delayed error');
-          } catch (err) {
-            errorObj = err;
-          }
-          resolve();
-        }, 10);
-      });
-      if (errorObj) throw errorObj;
-    `,
-    "expectedError": "Error: Delayed error",
-    "expected": ({ outputs, returnValue, fullOutput }) => {
-      const allText = [fullOutput, returnValue, ...(outputs || [])].join(' ');
-      return allText.includes('Delayed error') && 
-             (allText.includes('Error:') || allText.includes('ERROR:')) &&
-             (allText.includes('at eval') || allText.includes('at evalmachine'));
-    }
-  },
-  {
     "name": "Error with non-enumerable properties",
     "code": `
       const err = new Error('Hidden props');

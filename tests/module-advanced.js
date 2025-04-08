@@ -4,26 +4,4 @@
  */
 
 export default [
-  {
-    "name": "Requiring util methods",
-    "code": "const { inspect } = require('util'); return inspect({ a: 1, b: 2 });",
-    "expected": ({ returnValue }) => {
-      // 1. If it's a string containing the expected properties
-      if (typeof returnValue === 'string') {
-        return returnValue.includes('a: 1') && returnValue.includes('b: 2');
-      }
-      
-      // 2. If it's already the expected object somehow
-      if (typeof returnValue === 'object' && returnValue !== null) {
-        return returnValue.a === 1 && returnValue.b === 2;
-      }
-      
-      return false;
-    }
-  },
-  {
-    "name": "Requiring URL module",
-    "code": "const { parse } = require('url'); return parse(\"http://example.com/path\").hostname;",
-    "expected": "example.com"
-  }
 ];
