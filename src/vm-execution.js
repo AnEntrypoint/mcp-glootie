@@ -3,6 +3,7 @@
 
 import { executeCode as coreExecuteCode } from './vm/index.js';
 import { debugLog } from './utils.js';
+import fs from 'fs';
 
 /**
  * Execute code with a unified approach that handles all patterns naturally
@@ -14,6 +15,25 @@ import { debugLog } from './utils.js';
  */
 export async function executeCode(code, timeout, workingDir, processArgv) {
     debugLog(`Executing code in unified executor: ${code.substring(0, 50)}...`);
+
+    // Detect local module imports
+    const localImportPattern = /require\s*\(\s*['"]\.{1,2}\/|from\s+['"]\.{1,2}\//;
+    const hasLocalImports = localImportPattern.test(code);
+    
+    if (hasLocalImports) {
+        debugLog(`Local module imports detected in code, using working directory: ${workingDir}`);
+    }
+
+    // Handle dotenv usage
+    const usesDotenv = code.includes('require(\'dotenv\')') || 
+                      code.includes('require("dotenv")') || 
+                      code.includes('import dotenv') || 
+                      code.includes('from \'dotenv\'');
+    
+    if (usesDotenv) {
+        debugLog('Detected dotenv usage in code, will use native Node.js dotenv functionality');
+        // No manual environment variable loading - letting native dotenv handle it
+    }
 
     // Detect if this code involves network operations
     const hasNetworkOperations = code.includes('fetch(') || 

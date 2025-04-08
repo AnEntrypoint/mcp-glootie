@@ -70,12 +70,58 @@ export const callToolHandler = async (request, defaultWorkingDir = process.cwd()
             // Process working directory - ensure argv[2] works correctly
             debugLog(`Determined working directory for execution: ${workingDir}`);
             
-            // Load .env file from the determined working directory
+            // Explicitly handle environment variables
+            // First, try to load .env from the C:/dev/tasker directory if it exists
+            try {
+                const taskerEnvPath = 'C:/dev/tasker/.env';
+                if (fs.existsSync(taskerEnvPath)) {
+                    debugLog(`Loading .env file from ${taskerEnvPath}`);
+                    const envContent = fs.readFileSync(taskerEnvPath, 'utf8');
+                    envContent.split('\n').forEach(line => {
+                        const match = line.match(/^([^=]+)=(.*)$/);
+                        if (match && match[1] && !match[1].startsWith('#')) {
+                            const key = match[1].trim();
+                            let value = match[2].trim();
+                            if ((value.startsWith('"') && value.endsWith('"')) || 
+                                (value.startsWith("'") && value.endsWith("'"))) {
+                                value = value.substring(1, value.length - 1);
+                            }
+                            process.env[key] = value; 
+                            debugLog(`Set env var ${key}`);
+                        }
+                    });
+                }
+            } catch (taskerEnvErr) {
+                debugLog(`Error loading tasker .env file: ${taskerEnvErr.message}`);
+            }
+            
+            // Then, try the regular .env file loading logic
             try {
                 const envPath = path.join(workingDir, '.env');
                 if (fs.existsSync(envPath)) {
                     debugLog(`Loading .env file from ${envPath}`);
                     const envContent = fs.readFileSync(envPath, 'utf8');
+                    envContent.split('\n').forEach(line => {
+                        const match = line.match(/^([^=]+)=(.*)$/);
+                        if (match && match[1] && !match[1].startsWith('#')) {
+                            const key = match[1].trim();
+                            let value = match[2].trim();
+                            if ((value.startsWith('"') && value.endsWith('"')) || 
+                                (value.startsWith("'") && value.endsWith("'"))) {
+                                value = value.substring(1, value.length - 1);
+                            }
+                            process.env[key] = value; 
+                            debugLog(`Set env var ${key}`);
+                        }
+                    });
+                }
+                
+                // Also try to load .env from the current workspace directory
+                // This provides compatibility with dotenv which looks for .env in cwd()
+                const currentDirEnvPath = path.join(process.cwd(), '.env');
+                if (fs.existsSync(currentDirEnvPath) && currentDirEnvPath !== envPath) {
+                    debugLog(`Loading .env file from current directory: ${currentDirEnvPath}`);
+                    const envContent = fs.readFileSync(currentDirEnvPath, 'utf8');
                     envContent.split('\n').forEach(line => {
                         const match = line.match(/^([^=]+)=(.*)$/);
                         if (match && match[1] && !match[1].startsWith('#')) {

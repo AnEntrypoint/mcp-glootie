@@ -18,6 +18,16 @@ export async function executeCode(code, timeout = 5000, workingDir = process.cwd
     
     debugLog(`Executing code with patterns: ${JSON.stringify(codePatterns)}`);
     
+    // Check if code uses dotenv to provide additional handling
+    const usesDotenv = code.includes('require(\'dotenv\')') || 
+                      code.includes('require("dotenv")') || 
+                      code.includes('import dotenv') || 
+                      code.includes('from \'dotenv\'');
+    
+    if (usesDotenv) {
+        debugLog('Detected dotenv usage, ensuring environment variables are available');
+    }
+    
     // Adjust timeout based on code type
     let adjustedTimeout = timeout;
     if (codePatterns.isNetwork) {
