@@ -1,54 +1,32 @@
 {
-  "name": "mcp-repl",
-  "version": "1.0.125",
-  "description": "A secure JavaScript REPL server for MCP with comprehensive test coverage",
-  "main": "universal-repl-server.js",
+  "name": "direct-node-executor",
+  "version": "2.0.0",
+  "description": "Direct Node.js executor with ESM import support for MCP",
+  "main": "direct-node-executor.js",
   "type": "module",
   "bin": {
-    "mcp-repl": "./universal-repl-server.js"
+    "direct-node-executor": "./direct-node-executor.js"
   },
   "scripts": {
-    "start": "node universal-repl-server.js",
-    "test": "node test-all.js"
+    "start": "node direct-node-executor.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.8.0",
-    "acorn": "^8.11.3",
-    "acorn-walk": "^8.3.2",
-    "node-fetch": "^2.7.0",
-    "zod": "^3.22.4"
+    "express": "^4.18.2"
   },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18.0.0"
   },
   "keywords": [
     "repl",
     "javascript",
     "mcp",
     "node",
-    "cli",
-    "sandbox",
-    "execution",
-    "evaluate"
+    "esm",
+    "import",
+    "modules",
+    "execution"
   ],
   "author": "Model Context Protocol Team",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yourusername/simple-js-repl.git"
-  },
-  "bugs": {
-    "url": "https://github.com/yourusername/simple-js-repl/issues"
-  },
-  "homepage": "https://github.com/yourusername/simple-js-repl#readme",
-  "files": [
-    "simple-repl-server.js",
-    "cli.js",
-    "mcp-tester.js",
-    "update-test-expectations.js",
-    "tests"
-  ],
-  "devDependencies": {
-    "chalk": "^5.4.1"
-  }
+  "license": "MIT"
 }
