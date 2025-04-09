@@ -1,21 +1,29 @@
-# 🚀 MCP-REPL: The Universal JavaScript REPL Server
+# 🚀 Direct Node.js REPL Executor
 
-![Version](https://img.shields.io/badge/version-1.0.114-blue)
-![Node](https://img.shields.io/badge/node-%3E%3D14.0.0-green)
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 
-## 🧙‍♂️ Accelerate Your Debugging Workflow
+## 🧙‍♂️ Simplified JavaScript Execution Environment
 
-Welcome to MCP-REPL, a powerful JavaScript execution environment that dramatically speeds up your debugging process. By enabling direct calls to the REPL via the Model Context Protocol (MCP), this tool significantly reduces the number of agent iterations needed to solve complex problems.
+A streamlined direct Node.js execution environment that enables seamless code execution with full support for:
 
-for cursor this would be in your .cursor/mcp.json
-```
+- **ESM Modules** - Native import/export syntax
+- **Dynamic Imports** - Full support for await import() 
+- **CommonJS compatibility** - Works with require() through createRequire
+- **Native Node.js API access** - Direct access to all Node.js features
+
+## 🧩 Configuration
+
+For Cursor, update your `.cursor/mcp.json` configuration:
+
+```json
 {
   "mcpServers": {
     "mcp-repl": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "-y", "mcp-repl", "C:/your/project/path"
+        "path/to/direct-node-executor.js", "path/to/your/project"
       ],
       "env": {},
       "disabled": false,
@@ -25,11 +33,37 @@ for cursor this would be in your .cursor/mcp.json
 }
 ```
 
-## ✨ Features That Streamline Development
+## ✨ Features
 
-- 🚀 **Direct Execution**: Execute JavaScript code directly through MCP calls, eliminating back-and-forth iterations
-- ⏱️ **Instant Feedback**: Get immediate results from code execution without waiting for multiple agent responses
-- 🔍 **Real-time Debugging**: Quickly identify and fix issues with immediate execution feedback
-- 🧠 **Smart Code Analysis**: Automatically detects code patterns to optimize execution settings
-- 🔄 **Resource Tracking**: Monitors timers, promises, and network requests for comprehensive debugging
+- 🚀 **Direct Node.js Execution**: Runs code directly in Node.js without VM sandboxing
+- 📦 **Full Module Support**: Seamless support for ESM and CommonJS modules
+- ⏱️ **Real-time Feedback**: Get immediate results from code execution
+- 🔍 **Enhanced Debugging**: Clean output with proper error handling
+- 🧠 **Simple Architecture**: Streamlined implementation with minimal complexity
+- 🔄 **File System Access**: Full access to the file system for real testing
+
+## 🛠️ Implementation Details
+
+This implementation:
+
+1. Creates temporary `.mjs` files for each execution
+2. Runs the code directly with Node.js in a separate process
+3. Captures all console output and execution results
+4. Cleans up temporary files automatically
+5. Returns standardized results to the MCP client
+
+## 📝 Usage Examples
+
+```javascript
+// Dynamic imports
+const fs = await import('fs/promises');
+const path = await import('path');
+
+// Reading files
+const content = await fs.readFile('package.json', 'utf8');
+console.log(JSON.parse(content));
+
+// Using path utilities
+console.log(path.join('folder', 'file.txt'));
+```
 
