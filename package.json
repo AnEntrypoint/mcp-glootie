@@ -1,11 +1,11 @@
 {
-  "name": "direct-node-executor",
-  "version": "2.0.0",
+  "name": "mcp-repl",
+  "version": "2.0.7",
   "description": "Direct Node.js executor with ESM import support for MCP",
   "main": "direct-node-executor.js",
   "type": "module",
   "bin": {
-    "direct-node-executor": "./direct-node-executor.js"
+    "mcp-repl": "./direct-node-executor.js"
   },
   "scripts": {
     "start": "node direct-node-executor.js"
