@@ -8,16 +8,14 @@ import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import * as fs from 'fs';
-import { exec } from 'child_process';
-import { debugLog } from './utils.js';
+import { spawn } from 'child_process';
 
 // Get the working directory from command line or use current directory
-const defaultWorkingDir = process.argv[2] 
+const workingDir = process.argv[2] 
     ? path.resolve(process.argv[2]) 
     : process.cwd();
 
-console.log(`Starting direct executor with working directory: ${defaultWorkingDir}`);
+console.log(`Starting direct executor with working directory: ${workingDir}`);
 
 // Initialize the MCP server
 const server = new McpServer(
@@ -37,7 +35,7 @@ const listToolsHandler = async () => {
   return {
     tools: [
       {
-        name: "execute",
+        name: "executenodejs",
         description: "Execute JavaScript code directly with Node.js - supports ESM imports and all Node.js features",
         inputSchema: {
           type: "object",
@@ -57,211 +55,283 @@ const listToolsHandler = async () => {
           },
           required: ["code"]
         }
+      },
+      {
+        name: "executedeno",
+        description: "Execute JavaScript/TypeScript code with Deno - supports ESM imports and all Deno features",
+        inputSchema: {
+          type: "object",
+          properties: {
+            code: {
+              type: "string",
+              description: "JavaScript/TypeScript code to execute"
+            },
+            timeout: {
+              type: "number",
+              description: "Optional timeout in milliseconds (default: 5000)"
+            },
+            workingDir: {
+              type: "string",
+              description: "Optional working directory override"
+            },
+            permissions: {
+              type: "array",
+              description: "Optional array of Deno permissions to grant",
+              items: {
+                type: "string"
+              }
+            }
+          },
+          required: ["code"]
+        }
       }
     ],
   };
 };
 
-// Execute code function
-const executeCode = async (code, timeout = 5000, workingDir = defaultWorkingDir) => {
-  // Create a timestamp function for logging
-  const timestamp = () => `[${new Date().toISOString()}]`;
-  const capturedLogs = [];
+// Execute code function - simplified to pipe code into Node instead of using temp files
+const executeCode = async (code, timeout = 5000, customWorkingDir = null) => {
   const startTime = Date.now();
+  const executionWorkingDir = customWorkingDir || workingDir;
   
-  // Create a temporary directory for execution
-  const tempDir = path.join(workingDir, 'temp');
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
-  }
-  
-  // Create a unique temporary file for execution
-  const tempFile = path.join(tempDir, `node-exec-${Date.now()}-${Math.random().toString(36).substring(2)}.mjs`);
-  
-  // Wrap code to capture console output and return values
-  const wrappedCode = `
-// Capture start time
-const __startTime = Date.now();
-
-// Store original console methods
-const __originalConsole = { ...console };
-
-// Capture logs
-const __logs = [];
-
-// Override console methods to capture output
-console.log = (...args) => {
-  const formatted = args.map(arg => 
-    typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-  ).join(' ');
-  __logs.push(formatted);
-  __originalConsole.log(...args);
-};
-
-console.error = (...args) => {
-  const formatted = args.map(arg => 
-    typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-  ).join(' ');
-  __logs.push('ERROR: ' + formatted);
-  __originalConsole.error(...args);
-};
-
-console.warn = (...args) => {
-  const formatted = args.map(arg => 
-    typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-  ).join(' ');
-  __logs.push('WARNING: ' + formatted);
-  __originalConsole.warn(...args);
-};
-
-// Add execution info to logs
-__logs.push('${timestamp()} Running in Node.js with direct execution');
-
-// Store the result of the code execution
-let __result;
-
-// Use an async IIFE to allow top-level await
-(async () => {
   try {
-    // Execute the user code
-    __result = await (async () => {
-${code}
-    })();
-  } catch (error) {
-    __logs.push('${timestamp()} Execution error: ' + error.message);
-    if (error.stack) {
-      __logs.push('Stack trace: ' + error.stack.split('\\n').slice(0, 3).join('\\n'));
-    }
-    __result = { error: error.message };
-  } finally {
-    // Calculate execution time
-    const __endTime = Date.now();
-    const __duration = __endTime - __startTime;
-    const __memory = process.memoryUsage().heapUsed / 1024 / 1024;
+    // More robust detection if the code is likely CJS or ESM
+    // Look for explicit CJS markers: require, module.exports, __dirname, __filename
+    const cjsMarkers = [
+      'require(',
+      'module.exports',
+      '__dirname',
+      '__filename',
+      'exports.'
+    ];
     
-    __logs.push('${timestamp()} Execution completed in ' + __duration + 'ms (Memory: ' + Math.round(__memory * 100) / 100 + 'MB)');
+    // Check if the code contains any CJS markers
+    const isCjs = cjsMarkers.some(marker => code.includes(marker));
     
-    // Print results as JSON for easy parsing
-    __originalConsole.log('__EXEC_RESULT_START__');
-    __originalConsole.log(JSON.stringify({
-      success: true,
-      result: __result,
-      logs: __logs,
-      executionTimeMs: __duration,
-      memoryUsageMB: Math.round(__memory * 100) / 100
-    }));
-    __originalConsole.log('__EXEC_RESULT_END__');
-  }
-})();
-`;
-
-  try {
-    // Write the code to the temporary file
-    fs.writeFileSync(tempFile, wrappedCode, 'utf8');
-    
-    return new Promise((resolve) => {
-      capturedLogs.push(`${timestamp()} Executing code with Node.js...`);
+    // If code is CJS, wrap it with the appropriate CommonJS wrapper
+    if (isCjs) {
+      // For CommonJS, create a temporary file since piping with --input-type=commonjs 
+      // doesn't work reliably in all Node.js versions
+      const fs = await import('fs');
+      const tempDir = path.join(executionWorkingDir, 'temp');
       
-      // Execute with Node.js
-      const nodeProcess = exec(
-        `node --experimental-modules --no-warnings ${tempFile}`,
-        { 
-          cwd: workingDir,
+      // Create temp directory if it doesn't exist
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      
+      // Create a unique temporary file for CJS execution
+      const tempFile = path.join(tempDir, `node-exec-${Date.now()}-${Math.random().toString(36).substring(2)}.cjs`);
+      
+      // Write the code to the temp file
+      fs.writeFileSync(tempFile, code, 'utf8');
+      
+      return new Promise((resolve) => {
+        // Execute the file directly instead of piping for CJS
+        const nodeProcess = spawn('node', [tempFile], { 
+          cwd: executionWorkingDir,
           timeout,
           env: process.env
-        }
-      );
+        });
+        
+        let stdout = '';
+        let stderr = '';
+        
+        nodeProcess.stdout.on('data', (data) => {
+          stdout += data;
+        });
+        
+        nodeProcess.stderr.on('data', (data) => {
+          stderr += data;
+        });
+        
+        nodeProcess.on('close', (code) => {
+          // Calculate execution time
+          const executionTimeMs = Date.now() - startTime;
+          
+          // Clean up temporary file
+          try {
+            fs.unlinkSync(tempFile);
+          } catch (err) {
+            console.error(`Failed to clean up temporary file: ${err.message}`);
+          }
+          
+          resolve({
+            success: code === 0,
+            stdout,
+            stderr,
+            executionTimeMs,
+            code
+          });
+        });
+        
+        nodeProcess.on('error', (err) => {
+          // Clean up temporary file
+          try {
+            fs.unlinkSync(tempFile);
+          } catch (cleanupErr) {
+            console.error(`Failed to clean up temporary file: ${cleanupErr.message}`);
+          }
+          
+          resolve({
+            success: false,
+            error: err.message,
+            executionTimeMs: Date.now() - startTime
+          });
+        });
+      });
+    } else {
+      // For ESM code, continue using stdin piping
+      return new Promise((resolve) => {
+        // Spawn Node.js process with stdin piping for ESM
+        const nodeProcess = spawn('node', ['--input-type=module'], { 
+          cwd: executionWorkingDir,
+          timeout,
+          env: process.env
+        });
+        
+        let stdout = '';
+        let stderr = '';
+        
+        nodeProcess.stdout.on('data', (data) => {
+          stdout += data;
+        });
+        
+        nodeProcess.stderr.on('data', (data) => {
+          stderr += data;
+        });
+        
+        nodeProcess.on('close', (code) => {
+          // Calculate execution time
+          const executionTimeMs = Date.now() - startTime;
+          
+          resolve({
+            success: code === 0,
+            stdout,
+            stderr,
+            executionTimeMs,
+            code
+          });
+        });
+        
+        nodeProcess.on('error', (err) => {
+          resolve({
+            success: false,
+            error: err.message,
+            executionTimeMs: Date.now() - startTime
+          });
+        });
+        
+        // Write code to stdin and close
+        nodeProcess.stdin.write(code);
+        nodeProcess.stdin.end();
+      });
+    }
+  } catch (err) {
+    return {
+      success: false,
+      error: err.message
+    };
+  }
+};
+
+// Execute code with Deno
+const executeDenoCode = async (code, timeout = 5000, customWorkingDir = null, permissions = []) => {
+  const startTime = Date.now();
+  const executionWorkingDir = customWorkingDir || workingDir;
+  
+  try {
+    // Create a temporary file for Deno execution
+    const fs = await import('fs');
+    const tempDir = path.join(executionWorkingDir, 'temp');
+    
+    // Create temp directory if it doesn't exist
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    
+    // Create a unique temporary file for Deno execution
+    // Use .ts extension to allow TypeScript code
+    const tempFile = path.join(tempDir, `deno-exec-${Date.now()}-${Math.random().toString(36).substring(2)}.ts`);
+    
+    // Write the code to the temp file
+    fs.writeFileSync(tempFile, code, 'utf8');
+    
+    return new Promise((resolve) => {
+      // Build Deno command with permissions
+      const denoArgs = ['run'];
+      
+      // Add requested permissions
+      if (permissions && permissions.length > 0) {
+        permissions.forEach(perm => {
+          denoArgs.push(`--allow-${perm}`);
+        });
+      } else {
+        // Default permissions if none specified
+        denoArgs.push('--allow-read');
+        denoArgs.push('--allow-net');
+      }
+      
+      // Add the temp file
+      denoArgs.push(tempFile);
+      
+      // Execute with Deno
+      const denoProcess = spawn('deno', denoArgs, { 
+        cwd: executionWorkingDir,
+        timeout,
+        env: process.env
+      });
       
       let stdout = '';
       let stderr = '';
       
-      nodeProcess.stdout.on('data', (data) => {
+      denoProcess.stdout.on('data', (data) => {
         stdout += data;
       });
       
-      nodeProcess.stderr.on('data', (data) => {
+      denoProcess.stderr.on('data', (data) => {
         stderr += data;
-        // Add stderr to captured logs
-        const lines = data.toString().trim().split('\n');
-        lines.forEach(line => {
-          if (line.trim()) {
-            capturedLogs.push(`ERROR: ${line}`);
-          }
-        });
       });
       
-      nodeProcess.on('close', (code) => {
+      denoProcess.on('close', (code) => {
         // Calculate execution time
-        const endTime = Date.now();
-        const duration = endTime - startTime;
+        const executionTimeMs = Date.now() - startTime;
         
         // Clean up temporary file
         try {
           fs.unlinkSync(tempFile);
         } catch (err) {
-          capturedLogs.push(`${timestamp()} Failed to clean up temporary file: ${err.message}`);
+          console.error(`Failed to clean up temporary file: ${err.message}`);
         }
         
-        if (code !== 0) {
-          capturedLogs.push(`${timestamp()} Process exited with code ${code}`);
-          resolve({
-            success: false,
-            error: `Process exited with code ${code}`,
-            logs: capturedLogs.concat(stderr.split('\n').filter(Boolean))
-          });
-          return;
-        }
-        
-        // Extract execution result from stdout
-        try {
-          const resultMatches = stdout.match(/__EXEC_RESULT_START__\n([\s\S]*?)\n__EXEC_RESULT_END__/);
-          if (resultMatches && resultMatches[1]) {
-            const resultJson = JSON.parse(resultMatches[1]);
-            // Combine any logs from the execution with our own logs
-            resultJson.logs = capturedLogs.concat(resultJson.logs || []);
-            resolve(resultJson);
-          } else {
-            capturedLogs.push(`${timestamp()} Execution completed in ${duration}ms`);
-            resolve({
-              success: true,
-              result: stdout,
-              logs: capturedLogs
-            });
-          }
-        } catch (parseError) {
-          capturedLogs.push(`${timestamp()} Error parsing execution result: ${parseError.message}`);
-          resolve({
-            success: false,
-            error: `Error parsing execution result: ${parseError.message}`,
-            logs: capturedLogs,
-            rawOutput: stdout
-          });
-        }
+        resolve({
+          success: code === 0,
+          stdout,
+          stderr,
+          executionTimeMs,
+          code
+        });
       });
       
-      nodeProcess.on('error', (err) => {
-        capturedLogs.push(`${timestamp()} Execution error: ${err.message}`);
-        
+      denoProcess.on('error', (err) => {
         // Clean up temporary file
         try {
           fs.unlinkSync(tempFile);
         } catch (cleanupErr) {
-          capturedLogs.push(`${timestamp()} Failed to clean up temporary file: ${cleanupErr.message}`);
+          console.error(`Failed to clean up temporary file: ${cleanupErr.message}`);
         }
         
         resolve({
           success: false,
           error: err.message,
-          logs: capturedLogs
+          executionTimeMs: Date.now() - startTime
         });
       });
     });
   } catch (err) {
-    capturedLogs.push(`${timestamp()} Error setting up execution: ${err.message}`);
     return {
       success: false,
-      error: err.message,
-      logs: capturedLogs
+      error: err.message
     };
   }
 };
@@ -271,50 +341,101 @@ const callToolHandler = async (request) => {
   try {
     const { name, arguments: args = {} } = request.params;
     
-    if (name === 'execute' || name === 'mcp_mcp_repl_execute') {
-      const { code, timeout = 5000, workingDir = defaultWorkingDir } = args;
+    // Handle Node.js execution
+    if (name === 'executenodejs' || name === 'execute' || name === 'mcp_mcp_repl_execute') {
+      const { code, timeout = 5000, workingDir: customWorkingDir = null } = args;
       
       if (!code) {
         throw new Error("Missing code argument for execute tool");
       }
       
       // Execute the code with Node.js
-      const result = await executeCode(code, timeout, workingDir);
+      const result = await executeCode(code, timeout, customWorkingDir);
       
-      // Format the logs for MCP response
-      const formattedLogs = result.logs.map(log => ({
-        type: 'text',
-        text: log
-      }));
+      // Create content array with output
+      const outputLines = [];
       
-      // Format the execution result for MCP response
-      let resultValue;
-      if (result.success) {
-        if (result.result === undefined) {
-          resultValue = 'undefined';
-        } else if (result.result === null) {
-          resultValue = 'null';
-        } else if (typeof result.result === 'object') {
-          try {
-            resultValue = JSON.stringify(result.result, null, 2);
-          } catch (e) {
-            resultValue = `[Object: ${e.message}]`;
-          }
-        } else {
-          resultValue = String(result.result);
-        }
-      } else {
-        resultValue = `ERROR: ${result.error}`;
+      // Add stdout if any
+      if (result.stdout) {
+        outputLines.push({
+          type: 'text',
+          text: result.stdout.trim()
+        });
       }
       
+      // Add stderr if any
+      if (result.stderr) {
+        outputLines.push({
+          type: 'text',
+          text: `ERROR: ${result.stderr.trim()}`
+        });
+      }
+      
+      // Add error message if execution failed
+      if (!result.success && result.error) {
+        outputLines.push({
+          type: 'text',
+          text: `ERROR: ${result.error}`
+        });
+      }
+      
+      // Add execution summary
+      outputLines.push({
+        type: 'text',
+        text: `Execution completed in ${result.executionTimeMs}ms with exit code ${result.code || 0}`
+      });
+      
       return {
-        content: [
-          ...formattedLogs,
-          {
-            type: 'text',
-            text: resultValue
-          }
-        ]
+        content: outputLines
+      };
+    }
+    
+    // Handle Deno execution
+    if (name === 'executedeno' || name === 'mcp_mcp_repl_executedeno') {
+      const { code, timeout = 5000, workingDir: customWorkingDir = null, permissions = [] } = args;
+      
+      if (!code) {
+        throw new Error("Missing code argument for Deno execute tool");
+      }
+      
+      // Execute the code with Deno
+      const result = await executeDenoCode(code, timeout, customWorkingDir, permissions);
+      
+      // Create content array with output
+      const outputLines = [];
+      
+      // Add stdout if any
+      if (result.stdout) {
+        outputLines.push({
+          type: 'text',
+          text: result.stdout.trim()
+        });
+      }
+      
+      // Add stderr if any
+      if (result.stderr) {
+        outputLines.push({
+          type: 'text',
+          text: `ERROR: ${result.stderr.trim()}`
+        });
+      }
+      
+      // Add error message if execution failed
+      if (!result.success && result.error) {
+        outputLines.push({
+          type: 'text',
+          text: `ERROR: ${result.error}`
+        });
+      }
+      
+      // Add execution summary
+      outputLines.push({
+        type: 'text',
+        text: `Deno execution completed in ${result.executionTimeMs}ms with exit code ${result.code || 0}`
+      });
+      
+      return {
+        content: outputLines
       };
     }
     
