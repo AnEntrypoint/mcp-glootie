@@ -46,7 +46,7 @@ const listToolsHandler = async () => {
             },
             timeout: {
               type: "number",
-              description: "Optional timeout in milliseconds (default: 5000)"
+              description: "Optional timeout in milliseconds (default: 120000)"
             },
             workingDir: {
               type: "string",
@@ -68,7 +68,7 @@ const listToolsHandler = async () => {
             },
             timeout: {
               type: "number",
-              description: "Optional timeout in milliseconds (default: 5000)"
+              description: "Optional timeout in milliseconds (default: 120000)"
             },
             workingDir: {
               type: "string",
@@ -90,7 +90,7 @@ const listToolsHandler = async () => {
 };
 
 // Execute code function - simplified to pipe code into Node instead of using temp files
-const executeCode = async (code, timeout = 5000, customWorkingDir = null) => {
+const executeCode = async (code, timeout = 120000, customWorkingDir = null) => {
   const startTime = Date.now();
   const executionWorkingDir = customWorkingDir || workingDir;
   
@@ -236,7 +236,7 @@ const executeCode = async (code, timeout = 5000, customWorkingDir = null) => {
 };
 
 // Execute code with Deno
-const executeDenoCode = async (code, timeout = 5000, customWorkingDir = null, permissions = []) => {
+const executeDenoCode = async (code, timeout = 120000, customWorkingDir = null, permissions = []) => {
   const startTime = Date.now();
   const executionWorkingDir = customWorkingDir || workingDir;
   
@@ -343,7 +343,7 @@ const callToolHandler = async (request) => {
     
     // Handle Node.js execution
     if (name === 'executenodejs' || name === 'execute' || name === 'mcp_mcp_repl_execute') {
-      const { code, timeout = 5000, workingDir: customWorkingDir = null } = args;
+      const { code, timeout = 120000, workingDir: customWorkingDir = null } = args;
       
       if (!code) {
         throw new Error("Missing code argument for execute tool");
@@ -392,7 +392,7 @@ const callToolHandler = async (request) => {
     
     // Handle Deno execution
     if (name === 'executedeno' || name === 'mcp_mcp_repl_executedeno') {
-      const { code, timeout = 5000, workingDir: customWorkingDir = null, permissions = [] } = args;
+      const { code, timeout = 120000, workingDir: customWorkingDir = null, permissions = [] } = args;
       
       if (!code) {
         throw new Error("Missing code argument for Deno execute tool");
