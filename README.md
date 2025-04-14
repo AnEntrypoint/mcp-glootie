@@ -1,154 +1,69 @@
-# Simple JS REPL
-[![smithery badge](https://smithery.ai/badge/@AnEntrypoint/mcp-repl)](https://smithery.ai/server/@AnEntrypoint/mcp-repl)
+# 🚀 Direct Node.js REPL Executor
 
-A secure JavaScript REPL (Read-Eval-Print-Loop) for executing code snippets with comprehensive error handling, memory management, and output formatting.
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green)
+![License](https://img.shields.io/badge/license-MIT-orange)
 
-## Features
+## 🧙‍♂️ Simplified JavaScript Execution Environment
 
-- **Secure Execution Environment**: Runs JavaScript code in a sandboxed VM context
-- **Memory Limit Protection**: Prevents memory-intensive operations from crashing the server
-- **Timeout Handling**: Automatically terminates long-running operations
-- **Comprehensive Error Reporting**: Detailed error messages with stack traces
-- **Console Output Capture**: Captures and formats all console methods (log, error, warn, etc.)
-- **Support for Async/Await**: Execute asynchronous code with top-level await
-- **Node.js Module Access**: Import and use Node.js built-in modules securely
-- **Working Directory Support**: Specify a working directory via argv[2]
+A streamlined direct Node.js execution environment that enables seamless code execution with full support for:
 
-## Quick Start with npx
+- **ESM Modules** - Native import/export syntax
+- **Dynamic Imports** - Full support for await import() 
+- **CommonJS compatibility** - Works with require() through createRequire
+- **Native Node.js API access** - Direct access to all Node.js features
 
-Run the REPL without installing it:
+## 🧩 Configuration
 
-```bash
-npx mcp-repl
-```
-
-This will start an interactive REPL where you can enter JavaScript code:
-
-```
-> return 2 + 2
---- No Console Output ---
-
---- Result ---
-4
-------------
-```
-
-You can also execute code directly:
-
-```bash
-npx simple-js-repl "console.log('Hello world'); return 42"
-```
-
-Or pipe code into it:
-
-```bash
-echo "return new Date().toISOString()" | npx simple-js-repl
-```
-
-### Specifying Working Directory
-
-You can specify a working directory for the REPL to use:
-
-```bash
-npx simple-js-repl /path/to/working/directory
-```
-
-All code will be executed with this directory as the current working directory.
-
-## Installation
-
-### Installing via Smithery
-
-To install Simple JavaScript REPL for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@AnEntrypoint/mcp-repl):
-
-```bash
-npx -y @smithery/cli install @AnEntrypoint/mcp-repl --client claude
-```
-
-### Manual Installation
-If you want to install the package globally:
-
-```bash
-npm install -g simple-js-repl
-```
-
-After installation, you can use it as:
-
-```bash
-js-repl
-```
-
-## CLI Usage
-
-```
-Simple JavaScript REPL - Secure code execution environment
-
-Usage:
-  $ npx simple-js-repl
-  $ npx simple-js-repl "console.log('Hello, World!')"
-  $ echo "return 2 + 2" | npx simple-js-repl
-
-Options:
-  --help, -h    Show this help message
-  --version, -v Show version number
-```
-
-## API Usage
-
-The REPL server exposes a single MCP tool called `execute` that accepts JavaScript code as input and returns the execution result along with any console output.
-
-Example MCP request:
+For Cursor, update your `.cursor/mcp.json` configuration:
 
 ```json
 {
-  "jsonrpc": "2.0",
-  "id": "1",
-  "method": "tool",
-  "params": {
-    "name": "execute",
-    "arguments": {
-      "code": "return 2 + 2;"
+  "mcpServers": {
+    "mcp-repl": {
+      "command": "node",
+      "args": [
+        "path/to/direct-node-executor.js", "path/to/your/project"
+      ],
+      "env": {},
+      "disabled": false,
+      "autoApprove": ["execute"]
     }
   }
 }
 ```
 
-Example response:
+## ✨ Features
 
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "1",
-  "result": {
-    "content": [
-      {
-        "type": "text",
-        "text": "--- No Console Output ---\n\n--- Result ---\n4\n------------"
-      }
-    ],
-    "isError": false
-  }
-}
+- 🚀 **Direct Node.js Execution**: Runs code directly in Node.js without VM sandboxing
+- 📦 **Full Module Support**: Seamless support for ESM and CommonJS modules
+- ⏱️ **Real-time Feedback**: Get immediate results from code execution
+- 🔍 **Enhanced Debugging**: Clean output with proper error handling
+- 🧠 **Simple Architecture**: Streamlined implementation with minimal complexity
+- 🔄 **File System Access**: Full access to the file system for real testing
+
+## 🛠️ Implementation Details
+
+This implementation:
+
+1. Creates temporary `.mjs` files for each execution
+2. Runs the code directly with Node.js in a separate process
+3. Captures all console output and execution results
+4. Cleans up temporary files automatically
+5. Returns standardized results to the MCP client
+
+## 📝 Usage Examples
+
+```javascript
+// Dynamic imports
+const fs = await import('fs/promises');
+const path = await import('path');
+
+// Reading files
+const content = await fs.readFile('package.json', 'utf8');
+console.log(JSON.parse(content));
+
+// Using path utilities
+console.log(path.join('folder', 'file.txt'));
 ```
 
-## Testing
-
-The package includes comprehensive test suites:
-
-```bash
-# Run all tests
-npm test
-```
-
-## Security
-
-The REPL runs code in a secure sandboxed environment with:
-
-- Restricted access to sensitive modules (fs, child_process, etc.)
-- Memory usage monitoring and limits
-- Execution timeouts
-- Proper error isolation and reporting
-
-## License
-
-MIT
