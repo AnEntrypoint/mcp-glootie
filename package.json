@@ -1,32 +1,39 @@
 {
   "name": "mcp-repl",
-  "version": "2.0.9",
-  "description": "Direct Node.js executor with ESM import support for MCP",
-  "main": "direct-node-executor.js",
+  "version": "2.0.10",
+  "description": "MCP REPL with code execution and semantic code search",
+  "main": "src/direct-executor-server.js",
   "type": "module",
-  "bin": {
-    "mcp-repl": "./direct-node-executor.js"
-  },
   "scripts": {
-    "start": "node direct-node-executor.js"
+    "start": "node src/direct-executor-server.js",
+    "dev": "node src/direct-executor-server.js ./test"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.8.0",
-    "express": "^4.18.2"
+    "@modelcontextprotocol/sdk": "^1.11.0",
+    "@xenova/transformers": "^2.17.2",
+    "better-sqlite3": "^11.9.1",
+    "crypto": "^1.0.1",
+    "onnxruntime-node": "^1.21.1",
+    "sharp": "^0.34.1",
+    "sqlite-vss": "^0.1.2",
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-javascript": "^0.23.1",
+    "vectra": "^0.10.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/mcp-repl.git"
   },
   "keywords": [
-    "repl",
-    "javascript",
     "mcp",
-    "node",
-    "esm",
-    "import",
-    "modules",
-    "execution"
+    "repl",
+    "semantic",
+    "code",
+    "search"
   ],
-  "author": "Model Context Protocol Team",
+  "author": "",
   "license": "MIT"
 }
