@@ -1,20 +1,26 @@
 {
   "name": "mcp-repl",
-  "version": "2.0.10",
+  "version": "2.0.17",
   "description": "MCP REPL with code execution and semantic code search",
   "main": "src/direct-executor-server.js",
   "type": "module",
+  "bin": {
+    "mcp-repl": "./src/direct-executor-server.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "start": "node src/direct-executor-server.js",
     "dev": "node src/direct-executor-server.js ./test"
   },
   "dependencies": {
+    "@ast-grep/napi": "^0.37.0",
     "@modelcontextprotocol/sdk": "^1.11.0",
     "@xenova/transformers": "^2.17.2",
     "better-sqlite3": "^11.9.1",
-    "crypto": "^1.0.1",
-    "onnxruntime-node": "^1.21.1",
-    "sharp": "^0.34.1",
+    "onnxruntime-web": "^1.14.0",
+    "sharp": "^0.33.5",
     "sqlite-vss": "^0.1.2",
     "tree-sitter": "^0.21.1",
     "tree-sitter-javascript": "^0.23.1",
