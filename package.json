@@ -1,7 +1,7 @@
 {
   "name": "mcp-repl",
-  "version": "2.0.18",
-  "description": "MCP REPL with code execution and semantic code search",
+  "version": "2.1.0",
+  "description": "MCP REPL with code execution, semantic code search, and comprehensive ast-grep integration",
   "main": "src/direct-executor-server.js",
   "type": "module",
   "bin": {
@@ -16,7 +16,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.11.0",
-    "@xenova/transformers": "^2.17.2"
+    "@xenova/transformers": "^2.17.2",
+    "@ast-grep/napi": "^0.28.0"
   },
   "engines": {
     "node": ">=16.0.0"
@@ -30,7 +31,11 @@
     "repl",
     "semantic",
     "code",
-    "search"
+    "search",
+    "ast-grep",
+    "ast",
+    "refactoring",
+    "transformation"
   ],
   "author": "",
   "license": "MIT"
