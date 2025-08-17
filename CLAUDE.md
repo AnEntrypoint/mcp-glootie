@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MCP REPL is a Model Context Protocol (MCP) server that provides code execution and semantic code search capabilities. It enables AI assistants to execute JavaScript/TypeScript code and perform intelligent code searches within any project directory.
+MCP REPL is a Model Context Protocol (MCP) server that provides code execution, semantic code search, and comprehensive AST-based code analysis capabilities. It enables AI assistants to execute JavaScript/TypeScript code, perform intelligent code searches, and utilize powerful structural code analysis and transformation tools via ast-grep integration.
 
 ## Development Commands
 
@@ -26,7 +26,7 @@ MCP REPL is a Model Context Protocol (MCP) server that provides code execution a
 ### Core Components
 
 **MCP Server** (`src/direct-executor-server.js`):
-- Main entry point providing three MCP tools
+- Main entry point providing seven MCP tools
 - Handles stdio-based MCP protocol communication
 - Manages working directory context and process lifecycle
 
@@ -34,6 +34,12 @@ MCP REPL is a Model Context Protocol (MCP) server that provides code execution a
 - AI-powered code search using transformer embeddings
 - AST-aware code chunking and relationship mapping
 - Vector similarity + text matching hybrid scoring
+
+**AST-grep Integration** (`src/astgrep-*.js`):
+- Structural code search and transformation using AST patterns
+- Rule-based code validation and linting
+- Multi-language support with tree-sitter parsers
+- Advanced pattern matching with meta-variables
 
 ### MCP Tools Provided
 
@@ -51,6 +57,26 @@ MCP REPL is a Model Context Protocol (MCP) server that provides code execution a
    - Natural language query processing
    - Structural code understanding (functions, classes, methods)
    - Optional `workingDirectory` parameter to specify search scope
+
+4. **`astgrep_search`** - Pattern-based structural code search
+   - AST-aware pattern matching with meta-variables
+   - Multi-language support via tree-sitter
+   - Structural understanding beyond text matching
+
+5. **`astgrep_replace`** - Code transformation and refactoring
+   - Pattern-based code rewriting with meta-variable substitution
+   - Safe code transformation with dry-run support
+   - Structural refactoring capabilities
+
+6. **`astgrep_lint`** - Rule-based code validation
+   - YAML-based custom linting rules
+   - Structural pattern detection for code quality
+   - Custom rule enforcement and validation
+
+7. **`astgrep_analyze`** - AST structure analysis and debugging
+   - Pattern debugging and AST exploration
+   - Meta-variable extraction and analysis
+   - Code structure understanding and validation
 
 ### Working Directory Behavior
 
@@ -81,6 +107,7 @@ All MCP tools accept an optional `workingDirectory` parameter:
 ### Essential Dependencies
 - `@modelcontextprotocol/sdk` (^1.11.0) - Official MCP SDK for server implementation
 - `@xenova/transformers` (^2.17.2) - ML transformers for semantic search embeddings
+- `@ast-grep/napi` (^0.28.0) - AST-grep bindings for structural code analysis
 
 ### Development Environment
 - **Node.js**: >=16.0.0 required
@@ -101,6 +128,12 @@ All MCP tools accept an optional `workingDirectory` parameter:
 - Hybrid scoring combining semantic similarity and text matching
 - Real-time indexing with file system monitoring capability
 
+### AST-based Analysis
+- Structural pattern matching using abstract syntax trees
+- Multi-language support via tree-sitter parsers
+- Meta-variable extraction and code transformation
+- Rule-based validation and custom linting capabilities
+
 ### Security Considerations
 - Working directory validation to prevent path traversal
 - Controlled child process execution with timeouts
@@ -111,18 +144,25 @@ All MCP tools accept an optional `workingDirectory` parameter:
 ### Hypothesis-Driven Debugging
 The MCP tools are designed for iterative code testing and exploration:
 1. Execute code hypotheses with `executenodejs`/`executedeno`
-2. Search for similar patterns with `searchcode`
-3. Iterate and refine based on results
+2. Search for similar patterns with `searchcode` or `astgrep_search`
+3. Transform and refactor code with `astgrep_replace`
+4. Validate code quality with `astgrep_lint`
+5. Analyze code structure with `astgrep_analyze`
+6. Iterate and refine based on results
 
 ### Multi-Project Support
 Working directory parameters enable operation across multiple projects:
 - Specify different working directories per operation
-- Search across different codebases
+- Search across different codebases with semantic or structural patterns
 - Execute code in various project contexts
+- Apply consistent transformations across multiple projects
+- Validate code quality with custom rules across codebases
 
 ## Important Notes
 
 - All tool parameters are validated with clear error messages
-- Backward compatibility maintained for existing MCP clients
+- Backward compatibility maintained for existing MCP clients  
 - No hardcoded paths or configuration - fully parameterized
+- Comprehensive AST-based code analysis alongside semantic search
+- Multi-language support for structural code operations
 - Designed for both standalone use and integration with AI coding assistants

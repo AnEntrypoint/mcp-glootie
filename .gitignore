@@ -1,3 +1,4 @@
 node_modules/
 .env
 .cursor/code_search_index/
+code_search_index/
