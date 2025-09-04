@@ -1,6 +1,6 @@
 {
   "name": "mcp-repl",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "MCP REPL with code execution, semantic code search, and comprehensive ast-grep integration",
   "main": "src/direct-executor-server.js",
   "type": "module",
@@ -13,6 +13,9 @@
   "scripts": {
     "start": "node src/direct-executor-server.js",
     "dev": "node src/direct-executor-server.js ./test"
+  },
+  "overrides": {
+    "sharp": "npm:@img/sharp-wasm32@0.33.5"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.11.0",
