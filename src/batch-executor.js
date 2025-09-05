@@ -112,11 +112,21 @@ export function validateBatchOperations(operations) {
   const toolRequirements = {
     executenodejs: ['code'],
     executedeno: ['code'],
+    executebash: [],
     searchcode: ['query'],
     astgrep_search: ['pattern'],
     astgrep_replace: ['pattern', 'replacement'],
     astgrep_lint: ['rules'],
-    astgrep_analyze: ['pattern']
+    astgrep_analyze: ['pattern'],
+    astgrep_enhanced_search: ['pattern'],
+    astgrep_multi_pattern: ['patterns'],
+    astgrep_constraint_search: ['pattern'],
+    astgrep_project_init: ['language'],
+    astgrep_project_scan: [],
+    astgrep_test: ['pattern'],
+    astgrep_validate_rules: ['rules'],
+    astgrep_debug_rule: ['pattern'],
+    sequentialthinking: ['thoughts']
   };
 
   for (let i = 0; i < operations.length; i++) {
