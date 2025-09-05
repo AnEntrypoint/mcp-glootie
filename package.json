@@ -1,6 +1,6 @@
 {
   "name": "mcp-repl",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "MCP REPL with code execution, semantic code search, and comprehensive ast-grep integration",
   "main": "src/direct-executor-server.js",
   "type": "module",
