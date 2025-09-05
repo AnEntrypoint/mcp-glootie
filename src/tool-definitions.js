@@ -2,7 +2,7 @@
 // Imports and combines all tool definitions from specialized modules
 
 import { executionTools } from './execution-tools.js';
-import { searchTools, astTools, batchTools } from './ast-tools.js';
+import { searchTools, astTools, enhancedAstTools, batchTools, thinkingTools } from './ast-tools.js';
 
 // Get all tools
 export function getAllTools() {
@@ -10,6 +10,8 @@ export function getAllTools() {
     ...executionTools,
     ...searchTools, 
     ...astTools,
-    ...batchTools
+    ...enhancedAstTools,
+    ...batchTools,
+    ...thinkingTools
   ];
 }

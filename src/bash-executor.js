@@ -44,35 +44,6 @@ export async function executeBashCommand(commands, timeout = 120000, workingDire
   });
 
   return result;
-          stdout: stdout.trim(),
-          stderr: stderr.trim(),
-          exitCode: code,
-          executionTimeMs,
-          commandCount: commandArray.length,
-          workingDirectory: effectiveWorkingDir
-        });
-      });
-      
-      bashProcess.on('error', (err) => {
-        resolve({
-          success: false,
-          error: `Bash execution error: ${err.message}`,
-          executionTimeMs: Date.now() - startTime
-        });
-      });
-      
-      // Write the bash script to stdin and close
-      bashProcess.stdin.write(bashScript);
-      bashProcess.stdin.end();
-    });
-    
-  } catch (error) {
-    return {
-      success: false,
-      error: `Bash execution failed: ${error.message}`,
-      executionTimeMs: Date.now() - startTime
-    };
-  }
 }
 
 /**
