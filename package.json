@@ -5,7 +5,7 @@
   "main": "src/direct-executor-server.js",
   "type": "module",
   "bin": {
-    "mcp-repl": "./src/direct-executor-server.js"
+    "mcp-repl": "src/direct-executor-server.js"
   },
   "publishConfig": {
     "access": "public"
