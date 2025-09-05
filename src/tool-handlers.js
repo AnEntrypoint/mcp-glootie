@@ -8,6 +8,7 @@ import { validateWorkingDirectory } from './validation-utils.js';
 import { applyTruncation } from './output-truncation.js';
 import { executeNodeCode, executeDenoCode, executeBashCommands } from './process-executor.js';
 import { handleRetrieveOverflow } from './overflow-handler.js';
+import { convertToMCPFormat } from './mcp-format.js';
 
 /**
  * Handle Node.js code execution
@@ -16,11 +17,12 @@ export async function handleNodeExecution(args, defaultWorkingDir) {
   const startTime = Date.now();
   
   const paramError = validateRequiredParams(args, ['code', 'workingDirectory'], startTime);
-  if (paramError) return paramError;
+  if (paramError) return convertToMCPFormat(paramError, 'executenodejs');
 
   const dirValidation = validateWorkingDirectory(args.workingDirectory, defaultWorkingDir);
   if (!dirValidation.valid) {
-    return createErrorResponse(dirValidation.error, startTime);
+    const errorResponse = createErrorResponse(dirValidation.error, startTime);
+    return convertToMCPFormat(errorResponse, 'executenodejs');
   }
 
   const result = await executeNodeCode(args.code, {
@@ -28,7 +30,8 @@ export async function handleNodeExecution(args, defaultWorkingDir) {
     timeout: args.timeout || 120000
   });
 
-  return applyTruncation(result, dirValidation.effectiveDir, 'executenodejs');
+  const mcpResponse = convertToMCPFormat(result, 'executenodejs');
+  return applyTruncation(mcpResponse, dirValidation.effectiveDir, 'executenodejs');
 }
 
 /**
@@ -38,11 +41,12 @@ export async function handleDenoExecution(args, defaultWorkingDir) {
   const startTime = Date.now();
   
   const paramError = validateRequiredParams(args, ['code', 'workingDirectory'], startTime);
-  if (paramError) return paramError;
+  if (paramError) return convertToMCPFormat(paramError, 'executedeno');
 
   const dirValidation = validateWorkingDirectory(args.workingDirectory, defaultWorkingDir);
   if (!dirValidation.valid) {
-    return createErrorResponse(dirValidation.error, startTime);
+    const errorResponse = createErrorResponse(dirValidation.error, startTime);
+    return convertToMCPFormat(errorResponse, 'executedeno');
   }
 
   const result = await executeDenoCode(args.code, {
@@ -50,7 +54,8 @@ export async function handleDenoExecution(args, defaultWorkingDir) {
     timeout: args.timeout || 120000
   });
 
-  return applyTruncation(result, dirValidation.effectiveDir, 'executedeno');
+  const mcpResponse = convertToMCPFormat(result, 'executedeno');
+  return applyTruncation(mcpResponse, dirValidation.effectiveDir, 'executedeno');
 }
 
 /**
@@ -60,11 +65,12 @@ export async function handleBashExecution(args, defaultWorkingDir) {
   const startTime = Date.now();
   
   const paramError = validateRequiredParams(args, ['commands', 'workingDirectory'], startTime);
-  if (paramError) return paramError;
+  if (paramError) return convertToMCPFormat(paramError, 'executebash');
 
   const dirValidation = validateWorkingDirectory(args.workingDirectory, defaultWorkingDir);
   if (!dirValidation.valid) {
-    return createErrorResponse(dirValidation.error, startTime);
+    const errorResponse = createErrorResponse(dirValidation.error, startTime);
+    return convertToMCPFormat(errorResponse, 'executebash');
   }
 
   const result = await executeBashCommands(args.commands, {
@@ -72,7 +78,8 @@ export async function handleBashExecution(args, defaultWorkingDir) {
     timeout: args.timeout || 120000
   });
 
-  return applyTruncation(result, dirValidation.effectiveDir, 'executebash');
+  const mcpResponse = convertToMCPFormat(result, 'executebash');
+  return applyTruncation(mcpResponse, dirValidation.effectiveDir, 'executebash');
 }
 
 /**
@@ -82,14 +89,17 @@ export async function handleCodeSearch(args, defaultWorkingDir, getVectorIndexer
   const startTime = Date.now();
   
   const paramError = validateRequiredParams(args, ['query', 'workingDirectory'], startTime);
-  if (paramError) return paramError;
+  if (paramError) return convertToMCPFormat(paramError, 'searchcode');
 
   try {
     const { searchSemantic } = await getVectorIndexer();
     const results = await searchSemantic(args.query, args);
-    return createSuccessResponse({ results }, startTime);
+    const response = createSuccessResponse({ results }, startTime);
+    const mcpResponse = convertToMCPFormat(response, 'searchcode');
+    return applyTruncation(mcpResponse, args.workingDirectory, 'searchcode');
   } catch (error) {
-    return createErrorResponse(error, startTime);
+    const errorResponse = createErrorResponse(error, startTime);
+    return convertToMCPFormat(errorResponse, 'searchcode');
   }
 }
 
