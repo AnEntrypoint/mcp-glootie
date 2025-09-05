@@ -11,6 +11,7 @@
 export async function executeBatch(operations, toolHandlers, workingDir) {
   const startTime = Date.now();
   
+  
   // Validate operations array
   if (!Array.isArray(operations) || operations.length === 0) {
     return {
@@ -37,10 +38,10 @@ export async function executeBatch(operations, toolHandlers, workingDir) {
         executionTimeMs: Date.now() - startTime
       };
     }
-    if (!op.parameters || typeof op.parameters !== 'object') {
+    if (!op.arguments || typeof op.arguments !== 'object') {
       return {
         success: false,
-        error: `Operation ${i}: Missing or invalid parameters object`,
+        error: `Operation ${i}: Missing or invalid arguments object`,
         executionTimeMs: Date.now() - startTime
       };
     }
@@ -58,15 +59,13 @@ export async function executeBatch(operations, toolHandlers, workingDir) {
     try {
       // Prepare parameters with working directory fallback
       const params = {
-        ...operation.parameters,
-        workingDirectory: operation.parameters.workingDirectory || workingDir
+        ...operation.arguments,
+        workingDirectory: operation.arguments.workingDirectory || workingDir
       };
 
       // Execute the tool
       const handler = toolHandlers[operation.tool];
-      const result = await handler({
-        params: { name: operation.tool, arguments: params }
-      });
+      const result = await handler(params);
 
       const operationResult = {
         operation: i,
@@ -135,7 +134,7 @@ export function validateBatchOperations(operations) {
     
     if (requirements) {
       for (const req of requirements) {
-        if (!op.parameters[req]) {
+        if (!op.arguments[req]) {
           return {
             valid: false,
             error: `Operation ${i} (${op.tool}): Missing required parameter '${req}'`
