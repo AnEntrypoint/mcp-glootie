@@ -4,7 +4,9 @@ import { join, resolve } from 'path';
 
 export class SequentialThinking {
   constructor(workingDirectory) {
-    if (!workingDirectory) throw new Error('Working directory is required for sequential thinking');
+    if (!workingDirectory) {
+      throw new Error('Sequential thinking requires a workingDirectory parameter. Please specify the directory path where .sequential-thoughts/ data will be stored.');
+    }
     
     this.workingDir = resolve(workingDirectory);
     this.storageDir = join(this.workingDir, '.sequential-thoughts');

@@ -37,5 +37,37 @@ export const executionTools = [
       },
       required: ["commands", "workingDirectory"]
     }
+  ),
+
+  createToolDefinition(
+    "retrieve_overflow",
+    "**OVERFLOW CONTENT RETRIEVAL** - Retrieve truncated content from overflow files when tool responses exceed 25k tokens. **ALWAYS SPECIFY WORKING DIRECTORY** for overflow access.",
+    {
+      type: "object",
+      properties: {
+        overflowFile: {
+          type: "string",
+          description: "Overflow filename from truncation notice (e.g., 'overflow_executenodejs_1234567890.json')"
+        },
+        workingDirectory: {
+          type: "string",
+          description: "**REQUIRED** - Working directory where overflow file is stored (same as original tool call)"
+        },
+        chunkIndex: {
+          type: "number",
+          description: "Optional chunk index to retrieve (default: 0 for next chunk). Use metadata from previous call to get subsequent chunks."
+        },
+        listFiles: {
+          type: "boolean",
+          description: "Optional: List all available overflow files instead of retrieving content"
+        },
+        cleanup: {
+          type: "boolean", 
+          description: "Optional: Clean up old overflow files (>24 hours) in addition to retrieving content"
+        }
+      },
+      required: ["workingDirectory"],
+      additionalProperties: false
+    }
   )
 ];

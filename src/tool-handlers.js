@@ -7,6 +7,7 @@ import { createErrorResponse, createSuccessResponse, validateRequiredParams } fr
 import { validateWorkingDirectory } from './validation-utils.js';
 import { applyTruncation } from './output-truncation.js';
 import { executeNodeCode, executeDenoCode, executeBashCommands } from './process-executor.js';
+import { handleRetrieveOverflow } from './overflow-handler.js';
 
 /**
  * Handle Node.js code execution
@@ -27,7 +28,7 @@ export async function handleNodeExecution(args, defaultWorkingDir) {
     timeout: args.timeout || 120000
   });
 
-  return applyTruncation(result);
+  return applyTruncation(result, dirValidation.effectiveDir, 'executenodejs');
 }
 
 /**
@@ -49,7 +50,7 @@ export async function handleDenoExecution(args, defaultWorkingDir) {
     timeout: args.timeout || 120000
   });
 
-  return applyTruncation(result);
+  return applyTruncation(result, dirValidation.effectiveDir, 'executedeno');
 }
 
 /**
@@ -71,7 +72,7 @@ export async function handleBashExecution(args, defaultWorkingDir) {
     timeout: args.timeout || 120000
   });
 
-  return applyTruncation(result);
+  return applyTruncation(result, dirValidation.effectiveDir, 'executebash');
 }
 
 /**
@@ -119,6 +120,49 @@ export function createToolHandlers(defaultWorkingDir, getVectorIndexer, getAstGr
       const { astgrepHandlersAdvanced } = await getAstGrepUtils();
       return astgrepHandlersAdvanced.handleAstGrepAnalyze(args, defaultWorkingDir, getAstGrepUtils);
     },
+
+    // Enhanced AST tools - delegate to enhanced handlers
+    astgrep_enhanced_search: async (args) => {
+      const { astgrepEnhancedHandlers } = await getEnhancedUtils();
+      return astgrepEnhancedHandlers.handleAstGrepEnhancedSearch(args, defaultWorkingDir, getEnhancedUtils);
+    },
+    astgrep_multi_pattern: async (args) => {
+      const { astgrepEnhancedHandlers } = await getEnhancedUtils();
+      return astgrepEnhancedHandlers.handleAstGrepMultiPatternSearch(args, defaultWorkingDir, getEnhancedUtils);
+    },
+    astgrep_constraint_search: async (args) => {
+      const { astgrepEnhancedHandlers } = await getEnhancedUtils();
+      return astgrepEnhancedHandlers.handleAstGrepConstraintSearch(args, defaultWorkingDir, getEnhancedUtils);
+    },
+    astgrep_project_init: async (args) => {
+      const { astgrepEnhancedHandlers } = await getEnhancedUtils();
+      return astgrepEnhancedHandlers.handleAstGrepProjectInit(args, defaultWorkingDir, getEnhancedUtils);
+    },
+    astgrep_project_scan: async (args) => {
+      const { astgrepEnhancedHandlers } = await getEnhancedUtils();
+      return astgrepEnhancedHandlers.handleAstGrepProjectScan(args, defaultWorkingDir, getEnhancedUtils);
+    },
+    astgrep_test: async (args) => {
+      const { astgrepEnhancedHandlers } = await getEnhancedUtils();
+      return astgrepEnhancedHandlers.handleAstGrepTest(args, defaultWorkingDir, getEnhancedUtils);
+    },
+    astgrep_validate_rules: async (args) => {
+      const { astgrepEnhancedHandlers } = await getEnhancedUtils();
+      return astgrepEnhancedHandlers.handleAstGrepValidateRules(args, defaultWorkingDir, getEnhancedUtils);
+    },
+    astgrep_debug_rule: async (args) => {
+      const { astgrepEnhancedHandlers } = await getEnhancedUtils();
+      return astgrepEnhancedHandlers.handleAstGrepDebugRule(args, defaultWorkingDir, getEnhancedUtils);
+    },
+
+    // Sequential thinking tool
+    sequentialthinking: async (args) => {
+      const { handleSequentialThinking } = await import('./thinking-handler.js');
+      return handleSequentialThinking(args, defaultWorkingDir);
+    },
+
+    // Overflow content retrieval
+    retrieve_overflow: (args) => handleRetrieveOverflow(args, defaultWorkingDir),
 
     // Batch execution
     batch_execute: async (args) => {

@@ -2,12 +2,15 @@
 // Main server setup and request handling logic
 
 import * as path from 'node:path';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
 import { Server as McpServer } from "@modelcontextprotocol/sdk/server/index.js"; 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { getAllTools } from './tool-definitions.js';
 import { createToolHandlers } from './tool-handlers.js';
 import { createErrorResponse } from './common-errors.js';
+import { getSequentialThinkingToolDefinition } from './thinking-handler.js';
 
 /**
  * Initialize MCP server with lazy-loaded dependencies
@@ -74,15 +77,14 @@ export async function createMCPServer(workingDir) {
     { capabilities: { tools: {} } }
   );
 
-  // Initialize code search on startup
+  // Initialize code search lazily (don't sync on startup to prevent hanging)
   try {
-    const { initialize, syncIndex } = await getVectorIndexer();
+    console.log('[DEBUG] Code search will initialize on first use');
+    const { initialize } = await getVectorIndexer();
     await initialize();
-    await syncIndex([workingDir]);
+    console.log('[DEBUG] Code search base initialization complete');
   } catch (error) {
-    if (process.env.NODE_ENV === 'development' || process.env.DEBUG) {
-      console.error(`[DEBUG] Code search initialization failed: ${error.message}`);
-    }
+    console.error(`[DEBUG] Code search base initialization failed: ${error.message}`);
   }
 
   // Create tool handlers
@@ -94,15 +96,26 @@ export async function createMCPServer(workingDir) {
     getBatchHandler, 
     getBashHandler
   );
+  // Load tool descriptions JSON (metadata)
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  let descriptions = {};
+  try {
+    const raw = readFileSync(path.join(__dirname, 'tool-descriptions.json'), 'utf8');
+    descriptions = JSON.parse(raw).tools || {};
+  } catch (err) {
+    if (process.env.NODE_ENV === 'development' || process.env.DEBUG) console.error('[DEBUG] Failed to load tool-descriptions.json', err.message);
+    descriptions = {};
+  }
 
-  // List available tools
+  // Register ListTools handler: return the static tool definitions from code only.
+  // This ensures the server advertises only implemented tools (no placeholders).
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: getAllTools() }));
 
-  // Handle tool execution
+  // Register CallTool handler to dispatch to the tool handlers map
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const startTime = Date.now();
-    const toolName = request.params.name;
-    const args = request.params.arguments || {};
+    const toolName = request.params?.name;
+    const args = request.params?.arguments || {};
 
     const handler = toolHandlers[toolName];
     if (!handler) {
