@@ -14,7 +14,7 @@ export async function executeProcess(command, args = [], options = {}) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd,
-      stdio: input ? 'pipe' : 'inherit'
+      stdio: input ? 'pipe' : ['pipe', 'pipe', 'pipe'] // Always capture stdout/stderr
     });
 
     let stdout = '';
