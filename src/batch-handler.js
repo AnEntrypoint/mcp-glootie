@@ -55,7 +55,8 @@ Total execution time: ${batchResult.executionTimeMs}ms`
     });
 
     // Add detailed results for each operation
-    for (const result of batchResult.results) {
+    if (batchResult.results && Array.isArray(batchResult.results)) {
+      for (const result of batchResult.results) {
       const status = result.success ? '✓' : '✗';
       const header = `${status} Operation ${result.operation}: ${result.tool} (${result.executionTimeMs}ms)`;
       
@@ -76,6 +77,7 @@ Total execution time: ${batchResult.executionTimeMs}ms`
           text: `${header}\nERROR: ${result.error}`
         });
       }
+    }
     }
 
     return {
