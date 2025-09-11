@@ -1,17 +1,28 @@
 import { spawn } from 'child_process';
 import * as path from 'node:path';
 
-// Try to load NAPI binding, fall back to CLI if not available
+// Lazy-load NAPI binding only when needed to avoid ARM64 loading issues
 let astGrepNapi = null;
-let useNapi = false;
+let napiLoadAttempted = false;
+let napiLoadSuccessful = false;
 
-try {
-  astGrepNapi = await import('@ast-grep/napi');
-  useNapi = true;
-  console.log('[ast-grep] Using NAPI binding (faster performance)');
-} catch (error) {
-  console.log('[ast-grep] NAPI binding not available, using CLI fallback:', error.message);
-  useNapi = false;
+async function tryLoadNapi() {
+  if (napiLoadAttempted) {
+    return napiLoadSuccessful;
+  }
+  
+  napiLoadAttempted = true;
+  
+  try {
+    astGrepNapi = await import('@ast-grep/napi');
+    napiLoadSuccessful = true;
+    console.log('[ast-grep] NAPI binding loaded (faster performance)');
+    return true;
+  } catch (error) {
+    napiLoadSuccessful = false;
+    console.log('[ast-grep] NAPI binding not available, using CLI:', error.message.split('\n')[0]);
+    return false;
+  }
 }
 
 const executeAstGrepCommand = async (args, workingDirectory, timeout = 30000) => {
@@ -51,6 +62,12 @@ Or use other MCP tools: executenodejs, searchcode, batch_execute`;
 // NAPI-based search function
 const astgrepSearchNapi = async (pattern, language, paths, context, strictness, outputFormat, workingDirectory) => {
   const startTime = Date.now();
+  
+  // Try to load NAPI only when actually needed
+  if (!await tryLoadNapi()) {
+    // Fall back to CLI immediately if NAPI fails to load
+    return astgrepSearchCli(pattern, language, paths, context, strictness, outputFormat, workingDirectory);
+  }
   
   try {
     // Create ast-grep instance
@@ -110,13 +127,10 @@ const astgrepSearchCli = async (pattern, language, paths, context, strictness, o
            executionTimeMs: result.executionTimeMs };
 };
 
-// Main search function that chooses between NAPI and CLI
+// Main search function that tries NAPI first, falls back to CLI
 export const astgrepSearch = async (pattern, language, paths, context, strictness, outputFormat, workingDirectory) => {
-  if (useNapi) {
-    return astgrepSearchNapi(pattern, language, paths, context, strictness, outputFormat, workingDirectory);
-  } else {
-    return astgrepSearchCli(pattern, language, paths, context, strictness, outputFormat, workingDirectory);
-  }
+  // Always try NAPI first for better performance when available
+  return astgrepSearchNapi(pattern, language, paths, context, strictness, outputFormat, workingDirectory);
 };
 
 export const astgrepReplace = async (pattern, replacement, language, paths, dryRun, interactive, workingDirectory) => {
