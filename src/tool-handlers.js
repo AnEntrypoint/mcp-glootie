@@ -107,11 +107,10 @@ export async function handleCodeSearch(args, defaultWorkingDir, getVectorIndexer
  * Create tool handlers map for delegation
  */
 export function createToolHandlers(defaultWorkingDir, getVectorIndexer, getAstGrepUtils, getEnhancedUtils, getBatchHandler, getBashHandler) {
-  return {
+  const handlers = {
     executenodejs: (args) => handleNodeExecution(args, defaultWorkingDir),
     executedeno: (args) => handleDenoExecution(args, defaultWorkingDir),
     executebash: (args) => handleBashExecution(args, defaultWorkingDir),
-    searchcode: (args) => handleCodeSearch(args, defaultWorkingDir, getVectorIndexer),
     
     // AST tools - delegate to existing handlers
     astgrep_search: async (args) => {
@@ -180,4 +179,12 @@ export function createToolHandlers(defaultWorkingDir, getVectorIndexer, getAstGr
       return handleBatchExecute(args, defaultWorkingDir, () => createToolHandlers(defaultWorkingDir, getVectorIndexer, getAstGrepUtils, getEnhancedUtils, getBatchHandler, getBashHandler));
     }
   };
+
+  // Only include semantic search on non-ARM64 architectures
+  // ARM64 systems don't support transformers due to native module compatibility issues
+  if (process.arch !== 'arm64') {
+    handlers.searchcode = (args) => handleCodeSearch(args, defaultWorkingDir, getVectorIndexer);
+  }
+
+  return handlers;
 }
