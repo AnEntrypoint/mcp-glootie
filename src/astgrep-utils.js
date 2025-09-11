@@ -1,29 +1,8 @@
 import { spawn } from 'child_process';
 import * as path from 'node:path';
 
-// Lazy-load NAPI binding only when needed to avoid ARM64 loading issues
-let astGrepNapi = null;
-let napiLoadAttempted = false;
-let napiLoadSuccessful = false;
-
-async function tryLoadNapi() {
-  if (napiLoadAttempted) {
-    return napiLoadSuccessful;
-  }
-  
-  napiLoadAttempted = true;
-  
-  try {
-    astGrepNapi = await import('@ast-grep/napi');
-    napiLoadSuccessful = true;
-    console.log('[ast-grep] NAPI binding loaded (faster performance)');
-    return true;
-  } catch (error) {
-    napiLoadSuccessful = false;
-    console.log('[ast-grep] NAPI binding not available, using CLI:', error.message.split('\n')[0]);
-    return false;
-  }
-}
+// Use CLI-only approach for maximum ARM64 compatibility
+// NAPI removed to prevent double free corruption on ARM64 devices
 
 const executeAstGrepCommand = async (args, workingDirectory, timeout = 30000) => {
   const startTime = Date.now();
@@ -59,51 +38,7 @@ Or use other MCP tools: executenodejs, searchcode, batch_execute`;
   });
 };
 
-// NAPI-based search function
-const astgrepSearchNapi = async (pattern, language, paths, context, strictness, outputFormat, workingDirectory) => {
-  const startTime = Date.now();
-  
-  // Try to load NAPI only when actually needed
-  if (!await tryLoadNapi()) {
-    // Fall back to CLI immediately if NAPI fails to load
-    return astgrepSearchCli(pattern, language, paths, context, strictness, outputFormat, workingDirectory);
-  }
-  
-  try {
-    // Create ast-grep instance
-    const lang = astGrepNapi.Lang.fromString(language || 'javascript');
-    const root = astGrepNapi.parseFiles(lang, [workingDirectory]);
-    
-    const matcher = astGrepNapi.Pattern.new(pattern, lang);
-    const matches = [];
-    
-    // Search for matches
-    root.findAll(matcher).forEach(match => {
-      const range = match.range();
-      matches.push({
-        file: match.filename(),
-        startLine: range.start.line,
-        endLine: range.end.line,
-        startCol: range.start.column,
-        endCol: range.end.column,
-        text: match.text()
-      });
-    });
-    
-    return {
-      success: true,
-      matches,
-      executionTimeMs: Date.now() - startTime,
-      method: 'NAPI'
-    };
-  } catch (error) {
-    // Fall back to CLI on NAPI errors
-    console.log('[ast-grep] NAPI search failed, falling back to CLI:', error.message);
-    return astgrepSearchCli(pattern, language, paths, context, strictness, outputFormat, workingDirectory);
-  }
-};
-
-// CLI-based search function (original implementation)
+// CLI-only search function for maximum ARM64 compatibility
 const astgrepSearchCli = async (pattern, language, paths, context, strictness, outputFormat, workingDirectory) => {
   const args = ['run', '--json=compact'];
   if (language) args.push('--lang', language);
@@ -127,10 +62,9 @@ const astgrepSearchCli = async (pattern, language, paths, context, strictness, o
            executionTimeMs: result.executionTimeMs };
 };
 
-// Main search function that tries NAPI first, falls back to CLI
+// CLI-only search function for ARM64 compatibility
 export const astgrepSearch = async (pattern, language, paths, context, strictness, outputFormat, workingDirectory) => {
-  // Always try NAPI first for better performance when available
-  return astgrepSearchNapi(pattern, language, paths, context, strictness, outputFormat, workingDirectory);
+  return astgrepSearchCli(pattern, language, paths, context, strictness, outputFormat, workingDirectory);
 };
 
 export const astgrepReplace = async (pattern, replacement, language, paths, dryRun, interactive, workingDirectory) => {
