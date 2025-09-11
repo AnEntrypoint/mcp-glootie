@@ -27,7 +27,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yourusername/mcp-repl.git"
+    "url": "git+https://github.com/AnEntrypoint/mcp-repl.git"
   },
   "keywords": [
     "mcp",
