@@ -28,14 +28,14 @@ export const executionTools = [
         },
         workingDirectory: {
           type: "string", 
-          description: "**REQUIRED** - Working directory for bash execution"
+          description: "**Required**: workingDirectory parameter"
         },
         timeout: {
           type: "number",
           description: "Optional timeout in milliseconds (default: 120000)"
         }
       },
-      required: ["commands", "workingDirectory"]
+      required: ["commands"]
     }
   ),
 

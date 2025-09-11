@@ -64,7 +64,7 @@ export async function handleDenoExecution(args, defaultWorkingDir) {
 export async function handleBashExecution(args, defaultWorkingDir) {
   const startTime = Date.now();
   
-  const paramError = validateRequiredParams(args, ['commands', 'workingDirectory'], startTime);
+  const paramError = validateRequiredParams(args, ['commands'], startTime);
   if (paramError) return convertToMCPFormat(paramError, 'executebash');
 
   const dirValidation = validateWorkingDirectory(args.workingDirectory, defaultWorkingDir);
