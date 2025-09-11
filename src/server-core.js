@@ -8,7 +8,6 @@ import { Server as McpServer } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { getAllTools } from './tool-definitions.js';
-import { createToolHandlers } from './tool-handlers.js';
 import { createErrorResponse } from './common-errors.js';
 import { getSequentialThinkingToolDefinition } from './thinking-handler.js';
 
@@ -88,6 +87,7 @@ export async function createMCPServer(workingDir) {
   }
 
   // Create tool handlers
+  const { createToolHandlers } = await import('./tool-handlers.js');
   const toolHandlers = createToolHandlers(
     workingDir, 
     getVectorIndexer, 
