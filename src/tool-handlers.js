@@ -180,18 +180,8 @@ export function createToolHandlers(defaultWorkingDir, getVectorIndexer, getAstGr
     }
   };
 
-  // Include semantic search with ARM64 safety check
-  const isARM64 = process.arch === 'arm64' || process.platform === 'linux' && process.arch === 'arm64';
-  if (!isARM64) {
-    handlers.searchcode = (args) => handleCodeSearch(args, defaultWorkingDir, getVectorIndexer);
-  } else {
-    handlers.searchcode = (args) => ({
-      content: [{
-        type: "text",
-        text: "Semantic search disabled on ARM64 to prevent memory corruption. Use astgrep_search for structural code search instead."
-      }]
-    });
-  }
+  // Include semantic search with ARM64-compatible vector indexer
+  handlers.searchcode = (args) => handleCodeSearch(args, defaultWorkingDir, getVectorIndexer);
 
   return handlers;
 }
