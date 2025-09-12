@@ -15,60 +15,43 @@ import { getSequentialThinkingToolDefinition } from './thinking-handler.js';
  * Initialize MCP server with lazy-loaded dependencies
  */
 export async function createMCPServer(workingDir) {
-  // Lazy load dependencies to avoid startup issues
-  let vectorIndexer = null;
-  let astgrepUtils = null;
-  let astgrepEnhanced = null;
-  let batchHandler = null;
-  let bashHandler = null;
+  // Load dependencies synchronously to prevent ARM64 memory corruption during lazy loading
+  console.log('[DEBUG] Loading dependencies synchronously...');
+  
+  // Load all modules upfront to avoid memory corruption during lazy loading
+  const isARM64 = process.arch === 'arm64' || process.platform === 'linux' && process.arch === 'arm64';
+  
+  // Use ARM64-compatible vector indexer
+  let vectorIndexer = await import('./arm64-vector-indexer.js');
 
-  const getVectorIndexer = async () => {
-    if (!vectorIndexer) {
-      vectorIndexer = await import('./js-vector-indexer.js');
-    }
-    return vectorIndexer;
-  };
+  const [astgrepUtils, astgrepAdvanced, astgrepHandlers, astgrepHandlersAdvanced] = await Promise.all([
+    import('./astgrep-utils.js'),
+    import('./astgrep-advanced.js'), 
+    import('./astgrep-handlers.js'),
+    import('./astgrep-handlers-advanced.js')
+  ]);
 
-  const getAstGrepUtils = async () => {
-    if (!astgrepUtils) {
-      const [utils, advanced, handlers, handlersAdvanced] = await Promise.all([
-        import('./astgrep-utils.js'),
-        import('./astgrep-advanced.js'),
-        import('./astgrep-handlers.js'),
-        import('./astgrep-handlers-advanced.js')
-      ]);
-      astgrepUtils = { astgrepUtils: utils, astgrepAdvanced: advanced, astgrepHandlers: handlers, astgrepHandlersAdvanced: handlersAdvanced };
-    }
-    return astgrepUtils;
-  };
+  const [astgrepJsonFormats, astgrepProjectConfig, astgrepAdvancedSearch, astgrepTestValidation, astgrepEnhancedHandlers] = await Promise.all([
+    import('./astgrep-json-formats.js'),
+    import('./astgrep-project-config.js'),
+    import('./astgrep-advanced-search.js'),
+    import('./astgrep-test-validation.js'),
+    import('./astgrep-enhanced-handlers.js')
+  ]);
 
-  const getEnhancedAstGrepUtils = async () => {
-    if (!astgrepEnhanced) {
-      const [jsonFormats, projectConfig, advancedSearch, testValidation, enhancedHandlers] = await Promise.all([
-        import('./astgrep-json-formats.js'),
-        import('./astgrep-project-config.js'),
-        import('./astgrep-advanced-search.js'),
-        import('./astgrep-test-validation.js'),
-        import('./astgrep-enhanced-handlers.js')
-      ]);
-      astgrepEnhanced = { astgrepJsonFormats: jsonFormats, astgrepProjectConfig: projectConfig, astgrepAdvancedSearch: advancedSearch, astgrepTestValidation: testValidation, astgrepEnhancedHandlers: enhancedHandlers };
-    }
-    return astgrepEnhanced;
-  };
+  const batchHandler = await import('./batch-handler.js');
+  const bashHandler = await import('./bash-handler.js');
 
-  const getBatchHandler = async () => {
-    if (!batchHandler) {
-      batchHandler = await import('./batch-handler.js');
-    }
-    return batchHandler;
-  };
-
-  const getBashHandler = async () => {
-    if (!bashHandler) {
-      bashHandler = await import('./bash-handler.js');
-    }
-    return bashHandler;
-  };
+  // Create synchronous getter functions
+  const getVectorIndexer = async () => vectorIndexer;
+  const getAstGrepUtils = async () => ({ 
+    astgrepUtils, astgrepAdvanced, astgrepHandlers, astgrepHandlersAdvanced 
+  });
+  const getEnhancedAstGrepUtils = async () => ({ 
+    astgrepJsonFormats, astgrepProjectConfig, astgrepAdvancedSearch, astgrepTestValidation, astgrepEnhancedHandlers 
+  });
+  const getBatchHandler = async () => batchHandler;
+  const getBashHandler = async () => bashHandler;
 
   // Initialize the MCP server
   const server = new McpServer(
@@ -77,13 +60,18 @@ export async function createMCPServer(workingDir) {
   );
 
   // Initialize code search lazily (don't sync on startup to prevent hanging)
-  try {
-    console.log('[DEBUG] Code search will initialize on first use');
-    const { initialize } = await getVectorIndexer();
-    await initialize();
-    console.log('[DEBUG] Code search base initialization complete');
-  } catch (error) {
-    console.error(`[DEBUG] Code search base initialization failed: ${error.message}`);
+  // Skip initialization on ARM64 to prevent memory corruption
+  if (!isARM64) {
+    try {
+      console.log('[DEBUG] Code search will initialize on first use');
+      const { initialize } = await getVectorIndexer();
+      await initialize();
+      console.log('[DEBUG] Code search base initialization complete');
+    } catch (error) {
+      console.error(`[DEBUG] Code search base initialization failed: ${error.message}`);
+    }
+  } else {
+    console.log('[DEBUG] Skipping code search initialization on ARM64 to prevent memory corruption');
   }
 
   // Create tool handlers
