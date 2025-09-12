@@ -180,11 +180,8 @@ export function createToolHandlers(defaultWorkingDir, getVectorIndexer, getAstGr
     }
   };
 
-  // Only include semantic search on non-ARM64 architectures
-  // ARM64 systems don't support transformers due to native module compatibility issues
-  if (process.arch !== 'arm64') {
-    handlers.searchcode = (args) => handleCodeSearch(args, defaultWorkingDir, getVectorIndexer);
-  }
+  // Always include semantic search - now ARM64-compatible
+  handlers.searchcode = (args) => handleCodeSearch(args, defaultWorkingDir, getVectorIndexer);
 
   return handlers;
 }
