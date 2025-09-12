@@ -115,18 +115,12 @@ async function handleRequest(request) {
         };
       }
       try {
-        // Get tool handlers from the server with lightweight semantic search
+        // Get tool handlers with ARM64-compatible semantic search
         const { createToolHandlers } = await import('./tool-handlers.js');
-        const { lightweightSearch, getLightSearchInstance } = await import('./lightweight-semantic-search.js');
+        const vectorIndexer = await import('./arm64-vector-indexer.js');
         const toolHandlers = createToolHandlers(
           process.cwd(),
-          async () => ({ 
-            queryIndex: lightweightSearch,
-            syncIndex: async (folders) => {
-              const searchInstance = await getLightSearchInstance();
-              await searchInstance.indexFiles(folders);
-            }
-          }),
+          async () => vectorIndexer,
           async () => {
             const utils = await import('./astgrep-utils.js');
             const handlers = await import('./astgrep-handlers.js');

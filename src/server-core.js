@@ -60,18 +60,14 @@ export async function createMCPServer(workingDir) {
   );
 
   // Initialize code search lazily (don't sync on startup to prevent hanging)
-  // Skip initialization on ARM64 to prevent memory corruption
-  if (!isARM64) {
-    try {
-      console.log('[DEBUG] Code search will initialize on first use');
-      const { initialize } = await getVectorIndexer();
-      await initialize();
-      console.log('[DEBUG] Code search base initialization complete');
-    } catch (error) {
-      console.error(`[DEBUG] Code search base initialization failed: ${error.message}`);
-    }
-  } else {
-    console.log('[DEBUG] Skipping code search initialization on ARM64 to prevent memory corruption');
+  // Use ARM64-compatible semantic search
+  try {
+    console.log('[DEBUG] Code search will initialize on first use');
+    const { initialize } = await getVectorIndexer();
+    await initialize();
+    console.log('[DEBUG] Code search base initialization complete');
+  } catch (error) {
+    console.error(`[DEBUG] Code search base initialization failed: ${error.message}`);
   }
 
   // Create tool handlers

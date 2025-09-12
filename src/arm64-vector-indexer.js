@@ -357,3 +357,8 @@ export async function searchCode(query, workingDirectory, folders = ['.'], exten
     return [];
   }
 }
+
+export async function searchSemantic(query, options = {}) {
+  const { workingDirectory, folders = ['.'], extensions = DEFAULT_EXTS, topK = 8 } = options;
+  return await searchCode(query, workingDirectory, folders, extensions, topK);
+}
