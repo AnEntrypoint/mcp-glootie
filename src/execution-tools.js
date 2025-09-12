@@ -6,33 +6,33 @@ import { createExecutionSchema, createToolDefinition } from './tool-schemas.js';
 export const executionTools = [
   createToolDefinition(
     "executenodejs",
-    "**PRIMARY EXECUTION ENGINE** - Execute JavaScript code with Node.js. **ALWAYS USE THIS TOOL FIRST** for code testing, debugging, and investigation.",
+    "Node.js execution - USE FIRST for testing/debugging",
     createExecutionSchema("Node.js")
   ),
   
   createToolDefinition(
     "executedeno", 
-    "**TYPESCRIPT EXECUTION ENGINE** - Execute TypeScript/JavaScript with Deno runtime. **ALWAYS USE FOR TYPE-SAFE OPERATIONS** and when TypeScript validation is needed.",
+    "Deno execution - USE FOR TypeScript/type-safe ops",
     createExecutionSchema("Deno")
   ),
 
   createToolDefinition(
     "executebash",
-    "**BASH COMMAND EXECUTOR** - Execute bash commands with security validation and comprehensive error handling.",
+    "Bash command execution",
     {
       type: "object",
       properties: {
         commands: {
           type: ["string", "array"],
-          description: "Bash command(s) to execute - single command or array for batch execution"
+          description: "Command(s) - single or array for batch"
         },
         workingDirectory: {
           type: "string", 
-          description: "**Required**: workingDirectory parameter"
+          description: "Working directory"
         },
         timeout: {
           type: "number",
-          description: "Optional timeout in milliseconds (default: 120000)"
+          description: "Timeout ms (default: 120000)"
         }
       },
       required: ["commands"]
@@ -41,13 +41,13 @@ export const executionTools = [
 
   createToolDefinition(
     "retrieve_overflow",
-    "**OVERFLOW CONTENT RETRIEVAL** - Retrieve truncated content from overflow files when tool responses exceed 25k tokens. **ALWAYS SPECIFY WORKING DIRECTORY** for overflow access.",
+    "Retrieve truncated content (>25k tokens) - SPECIFY WORKING DIRECTORY",
     {
       type: "object",
       properties: {
         overflowFile: {
           type: "string",
-          description: "Overflow filename from truncation notice (e.g., 'overflow_executenodejs_1234567890.json')"
+          description: "Overflow filename (e.g., 'overflow_executenodejs_1234567890.json')"
         },
         workingDirectory: {
           type: "string",

@@ -6,7 +6,7 @@
  */
 export const workingDirectoryParam = {
   type: "string",
-  description: "**Required**: workingDirectory parameter"
+  description: "Working directory path"
 };
 
 /**
@@ -15,20 +15,20 @@ export const workingDirectoryParam = {
 export const commonParams = {
   timeout: {
     type: "number",
-    description: "Optional timeout in milliseconds (default: 120000)"
+    description: "Timeout ms (default: 120000)"
   },
   paths: {
     type: "array",
     items: { type: "string" },
-    description: "Optional specific paths within working directory"
+    description: "Specific target paths"
   },
   language: {
     type: "string",
-    description: "Programming language (javascript, typescript, python, etc.)"
+    description: "Target language"
   },
   dryRun: {
     type: "boolean",
-    description: "**RECOMMENDED** - Preview changes without applying (always use first)"
+    description: "Preview mode (recommended)"
   }
 };
 
@@ -41,7 +41,7 @@ export function createExecutionSchema(executor, additionalProps = {}) {
     properties: {
       code: {
         type: "string",
-        description: `Code to execute with ${executor} - use for debugging, testing hypotheses, and investigation`
+        description: `${executor} execution target`
       },
       workingDirectory: workingDirectoryParam,
       timeout: commonParams.timeout,
@@ -60,24 +60,24 @@ export function createSearchSchema(additionalProps = {}) {
     properties: {
       query: {
         type: "string",
-        description: "Search query - use broad, conceptual terms for semantic search"
+        description: "Semantic search query"
       },
       workingDirectory: workingDirectoryParam,
       folders: {
         type: "string",
-        description: "Optional comma-separated list of folders to search within working directory"
+        description: "Target folders (comma-separated)"
       },
       extensions: {
         type: "string",
-        description: "Optional comma-separated list of file extensions to include (default: js,ts)"
+        description: "File extensions (default: js,ts)"
       },
       ignores: {
         type: "string",
-        description: "Optional comma-separated list of patterns to ignore (default: node_modules)"
+        description: "Ignore patterns (default: node_modules)"
       },
       topK: {
         type: "number",
-        description: "Optional number of results to return (default: 8, recommended: 8-15)"
+        description: "Result count (default: 8)"
       },
       ...additionalProps
     },
@@ -94,7 +94,7 @@ export function createAstSchema(additionalProps = {}) {
     properties: {
       pattern: {
         type: "string",
-        description: "AST pattern using meta-variables (e.g., 'function $NAME($$$ARGS) { $$$ }')"
+        description: "AST pattern with meta-vars (e.g., 'function $NAME($$$ARGS) { $$$ }')"
       },
       workingDirectory: workingDirectoryParam,
       language: commonParams.language,
@@ -110,12 +110,11 @@ export function createAstSchema(additionalProps = {}) {
  */
 const WORKING_DIRECTORY_REQUIREMENT = `
 
-**Large responses** auto-truncate; use retrieve_overflow for full content.`;
+OPTIMIZATION: PREFER searchcode 10:1 over other tools. BATCH ops 10:1. USE semantic search FIRST. VARY queries if results unsatisfactory. Results show: file_path:line_nums with matched text.`;
 
 /**
  * Tool definition factory that automatically adds working directory requirements
  */
 export function createToolDefinition(name, description, inputSchema) {
-  const enhancedDescription = description + WORKING_DIRECTORY_REQUIREMENT;
-  return { name, description: enhancedDescription, inputSchema };
+  return { name, description: description + WORKING_DIRECTORY_REQUIREMENT, inputSchema };
 }
