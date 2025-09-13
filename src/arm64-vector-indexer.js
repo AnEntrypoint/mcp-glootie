@@ -2,9 +2,10 @@
 // ARM64-compatible vector search using transformers.js
 
 import fs from 'fs/promises';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'fs';
 import path from 'path';
 import { pipeline } from '@xenova/transformers';
+import ignore from 'ignore';
 
 // Configuration constants
 const INDEX_DIR = './code_search_index';
@@ -37,57 +38,71 @@ let codeChunks = [];
 let embeddingExtractor = null;
 let isInitialized = false;
 
-// Load ignore patterns from .gitignore files
-async function loadGitignorePatterns(rootDir, ignoreFiles = ['.gitignore']) {
-  const patterns = [...DEFAULT_IGNORES];
-  
-  for (const ignoreFile of ignoreFiles) {
-    const ignorePath = path.join(rootDir, ignoreFile);
-    
-    if (existsSync(ignorePath)) {
-      try {
-        const content = readFileSync(ignorePath, 'utf8');
-        const lines = content.split('\n');
-        
-        for (const line of lines) {
-          const trimmedLine = line.trim();
-          if (trimmedLine && !trimmedLine.startsWith('#')) {
-            patterns.push(trimmedLine);
+// Create robust ignore filter using the ignore library
+function createIgnoreFilter(rootDir) {
+  const ig = ignore();
+
+  // Add default ignore patterns
+  ig.add(DEFAULT_IGNORES);
+
+  // Find and add all .gitignore files in the directory tree
+  const addGitignoreFiles = (dir) => {
+    try {
+      const entries = readdirSync(dir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+
+        if (entry.isFile() && entry.name === '.gitignore') {
+          try {
+            const content = readFileSync(fullPath, 'utf8');
+            ig.add(content);
+          } catch (error) {
+            // Silently handle .gitignore read errors
           }
+        } else if (entry.isDirectory() && !entry.name.startsWith('.') && !DEFAULT_IGNORES.includes(entry.name)) {
+          // Recursively add .gitignore files from subdirectories
+          addGitignoreFiles(fullPath);
         }
-      } catch (error) {
-        // Silently handle ignore file parse errors
       }
+    } catch (error) {
+      // Silently handle directory read errors
     }
-  }
-  
-  return patterns;
+  };
+
+  addGitignoreFiles(rootDir);
+  return ig;
 }
 
-// Check if a path should be ignored
-function shouldIgnorePath(filePath, ignorePatterns, rootDir) {
-  const normalizedPath = path.relative(rootDir, filePath);
-  const standardPath = normalizedPath.replace(/\\/g, '/');
-  
-  for (const pattern of ignorePatterns) {
-    if (standardPath === pattern || standardPath === pattern.replace(/\/$/, '')) {
-      return true;
-    }
-    
-    if (pattern.endsWith('/**') && standardPath.startsWith(pattern.slice(0, -2))) {
-      return true;
-    }
-    
-    if (pattern.startsWith('*.') && standardPath.endsWith(pattern.slice(1))) {
-      return true;
-    }
-    
-    if (pattern.endsWith('/') && standardPath.startsWith(pattern)) {
-      return true;
-    }
+// Check if a file should be indexed based on extension
+function shouldIndexFile(filePath, allowedExtensions) {
+  const ext = path.extname(filePath).slice(1).toLowerCase();
+  if (!ext || !allowedExtensions.includes(ext)) {
+    return false;
   }
-  
-  return false;
+
+  // Additional filtering for known non-code files even with allowed extensions
+  const filename = path.basename(filePath);
+  const excludedFiles = [
+    // Minified/bundled JS
+    '*.min.js', '*.bundle.js', '*.pack.js',
+    // TypeScript definitions
+    '*.d.ts', '*.d.tsx',
+    // Source maps
+    '*.map', '*.css.map',
+    // Package files
+    'package.json', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
+    // Config files
+    'tsconfig.json', 'jsconfig.json',
+    // Linter configs
+    '.eslintrc.*', '.prettierrc.*',
+    // Documentation
+    'LICENSE*', 'README*', '*.md', 'CHANGELOG*',
+    // Docker
+    'Dockerfile*', 'docker-compose*.yml'
+  ];
+
+  return !excludedFiles.some(excluded => filename.match(excluded.replace(/\*/g, '.*')));
 }
 
 // Initialize the embedding model
@@ -189,12 +204,12 @@ export async function syncIndex(folders, exts = DEFAULT_EXTS, ignores = DEFAULT_
   if (!isInitialized) {
     await initialize();
   }
-  
+
   const files = [];
-  const ignorePatterns = await loadGitignorePatterns(process.cwd());
-  
+  const ignoreFilter = createIgnoreFilter(process.cwd());
+
   for (const folder of folders) {
-    await scanDirectory(folder, ignorePatterns, files, exts);
+    await scanDirectory(folder, ignoreFilter, files, exts);
   }
   
   // Process files into chunks
@@ -228,22 +243,35 @@ export async function syncIndex(folders, exts = DEFAULT_EXTS, ignores = DEFAULT_
   return codeChunks.length;
 }
 
-// Helper function to scan directories
-async function scanDirectory(dir, ignorePatterns, files, exts) {
+// Helper function to scan directories with proper .gitignore support
+async function scanDirectory(dir, ignoreFilter, files, exts) {
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
-    
+
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
-      
+      const relativePath = path.relative(process.cwd(), fullPath);
+
+      // Check if file/directory should be ignored using the ignore library
+      if (ignoreFilter.ignores(relativePath)) {
+        continue;
+      }
+
       if (entry.isDirectory()) {
-        if (!shouldIgnorePath(fullPath, ignorePatterns, process.cwd())) {
-          await scanDirectory(fullPath, ignorePatterns, files, exts);
-        }
+        // Recursively scan subdirectories
+        await scanDirectory(fullPath, ignoreFilter, files, exts);
       } else if (entry.isFile()) {
-        const fileExt = path.extname(entry.name).slice(1);
-        if (exts.includes(fileExt) && !shouldIgnorePath(fullPath, ignorePatterns, process.cwd())) {
-          files.push(fullPath);
+        // Check if this file should be indexed based on extension and content type
+        if (shouldIndexFile(fullPath, exts)) {
+          // Check file size - skip files larger than 200KB
+          try {
+            const stat = await fs.stat(fullPath);
+            if (stat.size <= 200 * 1024) { // 200KB limit
+              files.push(fullPath);
+            }
+          } catch (error) {
+            // Skip files we can't stat
+          }
         }
       }
     }
