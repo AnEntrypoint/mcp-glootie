@@ -6,28 +6,28 @@ import { createExecutionSchema, createToolDefinition } from './tool-schemas.js';
 export const executionTools = [
   createToolDefinition(
     "executenodejs",
-    "Node.js execution - USE FIRST for testing/debugging",
+    "Execute JavaScript code with Node.js",
     createExecutionSchema("Node.js")
   ),
-  
+
   createToolDefinition(
-    "executedeno", 
-    "Deno execution - USE FOR TypeScript/type-safe ops",
+    "executedeno",
+    "Execute TypeScript/JavaScript with Deno",
     createExecutionSchema("Deno")
   ),
 
   createToolDefinition(
     "executebash",
-    "Bash command execution",
+    "Execute bash commands",
     {
       type: "object",
       properties: {
         commands: {
           type: ["string", "array"],
-          description: "Command(s) - single or array for batch"
+          description: "Command(s) - single or array for batch execution"
         },
         workingDirectory: {
-          type: "string", 
+          type: "string",
           description: "Working directory"
         },
         timeout: {
@@ -41,7 +41,7 @@ export const executionTools = [
 
   createToolDefinition(
     "retrieve_overflow",
-    "Retrieve truncated content (>25k tokens) - SPECIFY WORKING DIRECTORY",
+    "Retrieve truncated content from previous tool calls",
     {
       type: "object",
       properties: {
@@ -51,19 +51,19 @@ export const executionTools = [
         },
         workingDirectory: {
           type: "string",
-          description: "**REQUIRED** - Working directory where overflow file is stored (same as original tool call)"
+          description: "Required - working directory where overflow file is stored"
         },
         chunkIndex: {
           type: "number",
-          description: "Optional chunk index to retrieve (default: 0 for next chunk). Use metadata from previous call to get subsequent chunks."
+          description: "Chunk index to retrieve (default: 0 for next chunk)"
         },
         listFiles: {
           type: "boolean",
-          description: "Optional: List all available overflow files instead of retrieving content"
+          description: "List available overflow files instead of retrieving content"
         },
         cleanup: {
-          type: "boolean", 
-          description: "Optional: Clean up old overflow files (>24 hours) in addition to retrieving content"
+          type: "boolean",
+          description: "Clean up old overflow files (>24 hours) while retrieving content"
         }
       },
       required: ["workingDirectory"],
