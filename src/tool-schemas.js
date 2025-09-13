@@ -110,7 +110,7 @@ export function createAstSchema(additionalProps = {}) {
  */
 const WORKING_DIRECTORY_REQUIREMENT = `
 
-OPTIMIZATION: PREFER searchcode 10:1 over other tools. BATCH ops 10:1. USE semantic search FIRST. VARY queries if results unsatisfactory. Results show: file_path:line_nums with matched text.`;
+Results show: file_path:line_nums with matched text.`;
 
 /**
  * Tool definition factory that automatically adds working directory requirements
