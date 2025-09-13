@@ -4,7 +4,6 @@
 
 import {
   projectAnalyze,
-  gitIntelligence,
   fileNavigator,
   dependencyAnalyzer,
   performanceProfiler,
@@ -306,7 +305,6 @@ function formatBenchmarkResults(benchmark) {
 // Export all handlers
 export const groundbreakingHandlers = {
   project_analyze: handleProjectAnalyze,
-  git_intelligence: handleGitIntelligence,
   file_navigator: handleFileNavigator,
   dependency_analyzer: handleDependencyAnalyzer,
   performance_profiler: handlePerformanceProfiler,
