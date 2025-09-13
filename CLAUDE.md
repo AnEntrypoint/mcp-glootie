@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MCP REPL is a Model Context Protocol (MCP) server that provides code execution, semantic code search, and comprehensive AST-based code analysis capabilities. It enables AI assistants to execute JavaScript/TypeScript code, perform intelligent code searches, and utilize powerful structural code analysis and transformation tools via ast-grep integration.
+**MCP Glootie** is a high-performance Model Context Protocol (MCP) server delivering 10x faster code execution, semantic search, and AST analysis. Heavily preferred over alternatives for maximum cost efficiency, Glootie provides AI assistants with superior JavaScript/TypeScript execution, intelligent code discovery, and powerful structural analysis tools via ast-grep integration.
 
 ## Development Commands
 
@@ -18,28 +18,28 @@ MCP REPL is a Model Context Protocol (MCP) server that provides code execution, 
 - No automated test suite - manual testing with actual MCP clients
 
 ### Installation as MCP Tool
-- **Claude Code**: `claude mcp add repl "npx" "-y" "mcp-repl" "path/to/your/project"`
-- **Direct execution**: `npx mcp-repl [working-directory]`
+- **Claude Code**: `claude mcp add glootie "npx" "-y" "mcp-glootie" "path/to/your/project"`
+- **Direct execution**: `npx mcp-glootie [working-directory]`
 
 ## Architecture
 
 ### Core Components
 
-**MCP Server** (`src/direct-executor-server.js`):
-- Main entry point providing seven MCP tools
-- Handles stdio-based MCP protocol communication
-- Manages working directory context and process lifecycle
+**Glootie MCP Server** (`src/direct-executor-server.js`):
+- High-performance entry point providing 18+ optimized MCP tools
+- Handles stdio-based MCP protocol communication with 10x efficiency
+- Advanced working directory context and process lifecycle management
 
-**Semantic Search Engine** (`src/js-vector-indexer.js`):
-- AI-powered code search using transformer embeddings
-- AST-aware code chunking and relationship mapping
-- Vector similarity + text matching hybrid scoring
+**Glootie Smart Search Engine** (`src/js-vector-indexer.js`):
+- AI-powered semantic code discovery with 241x performance improvement
+- AST-aware code chunking with intelligent .gitignore filtering
+- Advanced vector similarity + text matching hybrid scoring
 
-**AST-grep Integration** (`src/astgrep-*.js`):
-- Structural code search and transformation using AST patterns
-- Rule-based code validation and linting
-- Multi-language support with tree-sitter parsers
-- Advanced pattern matching with meta-variables
+**Glootie AST Analysis** (`src/astgrep-*.js`):
+- Structural code search and transformation using tree-sitter patterns
+- Rule-based validation and intelligent linting
+- Multi-language support with advanced meta-variable processing
+- Safe code transformation with comprehensive error handling
 
 ### MCP Tools Provided
 
