@@ -18,7 +18,7 @@ if (process.argv.includes('--version') || process.argv.includes('-v')) {
 // Handle help flag
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
   console.log('MCP REPL - Code execution and semantic search server');
-  console.log('Usage: mcp-repl [working-directory]');
+  console.log('Usage: mcp-glootie [working-directory]');
   console.log('Options:');
   console.log('  --version, -v    Show version');
   console.log('  --help, -h       Show help');

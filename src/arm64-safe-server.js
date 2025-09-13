@@ -72,7 +72,7 @@ async function handleRequest(request) {
             logging: {}
           },
           serverInfo: { 
-            name: "mcp-repl-arm64-safe", 
+            name: "mcp-glootie-arm64-safe", 
             version: "2.5.1" 
           }
         }
