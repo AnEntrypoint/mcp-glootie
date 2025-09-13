@@ -456,7 +456,6 @@ async function analyzePerformance(workingDirectory) {
 
 export {
   projectAnalyze,
-  gitIntelligence,
   fileNavigator,
   dependencyAnalyzer,
   performanceProfiler,

@@ -14,7 +14,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **🚀 REVOLUTIONARY FEATURES:**
 - **Complete Project Intelligence** - project_analyze with architecture insights
-- **Smart Git Integration** - git_intelligence with workflow optimization
 - **Intelligent File Navigation** - file_navigator with relationship mapping
 - **Code Relationship Analysis** - dependency_analyzer with security scanning
 - **Built-in Performance Profiling** - performance_profiler with optimization hints
