@@ -1,7 +1,7 @@
 {
   "name": "mcp-glootie",
-  "version": "2.10.0",
-  "description": "MCP Glootie - World-class code editing assistant with 98% token efficiency improvement, context optimization, and 18 MCP tools. High-performance MCP server with 89% reduced context overhead and production-ready reliability.",
+  "version": "2.11.0",
+  "description": "MCP Glootie - World-class code editing assistant with performance-validated tools, comprehensive testing results, and proven effectiveness. 18 MCP tools with 89% context optimization and detailed performance analysis.",
   "main": "src/direct-executor-server.js",
   "type": "module",
   "bin": {
