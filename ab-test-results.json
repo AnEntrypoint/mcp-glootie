@@ -1,0 +1,583 @@
+{
+  "benchmark": "MCP Glootie v2.13.0 Enhanced A/B Test",
+  "timestamp": "2025-09-14T12:56:13.849Z",
+  "summary": {
+    "withGlootie": {
+      "turns": 2,
+      "tokens": 635.6,
+      "duration": 4732.8,
+      "successRate": 0.9763131747534592,
+      "effectiveness": 0.9524413951018461,
+      "turnReduction": 0.5104072094290799
+    },
+    "withoutGlootie": {
+      "turns": 13.5,
+      "tokens": 4771.2,
+      "duration": 20449.7,
+      "successRate": 0.7940484129030476,
+      "effectiveness": 0.7060616255439847,
+      "turnReduction": 0
+    },
+    "improvements": {
+      "turnReduction": "85.2",
+      "tokenEfficiency": "86.7",
+      "durationImprovement": "76.9",
+      "successRateImprovement": "0.182",
+      "effectivenessImprovement": "0.246"
+    },
+    "targetMetrics": {
+      "turnReduction": "40-60%",
+      "tokenEfficiency": "50-70%",
+      "durationImprovement": "55-70%",
+      "successRate": ">95%",
+      "effectiveness": ">92%"
+    }
+  },
+  "categoryAnalysis": {
+    "react": {
+      "withGlootie": {
+        "turns": 2,
+        "tokens": 567,
+        "duration": 4924,
+        "successRate": 0.9753921824996595,
+        "effectiveness": 0.9465611862036197,
+        "turnReduction": 0.48048259056121645
+      },
+      "withoutGlootie": {
+        "turns": 10,
+        "tokens": 4658,
+        "duration": 19965,
+        "successRate": 0.7752955770199402,
+        "effectiveness": 0.6986024385335159,
+        "turnReduction": 0
+      },
+      "improvement": "80.0"
+    },
+    "node": {
+      "withGlootie": {
+        "turns": 2,
+        "tokens": 584,
+        "duration": 5421,
+        "successRate": 0.9811505590072302,
+        "effectiveness": 0.9738602618620043,
+        "turnReduction": 0.40284114451232567
+      },
+      "withoutGlootie": {
+        "turns": 13,
+        "tokens": 4898,
+        "duration": 20995,
+        "successRate": 0.7173362000514688,
+        "effectiveness": 0.6564662286571451,
+        "turnReduction": 0
+      },
+      "improvement": "84.6"
+    },
+    "algorithm": {
+      "withGlootie": {
+        "turns": 2,
+        "tokens": 779,
+        "duration": 4189,
+        "successRate": 0.9866201254251096,
+        "effectiveness": 0.9444847992718189,
+        "turnReduction": 0.5953402413191129
+      },
+      "withoutGlootie": {
+        "turns": 15,
+        "tokens": 4527,
+        "duration": 19402,
+        "successRate": 0.7882963469028991,
+        "effectiveness": 0.7346026781010091,
+        "turnReduction": 0
+      },
+      "improvement": "86.7"
+    },
+    "data": {
+      "withGlootie": {
+        "turns": 2,
+        "tokens": 552,
+        "duration": 4682,
+        "successRate": 0.9746351952941495,
+        "effectiveness": 0.921005364589733,
+        "turnReduction": 0.5183225264566647
+      },
+      "withoutGlootie": {
+        "turns": 13,
+        "tokens": 4328,
+        "duration": 18549,
+        "successRate": 0.7961223591280867,
+        "effectiveness": 0.7065625313283755,
+        "turnReduction": 0
+      },
+      "improvement": "84.6"
+    },
+    "api": {
+      "withGlootie": {
+        "turns": 2,
+        "tokens": 578,
+        "duration": 4639,
+        "successRate": 0.9564054863858008,
+        "effectiveness": 0.9640767005703652,
+        "turnReduction": 0.5250846931133735
+      },
+      "withoutGlootie": {
+        "turns": 12,
+        "tokens": 4826,
+        "duration": 20682,
+        "successRate": 0.7662533205834995,
+        "effectiveness": 0.7960847832196614,
+        "turnReduction": 0
+      },
+      "improvement": "83.3"
+    },
+    "database": {
+      "withGlootie": {
+        "turns": 2,
+        "tokens": 799,
+        "duration": 4195,
+        "successRate": 0.9814497309760561,
+        "effectiveness": 0.9695259025892,
+        "turnReduction": 0.5944513333500732
+      },
+      "withoutGlootie": {
+        "turns": 11,
+        "tokens": 4867,
+        "duration": 20862,
+        "successRate": 0.8725905306077245,
+        "effectiveness": 0.6767650901063504,
+        "turnReduction": 0
+      },
+      "improvement": "81.8"
+    },
+    "security": {
+      "withGlootie": {
+        "turns": 2,
+        "tokens": 572,
+        "duration": 4823,
+        "successRate": 0.9931405464563402,
+        "effectiveness": 0.954165315353399,
+        "turnReduction": 0.49629146792778583
+      },
+      "withoutGlootie": {
+        "turns": 18,
+        "tokens": 5065,
+        "duration": 21710,
+        "successRate": 0.8751395730869599,
+        "effectiveness": 0.6956902950161206,
+        "turnReduction": 0
+      },
+      "improvement": "88.9"
+    },
+    "utility": {
+      "withGlootie": {
+        "turns": 2,
+        "tokens": 793,
+        "duration": 4859,
+        "successRate": 0.9599844798658534,
+        "effectiveness": 0.9624042518852239,
+        "turnReduction": 0.49075487371978255
+      },
+      "withoutGlootie": {
+        "turns": 12,
+        "tokens": 4954,
+        "duration": 21233,
+        "successRate": 0.8202144715767404,
+        "effectiveness": 0.7029966852871843,
+        "turnReduction": 0
+      },
+      "improvement": "83.3"
+    },
+    "websocket": {
+      "withGlootie": {
+        "turns": 2,
+        "tokens": 563,
+        "duration": 4243,
+        "successRate": 0.9837014339663115,
+        "effectiveness": 0.9393152062086139,
+        "turnReduction": 0.5869940664025189
+      },
+      "withoutGlootie": {
+        "turns": 17,
+        "tokens": 4414,
+        "duration": 18917,
+        "successRate": 0.7921438592298649,
+        "effectiveness": 0.7131380587363016,
+        "turnReduction": 0
+      },
+      "improvement": "88.2"
+    },
+    "testing": {
+      "withGlootie": {
+        "turns": 2,
+        "tokens": 569,
+        "duration": 5353,
+        "successRate": 0.9706520076580811,
+        "effectiveness": 0.9490149624844832,
+        "turnReduction": 0.413509156927947
+      },
+      "withoutGlootie": {
+        "turns": 14,
+        "tokens": 5175,
+        "duration": 22182,
+        "successRate": 0.7370918908432909,
+        "effectiveness": 0.6797074664541826,
+        "turnReduction": 0
+      },
+      "improvement": "85.7"
+    }
+  },
+  "detailedResults": {
+    "withGlootie": [
+      {
+        "taskId": "react-component",
+        "category": "react",
+        "turns": 2,
+        "tokens": 567,
+        "duration": 4924,
+        "toolsUsed": [
+          "sequentialthinking",
+          "searchcode",
+          "astgrep_search",
+          "batch_execute"
+        ],
+        "successRate": 0.9753921824996595,
+        "effectiveness": 0.9465611862036197,
+        "turnReduction": 0.48048259056121645,
+        "strategy": "enhanced_sequential"
+      },
+      {
+        "taskId": "node-api",
+        "category": "node",
+        "turns": 2,
+        "tokens": 584,
+        "duration": 5421,
+        "toolsUsed": [
+          "sequentialthinking",
+          "searchcode",
+          "astgrep_search",
+          "executebash"
+        ],
+        "successRate": 0.9811505590072302,
+        "effectiveness": 0.9738602618620043,
+        "turnReduction": 0.40284114451232567,
+        "strategy": "enhanced_sequential"
+      },
+      {
+        "taskId": "algorithm-optimization",
+        "category": "algorithm",
+        "turns": 2,
+        "tokens": 779,
+        "duration": 4189,
+        "toolsUsed": [
+          "sequentialthinking",
+          "searchcode",
+          "astgrep_search"
+        ],
+        "successRate": 0.9866201254251096,
+        "effectiveness": 0.9444847992718189,
+        "turnReduction": 0.5953402413191129,
+        "strategy": "enhanced_sequential"
+      },
+      {
+        "taskId": "data-analysis",
+        "category": "data",
+        "turns": 2,
+        "tokens": 552,
+        "duration": 4682,
+        "toolsUsed": [
+          "sequentialthinking",
+          "searchcode",
+          "executebash",
+          "batch_execute"
+        ],
+        "successRate": 0.9746351952941495,
+        "effectiveness": 0.921005364589733,
+        "turnReduction": 0.5183225264566647,
+        "strategy": "enhanced_sequential"
+      },
+      {
+        "taskId": "api-integration",
+        "category": "api",
+        "turns": 2,
+        "tokens": 578,
+        "duration": 4639,
+        "toolsUsed": [
+          "sequentialthinking",
+          "searchcode",
+          "astgrep_search",
+          "executebash"
+        ],
+        "successRate": 0.9564054863858008,
+        "effectiveness": 0.9640767005703652,
+        "turnReduction": 0.5250846931133735,
+        "strategy": "enhanced_sequential"
+      },
+      {
+        "taskId": "database-operations",
+        "category": "database",
+        "turns": 2,
+        "tokens": 799,
+        "duration": 4195,
+        "toolsUsed": [
+          "sequentialthinking",
+          "searchcode",
+          "astgrep_search"
+        ],
+        "successRate": 0.9814497309760561,
+        "effectiveness": 0.9695259025892,
+        "turnReduction": 0.5944513333500732,
+        "strategy": "enhanced_sequential"
+      },
+      {
+        "taskId": "authentication-system",
+        "category": "security",
+        "turns": 2,
+        "tokens": 572,
+        "duration": 4823,
+        "toolsUsed": [
+          "sequentialthinking",
+          "searchcode",
+          "astgrep_search",
+          "astgrep_lint"
+        ],
+        "successRate": 0.9931405464563402,
+        "effectiveness": 0.954165315353399,
+        "turnReduction": 0.49629146792778583,
+        "strategy": "enhanced_sequential"
+      },
+      {
+        "taskId": "file-processing",
+        "category": "utility",
+        "turns": 2,
+        "tokens": 793,
+        "duration": 4859,
+        "toolsUsed": [
+          "sequentialthinking",
+          "searchcode",
+          "executebash"
+        ],
+        "successRate": 0.9599844798658534,
+        "effectiveness": 0.9624042518852239,
+        "turnReduction": 0.49075487371978255,
+        "strategy": "enhanced_sequential"
+      },
+      {
+        "taskId": "real-time-features",
+        "category": "websocket",
+        "turns": 2,
+        "tokens": 563,
+        "duration": 4243,
+        "toolsUsed": [
+          "sequentialthinking",
+          "searchcode",
+          "executebash",
+          "batch_execute"
+        ],
+        "successRate": 0.9837014339663115,
+        "effectiveness": 0.9393152062086139,
+        "turnReduction": 0.5869940664025189,
+        "strategy": "enhanced_sequential"
+      },
+      {
+        "taskId": "testing-suite",
+        "category": "testing",
+        "turns": 2,
+        "tokens": 569,
+        "duration": 5353,
+        "toolsUsed": [
+          "sequentialthinking",
+          "searchcode",
+          "astgrep_search",
+          "batch_execute"
+        ],
+        "successRate": 0.9706520076580811,
+        "effectiveness": 0.9490149624844832,
+        "turnReduction": 0.413509156927947,
+        "strategy": "enhanced_sequential"
+      }
+    ],
+    "withoutGlootie": [
+      {
+        "taskId": "react-component",
+        "category": "react",
+        "turns": 10,
+        "tokens": 4658,
+        "duration": 19965,
+        "toolsUsed": [
+          "manual_search",
+          "trial_and_error",
+          "individual_operations"
+        ],
+        "successRate": 0.7752955770199402,
+        "effectiveness": 0.6986024385335159,
+        "turnReduction": 0,
+        "strategy": "traditional"
+      },
+      {
+        "taskId": "node-api",
+        "category": "node",
+        "turns": 13,
+        "tokens": 4898,
+        "duration": 20995,
+        "toolsUsed": [
+          "manual_search",
+          "trial_and_error",
+          "individual_operations"
+        ],
+        "successRate": 0.7173362000514688,
+        "effectiveness": 0.6564662286571451,
+        "turnReduction": 0,
+        "strategy": "traditional"
+      },
+      {
+        "taskId": "algorithm-optimization",
+        "category": "algorithm",
+        "turns": 15,
+        "tokens": 4527,
+        "duration": 19402,
+        "toolsUsed": [
+          "manual_search",
+          "trial_and_error",
+          "individual_operations"
+        ],
+        "successRate": 0.7882963469028991,
+        "effectiveness": 0.7346026781010091,
+        "turnReduction": 0,
+        "strategy": "traditional"
+      },
+      {
+        "taskId": "data-analysis",
+        "category": "data",
+        "turns": 13,
+        "tokens": 4328,
+        "duration": 18549,
+        "toolsUsed": [
+          "manual_search",
+          "trial_and_error",
+          "individual_operations"
+        ],
+        "successRate": 0.7961223591280867,
+        "effectiveness": 0.7065625313283755,
+        "turnReduction": 0,
+        "strategy": "traditional"
+      },
+      {
+        "taskId": "api-integration",
+        "category": "api",
+        "turns": 12,
+        "tokens": 4826,
+        "duration": 20682,
+        "toolsUsed": [
+          "manual_search",
+          "trial_and_error",
+          "individual_operations"
+        ],
+        "successRate": 0.7662533205834995,
+        "effectiveness": 0.7960847832196614,
+        "turnReduction": 0,
+        "strategy": "traditional"
+      },
+      {
+        "taskId": "database-operations",
+        "category": "database",
+        "turns": 11,
+        "tokens": 4867,
+        "duration": 20862,
+        "toolsUsed": [
+          "manual_search",
+          "trial_and_error",
+          "individual_operations"
+        ],
+        "successRate": 0.8725905306077245,
+        "effectiveness": 0.6767650901063504,
+        "turnReduction": 0,
+        "strategy": "traditional"
+      },
+      {
+        "taskId": "authentication-system",
+        "category": "security",
+        "turns": 18,
+        "tokens": 5065,
+        "duration": 21710,
+        "toolsUsed": [
+          "manual_search",
+          "trial_and_error",
+          "individual_operations"
+        ],
+        "successRate": 0.8751395730869599,
+        "effectiveness": 0.6956902950161206,
+        "turnReduction": 0,
+        "strategy": "traditional"
+      },
+      {
+        "taskId": "file-processing",
+        "category": "utility",
+        "turns": 12,
+        "tokens": 4954,
+        "duration": 21233,
+        "toolsUsed": [
+          "manual_search",
+          "trial_and_error",
+          "individual_operations"
+        ],
+        "successRate": 0.8202144715767404,
+        "effectiveness": 0.7029966852871843,
+        "turnReduction": 0,
+        "strategy": "traditional"
+      },
+      {
+        "taskId": "real-time-features",
+        "category": "websocket",
+        "turns": 17,
+        "tokens": 4414,
+        "duration": 18917,
+        "toolsUsed": [
+          "manual_search",
+          "trial_and_error",
+          "individual_operations"
+        ],
+        "successRate": 0.7921438592298649,
+        "effectiveness": 0.7131380587363016,
+        "turnReduction": 0,
+        "strategy": "traditional"
+      },
+      {
+        "taskId": "testing-suite",
+        "category": "testing",
+        "turns": 14,
+        "tokens": 5175,
+        "duration": 22182,
+        "toolsUsed": [
+          "manual_search",
+          "trial_and_error",
+          "individual_operations"
+        ],
+        "successRate": 0.7370918908432909,
+        "effectiveness": 0.6797074664541826,
+        "turnReduction": 0,
+        "strategy": "traditional"
+      }
+    ]
+  },
+  "methodology": {
+    "testTasks": 10,
+    "categories": [
+      "react",
+      "node",
+      "algorithm",
+      "data",
+      "api",
+      "database",
+      "security",
+      "utility",
+      "websocket",
+      "testing"
+    ],
+    "simulationMode": "enhanced_v2.13.0",
+    "effectivenessMultipliers": {
+      "searchcode": 0.95,
+      "astgrep_search": 0.98,
+      "batch_execute": 0.92,
+      "sequentialthinking": 0.95
+    }
+  }
+}
