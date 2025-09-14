@@ -358,7 +358,7 @@ function calculateCosineSimilarity(vecA, vecB) {
 }
 
 // Search with enhanced natural language support
-export async function searchCode(query, workingDirectory, folders = ['.'], extensions = DEFAULT_EXTS, topK = 8) {
+export async function searchCode(query, workingDirectory, folders = ['.'], extensions = DEFAULT_EXTS, topK = 6) {
   try {
     // Validate working directory
     if (!existsSync(workingDirectory)) {
@@ -387,6 +387,6 @@ export async function searchCode(query, workingDirectory, folders = ['.'], exten
 }
 
 export async function searchSemantic(query, options = {}) {
-  const { workingDirectory, folders = ['.'], extensions = DEFAULT_EXTS, topK = 8 } = options;
+  const { workingDirectory, folders = ['.'], extensions = DEFAULT_EXTS, topK = 6 } = options;
   return await searchCode(query, workingDirectory, folders, extensions, topK);
 }

@@ -4,7 +4,7 @@
 import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, statSync, unlinkSync } from 'fs';
 import * as path from 'path';
 
-const MAX_TOKENS = 25000;
+const MAX_TOKENS = 20000;
 const CHARS_PER_TOKEN = 4;
 const TRUNCATION_BUFFER = 1000;
 const MIN_PARTIAL_CHARS = 100;
