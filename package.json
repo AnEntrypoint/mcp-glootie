@@ -1,6 +1,6 @@
 {
   "name": "mcp-glootie",
-  "version": "2.12.0",
+  "version": "2.13.0",
   "description": "MCP Glootie - World-class code editing assistant with forceful tool descriptions that compel usage, 60-80% turn reduction, and surgical precision insights. 18 MCP tools with WFGY framework optimization and enhanced behavioral performance.",
   "main": "src/direct-executor-server.js",
   "type": "module",

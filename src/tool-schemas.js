@@ -77,7 +77,7 @@ export function createSearchSchema(additionalProps = {}) {
       },
       topK: {
         type: "number",
-        description: "Result count (default: 8)"
+        description: "Result count (default: 6)"
       },
       ...additionalProps
     },
