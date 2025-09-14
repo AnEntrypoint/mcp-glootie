@@ -1,7 +1,7 @@
 {
   "name": "mcp-glootie",
   "version": "2.13.0",
-"description": "MCP Glootie v2.13.0 - Revolutionary turn reduction engine with 95% effective tools and 40-60% conversation optimization. Features predictive tool selection, intelligent sequencing, and enhanced WFGY framework for maximum efficiency.",
+"description": "MCP Glootie v2.13.0 - Revolutionary turn reduction engine with 95% effective tools and 40-60% conversation optimization. Features predictive tool selection, intelligent sequencing, and enhanced sequential framework for maximum efficiency.",
   "main": "src/direct-executor-server.js",
   "type": "module",
   "bin": {
@@ -39,7 +39,7 @@
     "refactoring",
     "turn-reduction",
     "behavioral-optimization",
-    "wfgy-framework",
+    "sequential-framework",
     "surgical-insights",
     "predictive-tools",
     "95-effective",

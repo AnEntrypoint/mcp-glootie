@@ -18,10 +18,10 @@ export class TurnReductionEngine {
       executebash: { current: 0.8, target: 0.88, improvement: 0.08 }
     };
 
-    this.wfgyEnhancement = {
-      whatFor: 'Define specific insight requirements and tool needs in single turn',
-      get: 'Combine tool execution with immediate analysis in single operation',
-      yield: 'Extract maximum insight while minimizing follow-up questions'
+    this.sequentialEnhancement = {
+      requirements: 'Define specific insight requirements and tool needs in single turn',
+      execution: 'Combine tool execution with immediate analysis in single operation',
+      results: 'Extract maximum insight while minimizing follow-up questions'
     };
   }
 
@@ -32,9 +32,9 @@ export class TurnReductionEngine {
     const baseTurns = 5; // Current baseline from simulation
     const optimizationStrategies = [];
 
-    // Strategy 1: Enhanced WFGY Framework (Target: 1 turn reduction)
-    const wfgyOptimization = await this.optimizeWFGYFramework(taskContext);
-    optimizationStrategies.push(wfgyOptimization);
+    // Strategy 1: Enhanced Sequential Framework (Target: 1 turn reduction)
+    const sequentialOptimization = await this.optimizeSequentialFramework(taskContext);
+    optimizationStrategies.push(sequentialOptimization);
 
     // Strategy 2: Predictive Tool Selection (Target: 1 turn reduction)
     const predictiveOptimization = await this.optimizePredictiveSelection(taskContext, availableTools);
@@ -59,12 +59,12 @@ export class TurnReductionEngine {
   }
 
   /**
-   * Enhanced WFGY Framework Optimization
+   * Enhanced Sequential Framework Optimization
    */
-  async optimizeWFGYFramework(taskContext) {
+  async optimizeSequentialFramework(taskContext) {
     const enhancements = [];
 
-    // What For enhancement - combine requirements with tool selection
+    // Requirements enhancement - combine requirements with tool selection
     enhancements.push({
       type: 'merged_requirements',
       description: 'Combine requirements analysis with tool selection in single turn',
@@ -72,7 +72,7 @@ export class TurnReductionEngine {
       implementation: 'Enhance sequentialthinking to include tool requirements in initial analysis'
     });
 
-    // Get enhancement - merge tool execution with analysis
+    // Execution enhancement - merge tool execution with analysis
     enhancements.push({
       type: 'merged_execution',
       description: 'Combine tool execution with immediate insight extraction',
@@ -80,16 +80,16 @@ export class TurnReductionEngine {
       implementation: 'Modify batch_execute to include analysis phase'
     });
 
-    // Yield enhancement - reduce follow-up questions
+    // Results enhancement - reduce follow-up questions
     enhancements.push({
-      type: 'enhanced_yield',
+      type: 'enhanced_results',
       description: 'Extract maximum insight to minimize follow-up questions',
       turnReduction: 0.2,
-      implementation: 'Add yield optimization to tool descriptions'
+      implementation: 'Add results optimization to tool descriptions'
     });
 
     return {
-      name: 'WFGY Framework Enhancement',
+      name: 'Sequential Framework Enhancement',
       turnReduction: 1.0, // Total reduction from this strategy
       enhancements
     };
@@ -214,7 +214,7 @@ export class TurnReductionEngine {
     const enhancedDescriptions = {
       sequentialthinking: {
         current: "Document analysis process with persistent storage",
-        enhanced: "TURN-OPTIMIZED SEQUENTIAL THINKING - MANDATORY FOR EFFICIENT ANALYSIS. Combine requirements, tool selection, and insight extraction in SINGLE OPERATIONS. Reduces conversation turns by 40-60% when used properly. WFGY framework: What For + Get + Yield in minimal turns.",
+        enhanced: "TURN-OPTIMIZED SEQUENTIAL THINKING - MANDATORY FOR EFFICIENT ANALYSIS. Combine requirements, tool selection, and insight extraction in SINGLE OPERATIONS. Reduces conversation turns by 40-60% when used properly."
         expectedImprovement: "5.6% effectiveness increase, 40-60% turn reduction"
       },
       searchcode: {
@@ -243,7 +243,7 @@ export class TurnReductionEngine {
   getToolOptimization(toolName) {
     const optimizations = {
       sequentialthinking: {
-        enhancement: "Add turn reduction guidance to WFGY framework",
+        enhancement: "Add turn reduction guidance to sequential framework",
         expectedTurnReduction: 0.5,
         implementation: "Modify description to emphasize single-operation analysis"
       },
