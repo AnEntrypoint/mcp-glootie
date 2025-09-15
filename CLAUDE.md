@@ -1,1 +1,2 @@
 - never kill the claude process by name, your own process is called claude
+- immediately split longer than 300-line files when you encounter them

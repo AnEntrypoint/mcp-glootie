@@ -21,8 +21,8 @@ export async function createMCPServer(workingDir) {
   // Load all modules upfront to avoid memory corruption during lazy loading
   const isARM64 = process.arch === 'arm64' || process.platform === 'linux' && process.arch === 'arm64';
   
-  // Use ARM64-compatible vector indexer
-  let vectorIndexer = await import('./arm64-vector-indexer.js');
+  // Use universal vector indexer
+  let vectorIndexer = await import('./universal-vector-indexer.js');
 
   const [astgrepUtils, astgrepAdvanced, astgrepHandlers, astgrepHandlersAdvanced] = await Promise.all([
     import('./astgrep-utils.js'),

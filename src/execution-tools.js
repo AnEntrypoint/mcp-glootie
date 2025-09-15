@@ -3,39 +3,45 @@
 
 import { createExecutionSchema, createToolDefinition } from './tool-schemas.js';
 
+// Consolidated execution tools - Reduced from 4 to 2 essential tools
 export const executionTools = [
   createToolDefinition(
-    "executenodejs",
-    "Execute JavaScript code with Node.js",
-    createExecutionSchema("Node.js")
-  ),
-
-  createToolDefinition(
-    "executedeno",
-    "Execute TypeScript/JavaScript with Deno",
-    createExecutionSchema("Deno")
-  ),
-
-  createToolDefinition(
-    "executebash",
-    "Execute bash commands",
+    "execute",
+    "Unified execution tool for Node.js, Deno, and Bash. Run JavaScript, TypeScript, or shell commands with intelligent runtime detection. Supports code analysis, batch operations, and overflow management.",
     {
       type: "object",
       properties: {
+        code: {
+          type: "string",
+          description: "JavaScript/TypeScript code to execute"
+        },
         commands: {
           type: ["string", "array"],
-          description: "Command(s) - single or array for batch execution"
+          description: "Bash commands (single or array for batch execution)"
+        },
+        runtime: {
+          type: "string",
+          enum: ["nodejs", "deno", "bash", "auto"],
+          description: "Execution runtime (default: auto-detect)"
         },
         workingDirectory: {
           type: "string",
-          description: "Working directory"
+          description: "Working directory for execution"
         },
         timeout: {
           type: "number",
-          description: "Timeout ms (default: 120000)"
+          description: "Timeout in milliseconds (default: 120000)"
+        },
+        handleOverflow: {
+          type: "boolean",
+          description: "Automatically handle large outputs with overflow files (default: true)"
         }
       },
-      required: ["commands"]
+      required: [],
+      anyOf: [
+        { required: ["code"] },
+        { required: ["commands"] }
+      ]
     }
   ),
 
@@ -47,7 +53,7 @@ export const executionTools = [
       properties: {
         overflowFile: {
           type: "string",
-          description: "Overflow filename (e.g., 'overflow_executenodejs_1234567890.json')"
+          description: "Overflow filename (e.g., 'overflow_execute_1234567890.json')"
         },
         workingDirectory: {
           type: "string",
