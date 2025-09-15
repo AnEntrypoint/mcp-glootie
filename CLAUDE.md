@@ -1,0 +1,1 @@
+- never kill the claude process by name, your own process is called claude
