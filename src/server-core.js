@@ -26,7 +26,7 @@ export async function createMCPServer(workingDir) {
 
   const [astgrepUtils, astgrepAdvanced, astgrepHandlers, astgrepHandlersAdvanced] = await Promise.all([
     import('./astgrep-utils.js'),
-    import('./astgrep-advanced.js'), 
+    import('./astgrep-advanced.js'),
     import('./astgrep-handlers.js'),
     import('./astgrep-handlers-advanced.js')
   ]);
@@ -44,11 +44,11 @@ export async function createMCPServer(workingDir) {
 
   // Create synchronous getter functions
   const getVectorIndexer = async () => vectorIndexer;
-  const getAstGrepUtils = async () => ({ 
-    astgrepUtils, astgrepAdvanced, astgrepHandlers, astgrepHandlersAdvanced 
+  const getAstGrepUtils = async () => ({
+    astgrepUtils, astgrepAdvanced, astgrepHandlers, astgrepHandlersAdvanced
   });
-  const getEnhancedAstGrepUtils = async () => ({ 
-    astgrepJsonFormats, astgrepProjectConfig, astgrepAdvancedSearch, astgrepTestValidation, astgrepEnhancedHandlers 
+  const getEnhancedAstGrepUtils = async () => ({
+    astgrepJsonFormats, astgrepProjectConfig, astgrepAdvancedSearch, astgrepTestValidation, astgrepEnhancedHandlers
   });
   const getBatchHandler = async () => batchHandler;
   const getBashHandler = async () => bashHandler;
