@@ -3,4 +3,5 @@ node_modules/
 .cursor/code_search_index/
 code_search_index/
 test-*/
+temp-*/
 ab-test*/
