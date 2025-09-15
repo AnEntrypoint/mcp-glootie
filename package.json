@@ -1,7 +1,7 @@
 {
   "name": "mcp-glootie",
-  "version": "3.1.1",
-  "description": "MCP Glootie v3.1.0 - Complete development toolkit with advanced search, AST analysis, batch execution, and sequential thinking. Restored full feature set with clean architecture and mature tool definitions.",
+  "version": "3.1.4",
+  "description": "MCP Glootie v3.1.4 - Optimized universal toolkit with consolidated tools, enhanced error handling, cross-platform compatibility, and intelligent caching. Reduced from 19 to 12 essential tools with improved reliability and performance.",
   "main": "src/direct-executor-server.js",
   "type": "module",
   "bin": {

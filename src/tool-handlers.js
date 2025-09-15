@@ -63,7 +63,7 @@ export async function handleDenoExecution(args, defaultWorkingDir) {
  */
 export async function handleBashExecution(args, defaultWorkingDir) {
   const startTime = Date.now();
-  
+
   const paramError = validateRequiredParams(args, ['commands'], startTime);
   if (paramError) return convertToMCPFormat(paramError, 'executebash');
 
@@ -80,6 +80,58 @@ export async function handleBashExecution(args, defaultWorkingDir) {
 
   const mcpResponse = convertToMCPFormat(result, 'executebash');
   return applyTruncation(mcpResponse, dirValidation.effectiveDir, 'executebash');
+}
+
+/**
+ * Handle unified execution (Node.js, Deno, Bash) with runtime detection
+ */
+export async function handleExecute(args, defaultWorkingDir) {
+  const startTime = Date.now();
+
+  // Validate either code or commands is provided
+  if (!args.code && !args.commands) {
+    const errorResponse = createErrorResponse('Either code or commands must be provided', startTime);
+    return convertToMCPFormat(errorResponse, 'execute');
+  }
+
+  const dirValidation = validateWorkingDirectory(args.workingDirectory, defaultWorkingDir);
+  if (!dirValidation.valid) {
+    const errorResponse = createErrorResponse(dirValidation.error, startTime);
+    return convertToMCPFormat(errorResponse, 'execute');
+  }
+
+  const options = {
+    workingDirectory: dirValidation.effectiveDir,
+    timeout: args.timeout || 120000,
+    handleOverflow: args.handleOverflow !== false
+  };
+
+  let result;
+  let toolType;
+
+  if (args.code) {
+    // Handle code execution
+    const runtime = args.runtime || 'auto';
+
+    if (runtime === 'nodejs' || (runtime === 'auto' && (args.code.includes('node:') || args.code.includes('require(')))) {
+      result = await executeNodeCode(args.code, options);
+      toolType = 'executenodejs';
+    } else if (runtime === 'deno' || (runtime === 'auto' && args.code.includes('Deno.'))) {
+      result = await executeDenoCode(args.code, options);
+      toolType = 'executedeno';
+    } else {
+      // Default to Node.js for code
+      result = await executeNodeCode(args.code, options);
+      toolType = 'executenodejs';
+    }
+  } else {
+    // Handle command execution
+    result = await executeBashCommands(args.commands, options);
+    toolType = 'executebash';
+  }
+
+  const mcpResponse = convertToMCPFormat(result, 'execute');
+  return applyTruncation(mcpResponse, dirValidation.effectiveDir, 'execute');
 }
 
 /**
@@ -111,6 +163,7 @@ export function createToolHandlers(defaultWorkingDir, getVectorIndexer, getAstGr
     executenodejs: (args) => handleNodeExecution(args, defaultWorkingDir),
     executedeno: (args) => handleDenoExecution(args, defaultWorkingDir),
     executebash: (args) => handleBashExecution(args, defaultWorkingDir),
+    execute: (args) => handleExecute(args, defaultWorkingDir),
     
     // AST tools - delegate to existing handlers
     astgrep_search: async (args) => {
@@ -173,10 +226,10 @@ export function createToolHandlers(defaultWorkingDir, getVectorIndexer, getAstGr
     // Overflow content retrieval
     retrieve_overflow: (args) => handleRetrieveOverflow(args, defaultWorkingDir),
 
-    // Batch execution
+    // Batch execution - Enhanced with natural language support
     batch_execute: async (args) => {
-      const { handleBatchExecute } = await getBatchHandler();
-      return handleBatchExecute(args, defaultWorkingDir, () => createToolHandlers(defaultWorkingDir, getVectorIndexer, getAstGrepUtils, getEnhancedUtils, getBatchHandler, getBashHandler));
+      const { handleEnhancedBatchExecute } = await import('./enhanced-batch-handler.js');
+      return handleEnhancedBatchExecute(args, defaultWorkingDir, () => createToolHandlers(defaultWorkingDir, getVectorIndexer, getAstGrepUtils, getEnhancedUtils, getBatchHandler, getBashHandler));
     }
   };
 
