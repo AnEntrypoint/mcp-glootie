@@ -33,13 +33,23 @@ export async function executeProcess(command, args = [], options = {}) {
     // Collect output
     if (child.stdout) {
       child.stdout.on('data', (data) => {
-        stdout += data.toString(encoding);
+        if (data && typeof data === 'object' && Buffer.isBuffer(data)) {
+          stdout += data.toString(encoding);
+        } else if (data && typeof data === 'string') {
+          stdout += data;
+        }
+        // Ignore null/undefined data
       });
     }
 
     if (child.stderr) {
       child.stderr.on('data', (data) => {
-        stderr += data.toString(encoding);
+        if (data && typeof data === 'object' && Buffer.isBuffer(data)) {
+          stderr += data.toString(encoding);
+        } else if (data && typeof data === 'string') {
+          stderr += data;
+        }
+        // Ignore null/undefined data
       });
     }
 
