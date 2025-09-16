@@ -2,17 +2,17 @@
   "name": "mcp-glootie",
   "version": "3.1.5",
   "description": "MCP Glootie v3.1.4 - Optimized universal toolkit with consolidated tools, enhanced error handling, cross-platform compatibility, and intelligent caching. Reduced from 19 to 12 essential tools with improved reliability and performance.",
-  "main": "src/direct-executor-server.js",
+  "main": "src/index.js",
   "type": "module",
   "bin": {
-    "mcp-glootie": "src/direct-executor-server.js"
+    "mcp-glootie": "src/index.js"
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "start": "node src/direct-executor-server.js",
-    "dev": "node src/direct-executor-server.js ./test"
+    "start": "node src/index.js",
+    "dev": "node src/index.js ./test"
   },
   "dependencies": {
     "@ast-grep/napi": "^0.39.5",
