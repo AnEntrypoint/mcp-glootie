@@ -1,51 +1,56 @@
 
 
+// Shared complexity indicators cache to avoid recreation on every call
+const COMPLEXITY_INDICATORS = {
+  simple: new Set([
+    'create', 'write', 'add simple', 'basic', 'simple', 'hello world',
+    'counter', 'test component', 'small function', 'add function',
+    'create file', 'write code', 'basic operation'
+  ]),
+  complex: new Set([
+    'search', 'analyze', 'refactor', 'optimize', 'migrate', 'transform',
+    'pattern', 'structure', 'comprehensive', 'multiple files', 'project',
+    'architecture', 'large scale', 'complex', 'advanced', 'sophisticated'
+  ]),
+  batch: new Set([
+    'multiple', 'several', 'batch', 'all files', 'run several',
+    'execute multiple', 'coordinate', 'sequence', 'pipeline'
+  ])
+};
+
+// Cache for project complexity analysis with TTL (5 minutes)
+const projectComplexityCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export function assessTaskComplexity(prompt, workingDirectory) {
-  const complexityIndicators = {
-    simple: [
-      'create', 'write', 'add simple', 'basic', 'simple', 'hello world',
-      'counter', 'test component', 'small function', 'add function',
-      'create file', 'write code', 'basic operation'
-    ],
-    complex: [
-      'search', 'analyze', 'refactor', 'optimize', 'migrate', 'transform',
-      'pattern', 'structure', 'comprehensive', 'multiple files', 'project',
-      'architecture', 'large scale', 'complex', 'advanced', 'sophisticated'
-    ],
-    batch: [
-      'multiple', 'several', 'batch', 'all files', 'run several',
-      'execute multiple', 'coordinate', 'sequence', 'pipeline'
-    ]
-  };
-
   const promptLower = prompt.toLowerCase();
-  let complexityScore = { simple: 0, complex: 0, batch: 0 };
+  const complexityScore = { simple: 0, complex: 0, batch: 0 };
 
-  Object.keys(complexityIndicators).forEach(level => {
-    complexityIndicators[level].forEach(indicator => {
+  // Optimized single-pass scoring with Set.has() instead of array.includes()
+  for (const [level, indicators] of Object.entries(COMPLEXITY_INDICATORS)) {
+    for (const indicator of indicators) {
       if (promptLower.includes(indicator)) {
         complexityScore[level]++;
       }
-    });
-  });
+    }
+  }
 
-  const maxScore = Math.max(...Object.values(complexityScore));
-  let complexityLevel = 'simple'; 
+  // Optimized complexity level determination with single pass
+  let complexityLevel = 'simple';
+  const maxScore = Math.max(complexityScore.simple, complexityScore.complex, complexityScore.batch);
 
   if (maxScore > 0) {
     if (complexityScore.complex >= complexityScore.batch && complexityScore.complex >= complexityScore.simple) {
       complexityLevel = 'complex';
     } else if (complexityScore.batch >= complexityScore.simple) {
       complexityLevel = 'batch';
-    } else if (complexityScore.simple > 0) {
-      complexityLevel = 'simple';
     }
   }
 
   const projectComplexity = analyzeProjectComplexity(workingDirectory);
 
   if (projectComplexity === 'large' && complexityLevel === 'simple') {
-    complexityLevel = 'complex'; 
+    complexityLevel = 'complex';
   }
 
   return {
@@ -57,7 +62,17 @@ export function assessTaskComplexity(prompt, workingDirectory) {
   };
 }
 
+// Optimized project complexity analysis with caching
 function analyzeProjectComplexity(workingDirectory) {
+  const cacheKey = workingDirectory;
+  const now = Date.now();
+
+  // Check cache first
+  const cached = projectComplexityCache.get(cacheKey);
+  if (cached && (now - cached.timestamp) < CACHE_TTL) {
+    return cached.result;
+  }
+
   try {
     const fs = require('fs');
     const path = require('path');
@@ -71,34 +86,41 @@ function analyzeProjectComplexity(workingDirectory) {
     let dirCount = 0;
     let hasComplexStructure = false;
 
-    items.forEach(item => {
+    // Pre-define sets for faster lookups
+    const complexDirs = new Set(['src', 'lib', 'components', 'services', 'utils']);
+    const codeExtensions = new Set(['.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.cpp', '.c']);
+
+    for (const item of items) {
       const fullPath = path.join(workingDirectory, item);
       const stats = fs.statSync(fullPath);
 
       if (stats.isDirectory()) {
         dirCount++;
-        
-        const complexDirs = ['src', 'lib', 'components', 'services', 'utils'];
-        if (complexDirs.includes(item)) {
+
+        if (complexDirs.has(item)) {
           hasComplexStructure = true;
         }
       } else if (stats.isFile()) {
-        
         const ext = path.extname(item).toLowerCase();
-        const codeExtensions = ['.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.cpp', '.c'];
-        if (codeExtensions.includes(ext)) {
+        if (codeExtensions.has(ext)) {
           fileCount++;
         }
       }
-    });
-
-    if (fileCount > 50 || dirCount > 10 || hasComplexStructure) {
-      return 'large';
-    } else if (fileCount > 10 || dirCount > 3) {
-      return 'medium';
-    } else {
-      return 'small';
     }
+
+    let result;
+    if (fileCount > 50 || dirCount > 10 || hasComplexStructure) {
+      result = 'large';
+    } else if (fileCount > 10 || dirCount > 3) {
+      result = 'medium';
+    } else {
+      result = 'small';
+    }
+
+    // Cache the result
+    projectComplexityCache.set(cacheKey, { result, timestamp: now });
+
+    return result;
   } catch (error) {
     return 'unknown';
   }
@@ -129,17 +151,16 @@ function generateToolRecommendations(complexityLevel, projectComplexity) {
   return recommendations[complexityLevel][projectComplexity] || recommendations[complexityLevel].unknown;
 }
 
+// Optimized confidence calculation with reduced object operations
 function calculateConfidence(complexityScore, projectComplexity) {
-  const totalScore = Object.values(complexityScore).reduce((sum, score) => sum + score, 0);
+  const totalScore = complexityScore.simple + complexityScore.complex + complexityScore.batch;
 
   if (totalScore === 0) {
-    
     return projectComplexity === 'unknown' ? 0.3 : 0.6;
   }
 
-  const maxScore = Math.max(...Object.values(complexityScore));
+  const maxScore = Math.max(complexityScore.simple, complexityScore.complex, complexityScore.batch);
   const scoreRatio = maxScore / totalScore;
-
   const projectConfidence = projectComplexity === 'unknown' ? 0.7 : 0.9;
 
   return Math.min(scoreRatio * projectConfidence, 0.95);

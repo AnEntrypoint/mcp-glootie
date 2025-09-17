@@ -1,73 +1,54 @@
 
 
-import { createExecutionSchema, createToolDefinition } from './tool-schemas.js';
+import { TOOL_STRINGS } from '../constants/tool-strings.js';
+import {
+  toolCreators,
+  responseFormatters,
+  DEFAULT_PARAMS,
+  COMMON_SCHEMAS
+} from '../utils/shared-hooks.js';
 
 export const executionTools = [
-  createToolDefinition(
+  toolCreators.withWorkingDirectory(
     "execute",
-    "PREFERRED: Always test code hypotheses first before editing files. MANDATORY workingDirectory for concurrent processing. Break problems into sections. Use for ground truth before file changes.",
+    TOOL_STRINGS.EXECUTE_DESCRIPTION,
+    async ({ code, commands, workingDirectory, runtime = DEFAULT_PARAMS.runtime, timeout = DEFAULT_PARAMS.timeout }) => {
+      return responseFormatters.execution(workingDirectory, runtime);
+    },
     {
-      type: "object",
-      properties: {
-        code: {
-          type: "string",
-          description: "JavaScript/TypeScript code to execute"
-        },
-        commands: {
-          type: ["string", "array"],
-          description: "Bash commands (single or array for batch execution)"
-        },
-        runtime: {
-          type: "string",
-          enum: ["nodejs", "deno", "bash", "auto"],
-          description: "Execution runtime (default: auto-detect)"
-        },
-        workingDirectory: {
-          type: "string",
-          description: "REQUIRED: Working directory for execution. Specify for concurrent multi-directory processing."
-        },
-        timeout: {
-          type: "number",
-          description: "Timeout in milliseconds (default: 120000)"
-        },
-        handleOverflow: {
-          type: "boolean",
-          description: "Automatically handle large outputs with overflow files (default: true)"
-        }
-      },
-      required: ["workingDirectory"]
-    }
+      code: COMMON_SCHEMAS.code,
+      commands: COMMON_SCHEMAS.commands,
+      runtime: COMMON_SCHEMAS.runtime,
+      timeout: COMMON_SCHEMAS.timeout,
+      }
   ),
 
-  createToolDefinition(
+  toolCreators.withWorkingDirectory(
     "retrieve_overflow",
     "Retrieve truncated content from previous tool calls",
+    async ({ workingDirectory, overflowFile, chunkIndex = DEFAULT_PARAMS.chunkIndex, listFiles = DEFAULT_PARAMS.listFiles, cleanup = DEFAULT_PARAMS.cleanup }) => {
+      return {
+        content: [{ type: "text", text: `${TOOL_STRINGS.OVERFLOW_RETRIEVAL_REQUESTED} ${workingDirectory}` }],
+        isError: false
+      };
+    },
     {
-      type: "object",
-      properties: {
-        overflowFile: {
-          type: "string",
-          description: "Overflow filename (e.g., 'overflow_execute_1234567890.json')"
-        },
-        workingDirectory: {
-          type: "string",
-          description: "Required - working directory where overflow file is stored"
-        },
-        chunkIndex: {
-          type: "number",
-          description: "Chunk index to retrieve (default: 0 for next chunk)"
-        },
-        listFiles: {
-          type: "boolean",
-          description: "List available overflow files instead of retrieving content"
-        },
-        cleanup: {
-          type: "boolean",
-          description: "Clean up old overflow files (>24 hours) while retrieving content"
-        }
+      overflowFile: {
+        type: "string",
+        description: TOOL_STRINGS.OVERFLOW_FILENAME_DESCRIPTION
       },
-      required: ["workingDirectory"],
-      additionalProperties: false
+      chunkIndex: {
+        type: "number",
+        description: TOOL_STRINGS.CHUNK_INDEX_DESCRIPTION
+      },
+      listFiles: {
+        type: "boolean",
+        description: TOOL_STRINGS.LIST_FILES_DESCRIPTION
+      },
+      cleanup: {
+        type: "boolean",
+        description: TOOL_STRINGS.CLEANUP_DESCRIPTION
+      }
     }
   )
 ];

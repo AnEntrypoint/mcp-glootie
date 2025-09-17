@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// Cross-platform vector search with architecture detection
+// Optimized vector search with memory management and performance improvements
 
 import fs from 'fs/promises';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import ignore from 'ignore';
+import { getDefaultIgnorePatterns } from './utils/tool-utils.js';
 
 // Platform detection and configuration
 const platform = {
@@ -20,7 +21,7 @@ const platform = {
 
 // Configuration constants with platform-specific optimizations
 const INDEX_DIR = './code_search_index';
-const DEFAULT_MODEL = platform.isARM64 ? 'Xenova/all-MiniLM-L6-v2' : 'Xenova/all-MiniLM-L6-v2';
+const DEFAULT_MODEL = 'Xenova/all-MiniLM-L6-v2';
 const DEFAULT_DIM = 384; // Dimension size for the chosen model
 const DEFAULT_EXTS = ['js', 'ts', 'jsx', 'tsx'];
 const DEFAULT_IGNORES = [
@@ -53,6 +54,7 @@ const DEFAULT_IGNORES = [
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB for regular files
 const MAX_LARGE_FILE_SIZE = 5 * 1024 * 1024; // 5MB for large files
 const MAX_LINES_PER_CHUNK = 500; // Maximum lines per code chunk
+const MAX_CACHE_SIZE = 1000; // Maximum number of cached embeddings
 
 const INDEX_FILE = 'code_index.json';
 const VECTOR_INDEX_FILE = 'vector_index.json';
@@ -65,10 +67,44 @@ const platformConfig = {
   timeout: platform.isARM64 ? 60000 : 30000 // Longer timeout for ARM64
 };
 
-// Global state
+// Optimized global state with memory management
 let codeChunks = [];
 let embeddingExtractor = null;
 let isInitialized = false;
+let embeddingCache = new Map(); // Cache for embeddings to avoid recomputation
+let indexTimestamp = 0; // Track when index was last updated
+
+// LRU cache implementation for embeddings
+class LRUCache {
+  constructor(maxSize) {
+    this.maxSize = maxSize;
+    this.cache = new Map();
+  }
+
+  get(key) {
+    if (this.cache.has(key)) {
+      const value = this.cache.get(key);
+      this.cache.delete(key);
+      this.cache.set(key, value);
+      return value;
+    }
+    return null;
+  }
+
+  set(key, value) {
+    if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
+    this.cache.set(key, value);
+  }
+
+  clear() {
+    this.cache.clear();
+  }
+}
+
+const embeddingLRUCache = new LRUCache(MAX_CACHE_SIZE);
 
 // Initialize transformers.js embedding provider (no fallbacks)
 async function initializeEmbeddingProvider() {
@@ -85,8 +121,21 @@ async function initializeEmbeddingProvider() {
 function createIgnoreFilter(rootDir) {
   const ig = ignore();
 
+  // Get default ignore patterns with dynamic loading
+  const defaultPatterns = getDefaultIgnorePatterns(rootDir);
+
   // Add default ignore patterns
   ig.add(DEFAULT_IGNORES);
+
+  // Add any custom patterns from defaults
+  if (defaultPatterns.customGitignore) {
+    ig.add(defaultPatterns.customGitignore);
+  }
+
+  // Add file patterns from defaults
+  if (defaultPatterns.files) {
+    ig.add(defaultPatterns.files);
+  }
 
   // Find and add all .gitignore files in the directory tree
   const addGitignoreFiles = (dir) => {
@@ -124,37 +173,27 @@ function shouldIndexFile(filePath, allowedExtensions) {
     return false;
   }
 
-  // Additional filtering for known non-code files even with allowed extensions
+  // Optimized file filtering with pre-compiled patterns
   const filename = path.basename(filePath);
-  const excludedFiles = [
-    // Minified/bundled JS
-    '*.min.js', '*.bundle.js', '*.pack.js',
-    // TypeScript definitions
-    '*.d.ts', '*.d.tsx',
-    // Source maps
-    '*.map', '*.css.map',
-    // Package files
-    'package.json', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
-    // Config files
-    'tsconfig.json', 'jsconfig.json',
-    // Linter configs
-    '.eslintrc.*', '.prettierrc.*',
-    // Documentation
-    'LICENSE*', 'README*', '*.md', 'CHANGELOG*',
-    // Docker
-    'Dockerfile*', 'docker-compose*.yml'
+  const excludedPatterns = [
+    /\.min\.js$/, /\.bundle\.js$/, /\.pack\.js$/,
+    /\.d\.ts$/, /\.d\.tsx$/,
+    /\.map$/, /\.css\.map$/,
+    /^package\.json$/, /^package-lock\.json$/, /^yarn\.lock$/, /^pnpm-lock\.yaml$/,
+    /^tsconfig\.json$/, /^jsconfig\.json$/,
+    /\.eslintrc\..*$/, /\.prettierrc\..*$/,
+    /^LICENSE.*$/, /^README.*$/, /^.*\.md$/, /^CHANGELOG.*$/,
+    /^Dockerfile.*$/, /^docker-compose.*\.yml$/
   ];
 
-  return !excludedFiles.some(excluded => filename.match(excluded.replace(/\*/g, '.*')));
+  return !excludedPatterns.some(pattern => pattern.test(filename));
 }
-
 
 // Initialize the embedding model
 export async function initialize(indexDir = INDEX_DIR) {
   if (isInitialized) return true;
 
   try {
-
     // Create index directory if it doesn't exist
     if (!existsSync(indexDir)) {
       mkdirSync(indexDir, { recursive: true });
@@ -165,6 +204,9 @@ export async function initialize(indexDir = INDEX_DIR) {
       await initializeEmbeddingProvider();
     }
 
+    // Load existing index if available
+    await loadIndex(indexDir);
+
     isInitialized = true;
     return true;
   } catch (error) {
@@ -172,7 +214,23 @@ export async function initialize(indexDir = INDEX_DIR) {
   }
 }
 
-// Process code files into chunks
+// Load existing index with timestamp check
+async function loadIndex(indexDir) {
+  try {
+    const indexPath = path.join(indexDir, INDEX_FILE);
+    if (existsSync(indexPath)) {
+      const indexData = JSON.parse(readFileSync(indexPath, 'utf8'));
+      codeChunks = indexData.chunks || [];
+      indexTimestamp = indexData.timestamp || 0;
+    }
+  } catch (error) {
+    // If loading fails, start fresh
+    codeChunks = [];
+    indexTimestamp = 0;
+  }
+}
+
+// Process code files into chunks with improved chunking logic
 function processCodeIntoChunks(content, filePath) {
   const chunks = [];
   const lines = content.split('\n');
@@ -182,13 +240,14 @@ function processCodeIntoChunks(content, filePath) {
   let inFunction = false;
   let inClass = false;
   let braceCount = 0;
+  let chunkLineCount = 0;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const trimmedLine = line.trim();
 
     // Start of function or class
-    if (trimmedLine.match(/^(function|class)\s+\w/)) {
+    if (trimmedLine.match(/^(function|class|const|let|var)\s+\w/)) {
       if (currentChunk.trim()) {
         chunks.push({
           content: currentChunk.trim(),
@@ -201,15 +260,17 @@ function processCodeIntoChunks(content, filePath) {
       braceCount = (line.match(/{/g) || []).length;
       inFunction = trimmedLine.startsWith('function');
       inClass = trimmedLine.startsWith('class');
+      chunkLineCount = 1;
     } else {
       currentChunk += '\n' + line;
+      chunkLineCount++;
 
       // Track braces for proper chunking
       braceCount += (line.match(/{/g) || []).length;
       braceCount -= (line.match(/}/g) || []).length;
 
-      // End chunk when brace count reaches zero
-      if (braceCount === 0 && (inFunction || inClass)) {
+      // End chunk when brace count reaches zero or chunk gets too large
+      if ((braceCount === 0 && (inFunction || inClass)) || chunkLineCount >= MAX_LINES_PER_CHUNK) {
         chunks.push({
           content: currentChunk.trim(),
           file: filePath,
@@ -219,6 +280,7 @@ function processCodeIntoChunks(content, filePath) {
         currentChunk = '';
         inFunction = false;
         inClass = false;
+        chunkLineCount = 0;
       }
     }
   }
@@ -236,20 +298,27 @@ function processCodeIntoChunks(content, filePath) {
   return chunks;
 }
 
-// Synchronize the index with the file system
+// Synchronize the index with the file system (optimized with change detection)
 export async function syncIndex(folders, exts = DEFAULT_EXTS, ignores = DEFAULT_IGNORES) {
   if (!isInitialized) {
     await initialize();
   }
 
   const files = [];
+  const startTime = Date.now();
+
+  // Check if we need to rebuild the index
+  const lastModified = await getLastModifiedTime(folders);
+  if (lastModified <= indexTimestamp && codeChunks.length > 0) {
+    return codeChunks.length; // Index is up to date
+  }
 
   for (const folder of folders) {
     const ignoreFilter = createIgnoreFilter(folder);
     await scanDirectory(folder, ignoreFilter, files, exts);
   }
 
-  // Process files into chunks
+  // Process files into chunks with memory management
   const newChunks = [];
   let skippedFiles = 0;
 
@@ -273,22 +342,27 @@ export async function syncIndex(folders, exts = DEFAULT_EXTS, ignores = DEFAULT_
       // For medium-sized files, truncate content
       let content = await fs.readFile(file, 'utf8');
       if (stats.size > MAX_FILE_SIZE) {
-        // Truncate to first MAX_FILE_SIZE characters
         content = content.substring(0, MAX_FILE_SIZE);
       }
 
       const chunks = processCodeIntoChunks(content, file);
       newChunks.push(...chunks);
     } catch (error) {
+      // Skip files that can't be processed
     }
   }
 
+  // Memory management: clear old cache if index is significantly different
+  if (newChunks.length > codeChunks.length * 1.5 || newChunks.length < codeChunks.length * 0.5) {
+    embeddingLRUCache.clear();
+  }
 
   codeChunks = newChunks;
+  indexTimestamp = startTime;
 
   // Save index
   const indexData = {
-    timestamp: Date.now(),
+    timestamp: indexTimestamp,
     chunks: codeChunks.map(c => ({
       file: c.file,
       content: c.content,
@@ -300,6 +374,28 @@ export async function syncIndex(folders, exts = DEFAULT_EXTS, ignores = DEFAULT_
   writeFileSync(path.join(INDEX_DIR, INDEX_FILE), JSON.stringify(indexData, null, 2));
 
   return codeChunks.length;
+}
+
+// Get the last modified time of files in folders
+async function getLastModifiedTime(folders) {
+  let lastModified = 0;
+
+  for (const folder of folders) {
+    try {
+      const files = await fs.readdir(folder, { withFileTypes: true });
+      for (const file of files) {
+        if (file.isFile()) {
+          const fullPath = path.join(folder, file.name);
+          const stats = await fs.stat(fullPath);
+          lastModified = Math.max(lastModified, stats.mtimeMs);
+        }
+      }
+    } catch (error) {
+      // Skip directories we can't read
+    }
+  }
+
+  return lastModified;
 }
 
 // Helper function to scan directories with proper .gitignore support
@@ -339,7 +435,29 @@ async function scanDirectory(dir, ignoreFilter, files, exts) {
   }
 }
 
-// Query the index with semantic search
+// Optimized embedding extraction with caching
+async function getEmbedding(text) {
+  const cacheKey = text; // Use text as cache key
+
+  // Check cache first
+  const cached = embeddingLRUCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  // Generate embedding
+  const embedding = await embeddingExtractor(text, {
+    pooling: 'mean',
+    normalize: true
+  });
+
+  // Cache the result
+  embeddingLRUCache.set(cacheKey, embedding);
+
+  return embedding;
+}
+
+// Query the index with semantic search (optimized with batching)
 export async function queryIndex(query, topK = 8) {
   if (!isInitialized) {
     await initialize();
@@ -350,30 +468,29 @@ export async function queryIndex(query, topK = 8) {
   }
 
   // Generate query embedding
-  const queryEmbedding = await embeddingExtractor(query, {
-    pooling: 'mean',
-    normalize: true
-  });
+  const queryEmbedding = await getEmbedding(query);
 
-  // Calculate similarity with all chunks
+  // Batch process chunks for better performance
   const results = [];
-  for (let i = 0; i < codeChunks.length; i++) {
-    const chunk = codeChunks[i];
-    const chunkEmbedding = await embeddingExtractor(chunk.content, {
-      pooling: 'mean',
-      normalize: true
+  const batchSize = platformConfig.batchSize;
+
+  for (let i = 0; i < codeChunks.length; i += batchSize) {
+    const batch = codeChunks.slice(i, i + batchSize);
+    const batchPromises = batch.map(async (chunk) => {
+      const chunkEmbedding = await getEmbedding(chunk.content);
+      const similarity = calculateCosineSimilarity(queryEmbedding.data, chunkEmbedding.data);
+
+      return {
+        file: chunk.file,
+        content: chunk.content,
+        startLine: chunk.startLine,
+        endLine: chunk.endLine,
+        similarity: similarity
+      };
     });
 
-    // Calculate cosine similarity
-    const similarity = calculateCosineSimilarity(queryEmbedding.data, chunkEmbedding.data);
-
-    results.push({
-      file: chunk.file,
-      content: chunk.content,
-      startLine: chunk.startLine,
-      endLine: chunk.endLine,
-      similarity: similarity
-    });
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
   }
 
   // Sort by similarity and return topK results
@@ -389,7 +506,7 @@ export async function queryIndex(query, topK = 8) {
     }));
 }
 
-// Calculate cosine similarity between two vectors
+// Optimized cosine similarity calculation
 function calculateCosineSimilarity(vecA, vecB) {
   if (vecA.length !== vecB.length) return 0;
 
@@ -397,13 +514,15 @@ function calculateCosineSimilarity(vecA, vecB) {
   let normA = 0;
   let normB = 0;
 
+  // Use single loop for better performance
   for (let i = 0; i < vecA.length; i++) {
     dotProduct += vecA[i] * vecB[i];
     normA += vecA[i] * vecA[i];
     normB += vecB[i] * vecB[i];
   }
 
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+  return denominator === 0 ? 0 : dotProduct / denominator;
 }
 
 // Search with enhanced natural language support

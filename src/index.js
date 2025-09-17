@@ -4,13 +4,14 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { getAllTools } from './tools/tool-definitions.js';
+import { TOOL_STRINGS } from './constants/tool-strings.js';
 
 // Create and configure the server
 const server = new Server(
   {
-    name: "mcp-glootie",
-    version: "3.1.5",
-    description: "MCP Glootie - Universal development toolkit with execution, search, and analysis tools"
+    name: TOOL_STRINGS.SERVER_NAME,
+    version: TOOL_STRINGS.SERVER_VERSION,
+    description: TOOL_STRINGS.SERVER_DESCRIPTION
   },
   {
     capabilities: {
@@ -35,7 +36,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   const tool = tools.find(t => t.name === name);
   if (!tool) {
-    throw new Error(`Unknown tool: ${name}`);
+    throw new Error(`${TOOL_STRINGS.UNKNOWN_TOOL} ${name}`);
   }
 
   // Execute the tool
@@ -46,7 +47,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   } catch (error) {
     return {
-      content: [{ type: "text", text: `Error: ${error.message}` }],
+      content: [{ type: "text", text: `${TOOL_STRINGS.ERROR_PREFIX} ${error.message}` }],
       isError: true
     };
   }
@@ -56,13 +57,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("MCP Glootie server running on stdio");
+  console.error(TOOL_STRINGS.SERVER_RUNNING_MESSAGE);
 }
 
 // Auto-start when run directly
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(error => {
-    console.error("Server error:", error);
+    console.error(`${TOOL_STRINGS.SERVER_ERROR_MESSAGE} ${error}`);
     process.exit(1);
   });
 }
