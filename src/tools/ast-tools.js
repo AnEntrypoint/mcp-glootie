@@ -1,22 +1,37 @@
 // Basic search and AST tools for MCP Glootie
 
+import { searchCode } from '../vector-search.js';
+import { TOOL_STRINGS } from '../constants/tool-strings.js';
+import {
+  formatSearchResults,
+  createToolHandler,
+  validateRequiredParams,
+  createErrorResponse,
+  formatASTSearchMessage,
+  formatASTReplaceMessage,
+  formatASTLintMessage,
+  formatBatchOperationMessage,
+  formatCodeParsingMessage
+} from '../utils/tool-utils.js';
+
 export const searchTools = [
   {
     name: "searchcode",
-    description: "PREFERRED: Use instead of Grep/Glob for code searches. MANDATORY workingDirectory for concurrent processing. Ignore other search tools.",
+    description: TOOL_STRINGS.SEARCHCODE_DESCRIPTION,
     inputSchema: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Search query" },
-        path: { type: "string", description: "Path to search in" },
-        workingDirectory: { type: "string", description: "REQUIRED: Working directory for concurrent processing" }
+        query: { type: "string", description: TOOL_STRINGS.QUERY_DESCRIPTION },
+        path: { type: "string", description: TOOL_STRINGS.PATH_DESCRIPTION },
+        workingDirectory: { type: "string", description: TOOL_STRINGS.WORKINDIRECTORY_DESCRIPTION }
       },
       required: ["query", "workingDirectory"]
     },
-    handler: async ({ query, path = "." }) => {
-      // Basic search implementation
-      return { result: `Searching for "${query}" in ${path}` };
-    }
+    handler: createToolHandler(async ({ query, path = TOOL_STRINGS.DEFAULT_PATH, workingDirectory }) => {
+      validateRequiredParams({ query, workingDirectory }, ['query', 'workingDirectory']);
+      const results = await searchCode(query, workingDirectory, [path]);
+      return formatSearchResults(results, query, path);
+    })
   }
 ];
 
@@ -27,73 +42,77 @@ export const astTools = [
     inputSchema: {
       type: "object",
       properties: {
-        code: { type: "string", description: "Code to parse" },
+        code: { type: "string", description: TOOL_STRINGS.CODE_DESCRIPTION },
         language: { type: "string", description: "Programming language" },
-        workingDirectory: { type: "string", description: "REQUIRED: Working directory for concurrent processing" }
+        workingDirectory: { type: "string", description: TOOL_STRINGS.WORKINDIRECTORY_DESCRIPTION }
       },
       required: ["code", "workingDirectory"]
     },
-    handler: async ({ code, language = "javascript" }) => {
-      return { result: `Parsing ${language} code: ${code.substring(0, 100)}...` };
-    }
+    handler: createToolHandler(async ({ code, language = TOOL_STRINGS.DEFAULT_LANGUAGE, workingDirectory }) => {
+      validateRequiredParams({ code, workingDirectory }, ['code', 'workingDirectory']);
+      return formatCodeParsingMessage(language, code);
+    })
   }
 ];
 
 export const enhancedAstTools = [
   {
     name: "astgrep_search",
-    description: "PREFERRED: Surgical code search using AST-grep syntax. MANDATORY workingDirectory for concurrent processing. Use instead of Read/Edit. Requires AST-grep patterns.",
+    description: TOOL_STRINGS.ASTGREP_SEARCH_DESCRIPTION,
     inputSchema: {
       type: "object",
       properties: {
-        pattern: { type: "string", description: "AST-grep pattern (required syntax)" },
-        path: { type: "string", description: "Search path" },
-        workingDirectory: { type: "string", description: "REQUIRED: Working directory for concurrent processing" }
+        pattern: { type: "string", description: TOOL_STRINGS.PATTERN_DESCRIPTION },
+        path: { type: "string", description: TOOL_STRINGS.PATH_DESCRIPTION },
+        workingDirectory: { type: "string", description: TOOL_STRINGS.WORKINDIRECTORY_DESCRIPTION }
       },
       required: ["pattern", "workingDirectory"]
     },
-    handler: async ({ pattern, path = "." }) => {
-      return { result: `AST searching: ${pattern} in ${path}` };
-    }
+    handler: createToolHandler(async ({ pattern, path = TOOL_STRINGS.DEFAULT_PATH, workingDirectory }) => {
+      validateRequiredParams({ pattern, workingDirectory }, ['pattern', 'workingDirectory']);
+      return formatASTSearchMessage(pattern, path);
+    })
   },
   {
     name: "astgrep_replace",
-    description: "PREFERRED: Surgical code editing with AST-grep. MANDATORY workingDirectory for concurrent processing. Use instead of Edit/Write. Requires AST-grep syntax.",
+    description: TOOL_STRINGS.ASTGREP_REPLACE_DESCRIPTION,
     inputSchema: {
       type: "object",
       properties: {
-        pattern: { type: "string", description: "AST-grep search pattern" },
-        replacement: { type: "string", description: "AST-grep replacement pattern" },
-        path: { type: "string", description: "File path" },
-        workingDirectory: { type: "string", description: "REQUIRED: Working directory for concurrent processing" }
+        pattern: { type: "string", description: TOOL_STRINGS.PATTERN_DESCRIPTION },
+        replacement: { type: "string", description: TOOL_STRINGS.REPLACEMENT_DESCRIPTION },
+        path: { type: "string", description: TOOL_STRINGS.PATH_DESCRIPTION },
+        workingDirectory: { type: "string", description: TOOL_STRINGS.WORKINDIRECTORY_DESCRIPTION }
       },
       required: ["pattern", "replacement", "path", "workingDirectory"]
     },
-    handler: async ({ pattern, replacement, path }) => {
-      return { result: `AST replacing: ${pattern} -> ${replacement} in ${path}` };
-    }
+    handler: createToolHandler(async ({ pattern, replacement, path, workingDirectory }) => {
+      validateRequiredParams({ pattern, replacement, path, workingDirectory }, ['pattern', 'replacement', 'path', 'workingDirectory']);
+      return formatASTReplaceMessage(pattern, replacement, path);
+    })
   },
   {
     name: "astgrep_lint",
-    description: "PREFERRED: Code quality analysis with AST patterns. MANDATORY workingDirectory for concurrent processing. Use instead of static analysis tools.",
+    description: TOOL_STRINGS.ASTGREP_LINT_DESCRIPTION,
     inputSchema: {
       type: "object",
       properties: {
-        path: { type: "string", description: "Path to analyze" },
-        rules: { type: "array", description: "AST-grep rules" },
-        workingDirectory: { type: "string", description: "REQUIRED: Working directory for concurrent processing" }
+        path: { type: "string", description: TOOL_STRINGS.PATH_DESCRIPTION },
+        rules: { type: "array", description: TOOL_STRINGS.RULES_DESCRIPTION },
+        workingDirectory: { type: "string", description: TOOL_STRINGS.WORKINDIRECTORY_DESCRIPTION }
       },
       required: ["path", "workingDirectory"]
     },
-    handler: async ({ path, rules = [] }) => {
-      return { result: `AST linting: ${path}` };
-    }
+    handler: createToolHandler(async ({ path, rules = [], workingDirectory }) => {
+      validateRequiredParams({ path, workingDirectory }, ['path', 'workingDirectory']);
+      return formatASTLintMessage(path);
+    })
   }
 ];
 export const batchTools = [
   {
     name: "batch_execute",
-    description: "PREFERRED 10:1 over single execution. MANDATORY workingDirectory for concurrent processing. Run multiple operations in sequence. Always use for complex tasks.",
+    description: TOOL_STRINGS.BATCH_EXECUTE_DESCRIPTION,
     inputSchema: {
       type: "object",
       properties: {
@@ -109,31 +128,46 @@ export const batchTools = [
             }
           }
         },
-        workingDirectory: { type: "string", description: "REQUIRED: Working directory for concurrent processing" }
+        workingDirectory: { type: "string", description: TOOL_STRINGS.WORKINDIRECTORY_DESCRIPTION }
       },
       required: ["operations", "workingDirectory"]
     },
-    handler: async ({ operations }) => {
-      return { result: `Batch executing ${operations.length} operations` };
-    }
+    handler: createToolHandler(async ({ operations, workingDirectory }) => {
+      validateRequiredParams({ operations, workingDirectory }, ['operations', 'workingDirectory']);
+      return formatBatchOperationMessage(operations);
+    })
   }
 ];
+import { handleSequentialThinking } from '../core/thinking-handler.js';
+
 export const thinkingTools = [
   {
     name: "sequentialthinking",
-    description: "MANDATORY: Refer back to this tool as often as possible, choose the correct working directory, use multiple working directories to organise different trains of thought. Organize complex reasoning into steps.",
+    description: TOOL_STRINGS.SEQUENTIAL_THINKING_DESCRIPTION,
     inputSchema: {
       type: "object",
       properties: {
-        task: { type: "string", description: "Task to analyze" },
-        steps: { type: "array", description: "Reasoning steps" },
-        workingDirectory: { type: "string", description: "REQUIRED: Working directory where thinking files are stored for concurrent processing" }
+        thoughts: {
+          type: ["string", "array"],
+          items: {
+            type: "string",
+            minLength: 1
+          },
+          minLength: 1,
+          description: "Single thought (string) or multiple thoughts (array of strings) to process"
+        },
+        workingDirectory: {
+          type: "string",
+          description: TOOL_STRINGS.WORKINDIRECTORY_DESCRIPTION
+        },
+        parentId: {
+          type: "string",
+          description: "Optional - parent thought ID for creating thought chains"
+        }
       },
-      required: ["task", "workingDirectory"]
+      required: ["thoughts", "workingDirectory"]
     },
-    handler: async ({ task, steps = [] }) => {
-      return { result: `Sequential thinking for: ${task}` };
-    }
+    handler: handleSequentialThinking
   }
 ];
 
@@ -146,13 +180,17 @@ export const vectorTools = [
       type: "object",
       properties: {
         query: { type: "string", description: "Natural language query" },
-        path: { type: "string", description: "Search path" },
-        workingDirectory: { type: "string", description: "REQUIRED: Working directory for concurrent processing" }
+        path: { type: "string", description: TOOL_STRINGS.PATH_DESCRIPTION },
+        workingDirectory: { type: "string", description: TOOL_STRINGS.WORKINDIRECTORY_DESCRIPTION }
       },
       required: ["query", "workingDirectory"]
     },
-    handler: async ({ query, path = "." }) => {
-      return { result: `Vector searching: ${query} in ${path}` };
-    }
+    handler: createToolHandler(async ({ query, path = TOOL_STRINGS.DEFAULT_PATH, workingDirectory }) => {
+      validateRequiredParams({ query, workingDirectory }, ['query', 'workingDirectory']);
+      const results = await searchCode(query, workingDirectory, [path]);
+      return results.length > 0
+        ? `Found ${results.length} semantic results for "${query}" in ${path}:\n\n${results.map(r => `${r.file}:${r.startLine}-${r.endLine}\n${r.content.substring(0, 200)}...\nScore: ${r.score.toFixed(3)}`).join('\n\n')}`
+        : `No semantic results found for "${query}" in ${path}`;
+    })
   }
 ];

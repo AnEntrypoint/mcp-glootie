@@ -1,9 +1,2 @@
 node_modules/
 .env
-.cursor/code_search_index/
-code_search_index/
-test-*/
-temp-*/
-optimized-*/
-ab-test*/
-results/

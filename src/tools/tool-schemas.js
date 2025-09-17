@@ -89,10 +89,6 @@ export function createAstSchema(additionalProps = {}) {
   };
 }
 
-const WORKING_DIRECTORY_REQUIREMENT = `
-
-Results show: file_path:line_nums with matched text.`;
-
 export function createToolDefinition(name, description, inputSchema) {
-  return { name, description: description + WORKING_DIRECTORY_REQUIREMENT, inputSchema };
+  return { name, description, inputSchema };
 }
