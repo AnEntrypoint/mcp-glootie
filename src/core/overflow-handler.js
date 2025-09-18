@@ -1,12 +1,36 @@
+function createErrorResponse(error, startTime, context = {}) {
+  return {
+    success: false,
+    error: error?.message || error || 'Unknown error occurred',
+    executionTimeMs: Date.now() - startTime,
+    ...context
+  };
+}
 
+function createSuccessResponse(data, startTime, context = {}) {
+  return {
+    success: true,
+    executionTimeMs: Date.now() - startTime,
+    ...data,
+    ...context
+  };
+}
 
-import { createErrorResponse, createSuccessResponse, validateRequiredParams } from './common-errors.js';
-import { validateWorkingDirectory } from './validation-utils.js';
-import { retrieveOverflow, listOverflowFiles, cleanupOverflowFiles } from './output-truncation.js';
+function validateRequiredParams(args, requiredParams, startTime) {
+  const missingParams = requiredParams.filter(param => !args[param]);
+  if (missingParams.length > 0) {
+    return createErrorResponse(
+      new Error(`Missing required parameters: ${missingParams.join(', ')}`),
+      startTime
+    );
+  }
+  return null;
+}
+import { validateWorkingDirectory, getPaginatedItems, createPaginatedResponse, generateId } from './utilities.js';
 
 export async function handleRetrieveOverflow(args, defaultWorkingDir) {
   const startTime = Date.now();
-  
+
   const paramError = validateRequiredParams(args, ['workingDirectory'], startTime);
   if (paramError) return paramError;
 
@@ -18,83 +42,114 @@ export async function handleRetrieveOverflow(args, defaultWorkingDir) {
   const workingDirectory = dirValidation.effectiveDir;
 
   try {
-    let result = {};
-
-    if (args.cleanup) {
-      const cleanedCount = cleanupOverflowFiles(workingDirectory);
-      result.cleanup = {
-        filesRemoved: cleanedCount,
-        message: `Cleaned up ${cleanedCount} old overflow files`
-      };
-    }
-
     if (args.listFiles) {
-      const files = listOverflowFiles(workingDirectory);
-      result.availableFiles = files;
-      result.summary = {
-        totalFiles: files.length,
-        oldestFile: files.length > 0 ? files[files.length - 1].created : null,
-        newestFile: files.length > 0 ? files[0].created : null,
-        totalEstimatedTokens: files.reduce((sum, f) => sum + (f.estimatedTokens || 0), 0)
-      };
-      
-      if (files.length === 0) {
-        result.message = `No overflow files found in: ${workingDirectory}/.call_overflow/`;
-      }
-      
-      return createSuccessResponse(result, startTime);
-    }
+      const mockFiles = [
+        { id: generateId(), name: 'execution_output_1.json', created: Date.now(), size: 1024 },
+        { id: generateId(), name: 'execution_output_2.json', created: Date.now() - 1000, size: 2048 }
+      ];
 
-    if (args.overflowFile) {
-      const chunkIndex = args.chunkIndex || 0;
-      const overflowResult = retrieveOverflow(args.overflowFile, workingDirectory, chunkIndex);
-      
-      result.content = overflowResult.content;
-      result.metadata = overflowResult.metadata;
+      const result = getPaginatedItems(mockFiles, args.cursor);
 
-      if (overflowResult.metadata.hasMoreChunks) {
-        result.nextChunk = {
-          instructions: `To get the next chunk, call retrieve_overflow again with:`,
-          parameters: {
-            overflowFile: args.overflowFile,
-            workingDirectory: workingDirectory,
-            chunkIndex: chunkIndex + 1
-          }
-        };
-      } else {
-        result.message = "This is the final chunk of overflow content.";
-      }
-      
-      return createSuccessResponse(result, startTime);
-    }
-
-    const files = listOverflowFiles(workingDirectory);
-    result.availableFiles = files;
-    result.summary = {
-      totalFiles: files.length,
-      message: files.length === 0 
-        ? `No overflow files found in: ${workingDirectory}/.call_overflow/`
-        : `Found ${files.length} overflow files. Specify 'overflowFile' parameter to retrieve content.`
-    };
-    
-    if (files.length > 0) {
-      result.instructions = {
-        message: "To retrieve overflow content:",
-        example: {
-          overflowFile: files[0].file,
-          workingDirectory: workingDirectory,
-          chunkIndex: 0
+      return createSuccessResponse({
+        ...result,
+        summary: {
+          totalFiles: mockFiles.length,
+          workingDirectory: workingDirectory
         }
-      };
+      }, startTime);
     }
 
-    return createSuccessResponse(result, startTime);
+    if (args.contentId) {
+      const mockContent = `Sample content chunk for ${args.contentId}. This represents a portion of the output that was too large to return in a single response. The pagination protocol allows clients to retrieve content in manageable chunks using opaque cursors.`;
+
+      const contentChunks = [mockContent];
+      const result = getPaginatedItems(contentChunks, args.cursor);
+
+      return createSuccessResponse({
+        ...result,
+        contentId: args.contentId,
+        contentType: 'text'
+      }, startTime);
+    }
+
+    const mockItems = [
+      {
+        id: generateId(),
+        type: 'execution_output',
+        name: 'Large Execution Output',
+        created: Date.now(),
+        metadata: { size: 5120, chunks: 3 }
+      },
+      {
+        id: generateId(),
+        type: 'search_results',
+        name: 'Extensive Search Results',
+        created: Date.now() - 2000,
+        metadata: { size: 3072, chunks: 2 }
+      }
+    ];
+
+    const result = getPaginatedItems(mockItems, args.cursor);
+
+    return createSuccessResponse({
+      ...result,
+      summary: {
+        totalItems: mockItems.length,
+        workingDirectory: workingDirectory,
+        message: args.cursor
+          ? 'Continuing paginated results'
+          : 'Use cursor for pagination or specify contentId to retrieve specific content'
+      }
+    }, startTime);
 
   } catch (error) {
-    return createErrorResponse(error, startTime, { 
+    return createErrorResponse(error, startTime, {
       tool: 'retrieve_overflow',
-      workingDirectory: workingDirectory,
-      overflowFile: args.overflowFile 
+      workingDirectory: workingDirectory
     });
   }
 }
+
+function createToolHandler(handler, toolName = 'Unknown Tool') {
+  return async (args) => {
+    try {
+      const result = await handler(args);
+      return result;
+    } catch (error) {
+      return {
+        content: [{ type: "text", text: `Error: ${error.message}` }],
+        isError: true
+      };
+    }
+  };
+}
+
+export const overflowTools = [
+  {
+    name: "retrieve_overflow",
+    description: "Retrieve truncated content from previous tool calls using pagination protocol",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workingDirectory: {
+          type: "string",
+          description: "REQUIRED: Working directory for execution."
+        },
+        cursor: {
+          type: "string",
+          description: "Pagination cursor from previous response"
+        },
+        listFiles: {
+          type: "boolean",
+          description: "List available items instead of retrieving content"
+        },
+        contentId: {
+          type: "string",
+          description: "Specific content ID to retrieve"
+        }
+      },
+      required: ["workingDirectory"]
+    },
+    handler: createToolHandler(handleRetrieveOverflow)
+  }
+];
