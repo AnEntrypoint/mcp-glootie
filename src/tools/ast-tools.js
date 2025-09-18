@@ -93,7 +93,7 @@ export const astTools = [
 export const enhancedAstTools = [
   {
     name: "astgrep_search",
-    TOOL_STRINGS.ASTGREP_SEARCH_DESCRIPTION,
+    description: TOOL_STRINGS.ASTGREP_SEARCH_DESCRIPTION,
     inputSchema: {
       type: "object",
       properties: {
@@ -110,7 +110,7 @@ export const enhancedAstTools = [
   },
   {
     name: "astgrep_replace",
-    TOOL_STRINGS.ASTGREP_REPLACE_DESCRIPTION,
+    description: TOOL_STRINGS.ASTGREP_REPLACE_DESCRIPTION,
     inputSchema: {
       type: "object",
       properties: {
@@ -200,7 +200,7 @@ export const enhancedAstTools = [
 export const batchTools = [
   {
     name: "batch_execute",
-    TOOL_STRINGS.BATCH_EXECUTE_DESCRIPTION,
+    description: TOOL_STRINGS.BATCH_EXECUTE_DESCRIPTION,
     inputSchema: {
       type: "object",
       properties: {

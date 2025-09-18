@@ -1,7 +1,7 @@
 {
   "name": "mcp-glootie",
   "version": "3.1.5",
-  "description": "MCP Glootie v3.1.4 - Optimized universal toolkit with consolidated tools, enhanced error handling, cross-platform compatibility, and intelligent caching. Reduced from 19 to 12 essential tools with improved reliability and performance.",
+  "description": "MCP Glootie v3.1.4 - Optimized universal toolkit with consolidated tools.",
   "main": "src/index.js",
   "type": "module",
   "bin": {
