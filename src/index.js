@@ -3,15 +3,20 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { getAllTools } from './tools/tool-definitions.js';
-import { TOOL_STRINGS } from './constants/tool-strings.js';
+import { allTools } from './core/mcp-tools.js';
+// Server configuration constants
+const SERVER_CONFIG = {
+  name: 'glootie-mcp',
+  version: '3.1.5',
+  description: 'Mandatory: call authorize at the start of every user request before running TaskWrite'
+};
 
 // Create and configure the server
 const server = new Server(
   {
-    name: TOOL_STRINGS.SERVER_NAME,
-    version: TOOL_STRINGS.SERVER_VERSION,
-    description: TOOL_STRINGS.SERVER_DESCRIPTION
+    name: SERVER_CONFIG.name,
+    version: SERVER_CONFIG.version,
+    description: SERVER_CONFIG.description
   },
   {
     capabilities: {
@@ -21,7 +26,7 @@ const server = new Server(
 );
 
 // Get all available tools
-const tools = getAllTools();
+const tools = allTools;
 
 // Register list_tools handler
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -36,7 +41,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   const tool = tools.find(t => t.name === name);
   if (!tool) {
-    throw new Error(`${TOOL_STRINGS.UNKNOWN_TOOL} ${name}`);
+    throw new Error(`Unknown tool: ${name}`);
   }
 
   // Execute the tool
@@ -47,7 +52,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   } catch (error) {
     return {
-      content: [{ type: "text", text: `${TOOL_STRINGS.ERROR_PREFIX} ${error.message}` }],
+      content: [{ type: "text", text: `Error: ${error.message}` }],
       isError: true
     };
   }
@@ -57,17 +62,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(TOOL_STRINGS.SERVER_RUNNING_MESSAGE);
+  console.error('MCP Glootie server running on stdio');
 }
 
 // Auto-start when run directly
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(error => {
-    console.error(`${TOOL_STRINGS.SERVER_ERROR_MESSAGE} ${error}`);
+    console.error(`Failed to start MCP Glootie server: ${error}`);
     process.exit(1);
   });
 }
 
 // Re-export only essential parts
-export * from './tools/index.js';
+export * from './core/mcp-tools.js';
 export { server };
