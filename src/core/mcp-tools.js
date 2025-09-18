@@ -3,7 +3,7 @@ import { overflowTools } from './overflow-handler.js';
 import { searchTools } from './unified-vector.js';
 import { astTools, advancedAstTools } from './ast-tools.js';
 import { batchTools } from './utilities.js';
-import { thinkingTools } from './thinking-handler.js';
+import { authorizationTools } from './authorization.js';
 
 export const allTools = [
   ...executionTools,
@@ -12,5 +12,5 @@ export const allTools = [
   ...astTools,
   ...advancedAstTools,
   ...batchTools,
-  ...thinkingTools
+  ...authorizationTools
 ];
