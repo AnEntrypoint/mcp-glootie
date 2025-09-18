@@ -1,5 +1,5 @@
 import { TOOL_STRINGS } from '../constants/tool-strings.js';
-import { ValidationError, withErrorHandling } from './error-handling.js';
+import { ValidationError, withErrorHandling, createAdvancedToolHandler, ToolErrorHandler } from './error-handling.js';
 
 export function createToolResponse(content, isError = false) {
   return {
@@ -155,7 +155,7 @@ export async function safeExecute(operation, errorMessage = "Operation failed") 
   }
 }
 
-export function createToolHandler(handler, toolName = 'Unknown Tool') {
+export function createToolHandler(handler, toolName = 'Unknown Tool', options = {}) {
   return withErrorHandling(
     async (args) => {
       const result = await handler(args);
@@ -163,4 +163,26 @@ export function createToolHandler(handler, toolName = 'Unknown Tool') {
     },
     toolName
   );
+}
+
+// Enhanced tool handler with timeout and retry capabilities
+export function createAdvancedToolHandlerUtil(handler, toolName = 'Unknown Tool', options = {}) {
+  return createAdvancedToolHandler(handler, toolName, options);
+}
+
+// Tool handler with automatic timeout for long operations
+export function createTimeoutToolHandler(handler, toolName = 'Unknown Tool', timeoutMs = 30000) {
+  return createAdvancedToolHandler(handler, toolName, {
+    timeout: timeoutMs,
+    enableTimeout: true
+  });
+}
+
+// Tool handler with automatic retry for retryable operations
+export function createRetryToolHandler(handler, toolName = 'Unknown Tool', retries = 3) {
+  return createAdvancedToolHandler(handler, toolName, {
+    retries,
+    enableRetry: true,
+    retryDelay: 1000
+  });
 }

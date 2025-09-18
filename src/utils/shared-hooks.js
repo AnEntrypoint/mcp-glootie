@@ -4,12 +4,15 @@
 import { TOOL_STRINGS } from '../constants/tool-strings.js';
 import {
   createToolHandler,
+  createAdvancedToolHandlerUtil,
+  createTimeoutToolHandler,
+  createRetryToolHandler,
   validateRequiredParams,
   createToolResponse,
   createErrorResponse,
   createSuccessResponse
 } from './tool-utils.js';
-import { withErrorHandling, ValidationError, ExecutionError, SearchError } from './error-handling.js';
+import { withErrorHandling, ValidationError, ExecutionError, SearchError, ToolErrorHandler } from './error-handling.js';
 
 /**
  * Common validation schemas for tool parameters
@@ -178,6 +181,55 @@ export const toolCreators = {
         required: ["query", "workingDirectory", ...additionalRequired]
       },
       createEnhancedToolHandler(handler, name, ["query", "workingDirectory", ...additionalRequired])
+    );
+  },
+
+  // Enhanced tool creators with timeout and retry capabilities
+  withTimeout: (name, description, handler, additionalProperties = {}, timeoutMs = 30000) => {
+    return createToolConfig(
+      name,
+      description,
+      {
+        type: "object",
+        properties: {
+          workingDirectory: COMMON_SCHEMAS.workingDirectory,
+          ...additionalProperties
+        },
+        required: ["workingDirectory"]
+      },
+      createTimeoutToolHandler(handler, name, timeoutMs)
+    );
+  },
+
+  withRetry: (name, description, handler, additionalProperties = {}, retries = 3) => {
+    return createToolConfig(
+      name,
+      description,
+      {
+        type: "object",
+        properties: {
+          workingDirectory: COMMON_SCHEMAS.workingDirectory,
+          ...additionalProperties
+        },
+        required: ["workingDirectory"]
+      },
+      createRetryToolHandler(handler, name, retries)
+    );
+  },
+
+  withAdvanced: (name, description, handler, additionalProperties = {}, options = {}) => {
+    return createToolConfig(
+      name,
+      description,
+      {
+        type: "object",
+        properties: {
+          workingDirectory: COMMON_SCHEMAS.workingDirectory,
+          ...additionalProperties
+        },
+        required: ["workingDirectory"]
+      },
+      createAdvancedToolHandlerUtil(handler, name, options)
     );
   }
 };
