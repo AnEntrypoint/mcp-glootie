@@ -609,10 +609,7 @@ export function createTimeoutToolHandler(handler, toolName = 'Unknown Tool', tim
 }
 
 async function executeBatchOperation(operation, workingDirectory) {
-  console.log('DEBUG: executeBatchOperation called with type:', operation.type);
-  console.log('DEBUG: __dirname:', __dirname);
   try {
-    console.log('DEBUG: About to enter switch statement');
     switch (operation.type) {
       case 'execute': {
         const { code, runtime = 'auto', timeout = 120000, commands } = operation;
@@ -621,19 +618,22 @@ async function executeBatchOperation(operation, workingDirectory) {
 
         if (runtime === 'bash' || (commands && (runtime === 'auto' || !code))) {
           if (typeof executorModule.executeBashCommand === 'function') {
-            return await executorModule.executeBashCommand(commands || code, { workingDirectory, timeout });
+            const result = await executorModule.executeBashCommand(commands || code, { workingDirectory, timeout });
+            return { success: true, result, operationType: 'execute' };
           } else {
             throw new Error('executeBashCommand function not available in unified-executor module');
           }
         } else if (runtime === 'nodejs' || runtime === 'auto') {
           if (typeof executorModule.executeNodeCode === 'function') {
-            return await executorModule.executeNodeCode(code, { workingDirectory, timeout });
+            const result = await executorModule.executeNodeCode(code, { workingDirectory, timeout });
+            return { success: true, result, operationType: 'execute' };
           } else {
             throw new Error('executeNodeCode function not available in unified-executor module');
           }
         } else if (runtime === 'deno') {
           if (typeof executorModule.executeDenoCode === 'function') {
-            return await executorModule.executeDenoCode(code, { workingDirectory, timeout });
+            const result = await executorModule.executeDenoCode(code, { workingDirectory, timeout });
+            return { success: true, result, operationType: 'execute' };
           } else {
             throw new Error('executeDenoCode function not available in unified-executor module');
           }
@@ -646,7 +646,8 @@ async function executeBatchOperation(operation, workingDirectory) {
         // Import and call searchCode function
         const vectorModule = await import('./unified-vector.js');
         if (typeof vectorModule.searchCode === 'function') {
-          return await vectorModule.searchCode(query, workingDirectory, [searchPath]);
+          const result = await vectorModule.searchCode(query, workingDirectory, [searchPath]);
+          return { success: true, result, operationType: 'searchcode' };
         } else {
           throw new Error('searchCode function not available in unified-vector module');
         }
@@ -675,7 +676,8 @@ async function executeBatchOperation(operation, workingDirectory) {
         }
 
         if (typeof astToolsModule.parseAST === 'function') {
-          return await astToolsModule.parseAST(codeToParse, language, workingDirectory, filePath);
+          const result = await astToolsModule.parseAST(codeToParse, language, workingDirectory, filePath);
+          return { success: true, result, operationType: 'parse_ast' };
         } else {
           throw new Error('parseAST function not available in ast-tools module');
         }
@@ -685,24 +687,21 @@ async function executeBatchOperation(operation, workingDirectory) {
         const { pattern: searchPattern, grepPath: searchGrepPath = '.' } = operation;
         // Import and call astgrepSearch function
         const astToolsModule = await import('./ast-tools.js');
-        console.log('DEBUG: astToolsModule keys:', Object.keys(astToolsModule));
-        console.log('DEBUG: astgrepSearch type:', typeof astToolsModule.astgrepSearch);
         if (typeof astToolsModule.astgrepSearch === 'function') {
           const result = await astToolsModule.astgrepSearch(searchPattern, searchGrepPath, workingDirectory);
-          console.log('DEBUG: astgrepSearch call successful');
-          return result;
+          return { success: true, result, operationType: 'astgrep_search' };
         } else {
-          console.log('DEBUG: astgrepSearch not a function, available functions:', Object.keys(astToolsModule).filter(k => typeof astToolsModule[k] === 'function'));
           throw new Error('astgrepSearch function not available in ast-tools module');
         }
       }
 
       case 'astgrep_replace': {
-        const { pattern: replacePattern, replacement, grepPath: replaceGrepPath = '.' } = operation;
+        const { pattern: replacePattern, replacement, grepPath: replaceGrepPath = '.', backup = true } = operation;
         // Import and call astgrepReplace function
         const astToolsModule = await import('./ast-tools.js');
         if (typeof astToolsModule.astgrepReplace === 'function') {
-          return await astToolsModule.astgrepReplace(replacePattern, replacement, replaceGrepPath, workingDirectory);
+          const result = await astToolsModule.astgrepReplace(replacePattern, replacement, replaceGrepPath, workingDirectory, backup);
+          return { success: true, result, operationType: 'astgrep_replace' };
         } else {
           throw new Error('astgrepReplace function not available in ast-tools module');
         }
@@ -713,7 +712,8 @@ async function executeBatchOperation(operation, workingDirectory) {
         // Import and call astgrepLint function
         const astToolsModule = await import('./ast-tools.js');
         if (typeof astToolsModule.astgrepLint === 'function') {
-          return await astToolsModule.astgrepLint(lintPath, lintRules, workingDirectory);
+          const result = await astToolsModule.astgrepLint(lintPath, lintRules, workingDirectory);
+          return { success: true, result, operationType: 'astgrep_lint' };
         } else {
           throw new Error('astgrepLint function not available in ast-tools module');
         }
@@ -724,7 +724,8 @@ async function executeBatchOperation(operation, workingDirectory) {
         // Import and call handleRetrieveOverflow function
         const overflowModule = await import('./overflow-handler.js');
         if (typeof overflowModule.handleRetrieveOverflow === 'function') {
-          return await overflowModule.handleRetrieveOverflow({ workingDirectory, contentId, cursor, listFiles });
+          const result = await overflowModule.handleRetrieveOverflow({ workingDirectory, contentId, cursor, listFiles });
+          return { success: true, result, operationType: 'retrieve_overflow' };
         } else {
           throw new Error('handleRetrieveOverflow function not available in overflow-handler module');
         }
@@ -873,9 +874,13 @@ export const batchTools = [
       const results = [];
 
       for (const operation of operations) {
+        const opStartTime = Date.now();
         try {
           const result = await executeBatchOperation(operation, dirValidation.effectiveDir);
-          results.push(result);
+          results.push({
+            ...result,
+            executionTimeMs: Date.now() - opStartTime
+          });
         } catch (error) {
           // Classify the error and get recovery suggestions
           const errorInfo = classifyError(error, operation.type);
@@ -887,7 +892,7 @@ export const batchTools = [
             errorType: errorInfo.type,
             recoverySuggestions: recovery.alternatives,
             operationType: operation.type,
-            executionTimeMs: Date.now() - startTime
+            executionTimeMs: Date.now() - opStartTime
           });
         }
       }
