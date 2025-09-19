@@ -1,5 +1,10 @@
 import * as path from 'node:path';
 import { existsSync, statSync } from 'fs';
+import { fileURLToPath } from 'node:url';
+
+// Get current directory for absolute imports
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function createErrorResponse(error, startTime, context = {}) {
   return {
@@ -93,6 +98,187 @@ export function createToolResponse(content, isError = false) {
 
 export function createErrorResponseUtil(message) {
   return createToolResponse(`Error: ${message}`, true);
+}
+
+// Error types classification
+const ErrorTypes = {
+  PERMISSION_DENIED: 'permission_denied',
+  UNSUPPORTED_OPERATION: 'unsupported_operation',
+  VALIDATION_ERROR: 'validation_error',
+  FILE_NOT_FOUND: 'file_not_found',
+  TIMEOUT: 'timeout',
+  SYNTAX_ERROR: 'syntax_error',
+  NETWORK_ERROR: 'network_error',
+  UNKNOWN: 'unknown'
+};
+
+// Tool error classification
+function classifyError(error, operationType = null) {
+  const message = error?.message || error || '';
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes('permission') || lowerMessage.includes('unauthorized') || lowerMessage.includes('access denied')) {
+    return { type: ErrorTypes.PERMISSION_DENIED, originalError: error };
+  }
+
+  if (lowerMessage.includes('unsupported') || lowerMessage.includes('not supported') ||
+      (operationType && lowerMessage.includes(operationType) && lowerMessage.includes('not found'))) {
+    return { type: ErrorTypes.UNSUPPORTED_OPERATION, originalError: error };
+  }
+
+  if (lowerMessage.includes('validation') || lowerMessage.includes('required') || lowerMessage.includes('missing')) {
+    return { type: ErrorTypes.VALIDATION_ERROR, originalError: error };
+  }
+
+  if (lowerMessage.includes('file not found') || lowerMessage.includes('no such file') || lowerMessage.includes('ENOENT')) {
+    return { type: ErrorTypes.FILE_NOT_FOUND, originalError: error };
+  }
+
+  if (lowerMessage.includes('timeout') || lowerMessage.includes('timed out')) {
+    return { type: ErrorTypes.TIMEOUT, originalError: error };
+  }
+
+  if (lowerMessage.includes('syntax') || lowerMessage.includes('parse error')) {
+    return { type: ErrorTypes.SYNTAX_ERROR, originalError: error };
+  }
+
+  if (lowerMessage.includes('network') || lowerMessage.includes('connection') || lowerMessage.includes('fetch')) {
+    return { type: ErrorTypes.NETWORK_ERROR, originalError: error };
+  }
+
+  return { type: ErrorTypes.UNKNOWN, originalError: error };
+}
+
+// Alternative tool suggestions
+function getAlternativeTools(operationType) {
+  const alternatives = {
+    'execute': ['Try splitting into smaller code chunks', 'Use bash runtime instead of nodejs', 'Check syntax before execution'],
+    'searchcode': ['Use grep or Glob for simple searches', 'Try more specific search terms', 'Search in specific directories'],
+    'parse_ast': ['Check code syntax first', 'Ensure file exists and is readable', 'Try with smaller code samples'],
+    'astgrep_search': ['Use simpler search patterns', 'Try string-based search first', 'Check AST pattern syntax'],
+    'astgrep_replace': ['Verify pattern matches first with astgrep_search', 'Test replacement on small sample', 'Check file permissions'],
+    'astgrep_lint': ['Run individual checks instead of batch', 'Check ignore patterns', 'Verify working directory'],
+    'retrieve_overflow': ['Try without pagination cursor', 'List available files first', 'Check content ID format'],
+    'batch_execute': ['Execute operations individually', 'Reduce batch size', 'Check operation types are supported']
+  };
+
+  return alternatives[operationType] || ['Try standard tools instead', 'Break down into smaller tasks', 'Check tool documentation'];
+}
+
+// Recovery action suggestions
+function getRecoveryAction(errorInfo, operationType = null) {
+  const { type, originalError } = errorInfo;
+
+  switch (type) {
+    case ErrorTypes.PERMISSION_DENIED:
+      return {
+        action: 'fallback_to_standard',
+        message: 'Permission denied. Consider using standard tools or checking access rights.',
+        alternatives: ['Use standard Read/Edit/Grep tools', 'Check file permissions', 'Run with elevated privileges if needed']
+      };
+
+    case ErrorTypes.UNSUPPORTED_OPERATION:
+      return {
+        action: 'suggest_alternative',
+        message: `Operation '${operationType}' is not supported in this context.`,
+        alternatives: getAlternativeTools(operationType)
+      };
+
+    case ErrorTypes.VALIDATION_ERROR:
+      return {
+        action: 'fix_parameters',
+        message: 'Invalid parameters provided.',
+        alternatives: ['Check required parameters', 'Verify parameter formats', 'Review tool documentation']
+      };
+
+    case ErrorTypes.FILE_NOT_FOUND:
+      return {
+        action: 'check_path',
+        message: 'File or directory not found.',
+        alternatives: ['Verify file paths exist', 'Check working directory', 'Use absolute paths']
+      };
+
+    case ErrorTypes.TIMEOUT:
+      return {
+        action: 'retry_or_optimize',
+        message: 'Operation timed out.',
+        alternatives: ['Increase timeout value', 'Optimize operation complexity', 'Break into smaller operations']
+      };
+
+    case ErrorTypes.SYNTAX_ERROR:
+      return {
+        action: 'fix_syntax',
+        message: 'Syntax error in code or patterns.',
+        alternatives: ['Validate code syntax', 'Check AST pattern syntax', 'Use simpler expressions']
+      };
+
+    case ErrorTypes.NETWORK_ERROR:
+      return {
+        action: 'retry_or_offline',
+        message: 'Network or connection error.',
+        alternatives: ['Check internet connection', 'Retry operation', 'Use offline alternatives if available']
+      };
+
+    default:
+      return {
+        action: 'general_troubleshooting',
+        message: 'An unexpected error occurred.',
+        alternatives: ['Check tool documentation', 'Try alternative approach', 'Break down into simpler steps']
+      };
+  }
+}
+
+// Enhanced error response with recovery suggestions
+export function createEnhancedErrorResponse(error, operationType = null, context = {}) {
+  const errorInfo = classifyError(error, operationType);
+  const recovery = getRecoveryAction(errorInfo, operationType);
+
+  const errorMessage = error?.message || error || 'Unknown error';
+
+  let responseText = `❌ Error: ${errorMessage}\n\n`;
+  responseText += `🔍 Error Type: ${errorInfo.type}\n`;
+  responseText += `💡 Recovery Suggestion: ${recovery.message}\n\n`;
+  responseText += `🛠️  Suggested Actions:\n`;
+  recovery.alternatives.forEach((alt, index) => {
+    responseText += `${index + 1}. ${alt}\n`;
+  });
+
+  if (context.operation) {
+    responseText += `\n📝 Operation: ${context.operation}\n`;
+  }
+  if (context.workingDirectory) {
+    responseText += `📁 Working Directory: ${context.workingDirectory}\n`;
+  }
+
+  return createToolResponse(responseText, true);
+}
+
+// Wrap tool handlers with enhanced error recovery
+export function createRecoveryToolHandler(handler, toolName, timeoutMs = 30000) {
+  return async (args) => {
+    const startTime = Date.now();
+
+    try {
+      const result = await handler(args);
+      return result;
+    } catch (error) {
+      console.error(`[Error Recovery] Tool '${toolName}' failed:`, error.message);
+
+      // Extract operation type from args if available
+      const operationType = args?.type || args?.operation || toolName;
+
+      // Create enhanced error response with recovery suggestions
+      return createEnhancedErrorResponse(
+        error,
+        operationType,
+        {
+          operation: operationType,
+          workingDirectory: args?.workingDirectory,
+          executionTimeMs: Date.now() - startTime
+        }
+      );
+    }
+  };
 }
 
 export function createSuccessResponseUtil(data) {
@@ -423,27 +609,119 @@ export function createTimeoutToolHandler(handler, toolName = 'Unknown Tool', tim
 }
 
 async function executeBatchOperation(operation, workingDirectory) {
-  if (operation.type === 'execute') {
-    const { code, runtime = 'auto', timeout = 120000 } = operation;
+  console.log('DEBUG: executeBatchOperation called with type:', operation.type);
+  console.log('DEBUG: __dirname:', __dirname);
+  try {
+    console.log('DEBUG: About to enter switch statement');
+    switch (operation.type) {
+      case 'execute': {
+        const { code, runtime = 'auto', timeout = 120000, commands } = operation;
+        // Import and call execution functions
+        const executorModule = await import('./unified-executor.js');
 
-    if (runtime === 'nodejs' || runtime === 'auto') {
-      const { executeNodeCode } = await import('./unified-executor.js');
-      return await executeNodeCode(code, { workingDirectory, timeout });
-    } else if (runtime === 'deno') {
-      const { executeDenoCode } = await import('./unified-executor.js');
-      return await executeDenoCode(code, { workingDirectory, timeout });
+        if (runtime === 'bash' || (commands && (runtime === 'auto' || !code))) {
+          if (typeof executorModule.executeBashCommand === 'function') {
+            return await executorModule.executeBashCommand(commands || code, { workingDirectory, timeout });
+          } else {
+            throw new Error('executeBashCommand function not available in unified-executor module');
+          }
+        } else if (runtime === 'nodejs' || runtime === 'auto') {
+          if (typeof executorModule.executeNodeCode === 'function') {
+            return await executorModule.executeNodeCode(code, { workingDirectory, timeout });
+          } else {
+            throw new Error('executeNodeCode function not available in unified-executor module');
+          }
+        } else if (runtime === 'deno') {
+          if (typeof executorModule.executeDenoCode === 'function') {
+            return await executorModule.executeDenoCode(code, { workingDirectory, timeout });
+          } else {
+            throw new Error('executeDenoCode function not available in unified-executor module');
+          }
+        }
+        break;
+      }
+
+      case 'searchcode': {
+        const { query, searchPath = '.' } = operation;
+        // Import and call searchCode function
+        const vectorModule = await import('./unified-vector.js');
+        if (typeof vectorModule.searchCode === 'function') {
+          return await vectorModule.searchCode(query, workingDirectory, [searchPath]);
+        } else {
+          throw new Error('searchCode function not available in unified-vector module');
+        }
+      }
+
+      case 'parse_ast': {
+        const { filePath, language = 'javascript', code: astCode } = operation;
+        // Import and call parseAST function
+        const astToolsModule = await import('./ast-tools.js');
+        if (typeof astToolsModule.parseAST === 'function') {
+          return await astToolsModule.parseAST(astCode, language, workingDirectory, filePath);
+        } else {
+          throw new Error('parseAST function not available in ast-tools module');
+        }
+      }
+
+      case 'astgrep_search': {
+        const { pattern: searchPattern, grepPath: searchGrepPath = '.' } = operation;
+        // Import and call astgrepSearch function
+        const astToolsModule = await import('./ast-tools.js');
+        console.log('DEBUG: astToolsModule keys:', Object.keys(astToolsModule));
+        console.log('DEBUG: astgrepSearch type:', typeof astToolsModule.astgrepSearch);
+        if (typeof astToolsModule.astgrepSearch === 'function') {
+          const result = await astToolsModule.astgrepSearch(searchPattern, searchGrepPath, workingDirectory);
+          console.log('DEBUG: astgrepSearch call successful');
+          return result;
+        } else {
+          console.log('DEBUG: astgrepSearch not a function, available functions:', Object.keys(astToolsModule).filter(k => typeof astToolsModule[k] === 'function'));
+          throw new Error('astgrepSearch function not available in ast-tools module');
+        }
+      }
+
+      case 'astgrep_replace': {
+        const { pattern: replacePattern, replacement, grepPath: replaceGrepPath = '.' } = operation;
+        // Import and call astgrepReplace function
+        const astToolsModule = await import('./ast-tools.js');
+        if (typeof astToolsModule.astgrepReplace === 'function') {
+          return await astToolsModule.astgrepReplace(replacePattern, replacement, replaceGrepPath, workingDirectory);
+        } else {
+          throw new Error('astgrepReplace function not available in ast-tools module');
+        }
+      }
+
+      case 'astgrep_lint': {
+        const { path: lintPath, rules: lintRules } = operation;
+        // Import and call astgrepLint function
+        const astToolsModule = await import('./ast-tools.js');
+        if (typeof astToolsModule.astgrepLint === 'function') {
+          return await astToolsModule.astgrepLint(lintPath, lintRules, workingDirectory);
+        } else {
+          throw new Error('astgrepLint function not available in ast-tools module');
+        }
+      }
+
+      case 'retrieve_overflow': {
+        const { contentId, cursor, listFiles } = operation;
+        // Import and call handleRetrieveOverflow function
+        const overflowModule = await import('./overflow-handler.js');
+        if (typeof overflowModule.handleRetrieveOverflow === 'function') {
+          return await overflowModule.handleRetrieveOverflow({ workingDirectory, contentId, cursor, listFiles });
+        } else {
+          throw new Error('handleRetrieveOverflow function not available in overflow-handler module');
+        }
+      }
+
+      default:
+        throw new Error(`Unsupported operation type: ${operation.type}`);
     }
-  } else if (operation.type === 'search') {
-    const { query, path = '.', searchType = 'semantic' } = operation;
-    const { searchCode } = await import('./unified-vector.js');
-    return await searchCode(query, workingDirectory, [path]);
-  } else if (operation.type === 'edit') {
-    const { code, path } = operation;
-    const { astgrepReplace } = await import('./ast-tools.js');
-    return await astgrepReplace(code, path, workingDirectory);
+  } catch (error) {
+    // Enhance error with operation-specific context
+    const enhancedError = new Error(`Operation '${operation.type}' failed: ${error.message}`);
+    enhancedError.originalError = error;
+    enhancedError.operationType = operation.type;
+    throw enhancedError;
   }
-
-  throw new Error(`Unsupported operation type: ${operation.type}`);
 }
 
 function formatBatchResults(results) {
@@ -459,7 +737,12 @@ function formatBatchResults(results) {
     results: results.map((result, index) => ({
       index,
       success: result.success,
-      result: result.success ? result : { error: result.error },
+      result: result.success ? result : {
+        error: result.error,
+        errorType: result.errorType,
+        recoverySuggestions: result.recoverySuggestions,
+        operationType: result.operationType
+      },
       executionTimeMs: result.executionTimeMs
     }))
   };
@@ -468,7 +751,10 @@ function formatBatchResults(results) {
 export const batchTools = [
   {
     name: "batch_execute",
-    description: "Prefer 10:1 over single execution when multiple calls are being done",
+    description: "Execute multiple glootie tools in a single batch operation. Supports: execute, searchcode, parse_ast, astgrep_search, astgrep_replace, astgrep_lint, retrieve_overflow. Use this 10:1 over single tool calls when possible.",
+    supported_operations: ["all glootie tools"],
+    unsupported_operations: ["all non glootie tools"],
+    use_cases: ["Multiple file operations", "Batch processing", "Multiple tasks are already planned and ready"],
     inputSchema: {
       type: "object",
       properties: {
@@ -483,30 +769,79 @@ export const batchTools = [
             properties: {
               type: {
                 type: "string",
-                enum: ["execute", "search", "edit"]
+                enum: ["execute", "searchcode", "parse_ast", "astgrep_search", "astgrep_replace", "astgrep_lint", "retrieve_overflow"]
               },
+              // For execute operations
               code: {
-                type: "string"
-              },
-              path: {
-                type: "string"
-              },
-              query: {
-                type: "string"
+                type: "string",
+                description: "JavaScript/TypeScript code to execute (for execute type)"
               },
               runtime: {
                 type: "string",
-                enum: ["nodejs", "deno", "bash", "auto"]
+                enum: ["nodejs", "deno", "bash", "auto"],
+                description: "Runtime for code execution (for execute type)"
+              },
+              commands: {
+                type: "string",
+                description: "Bash commands to execute (for execute type with bash runtime)"
+              },
+              timeout: {
+                type: "number",
+                description: "Timeout in milliseconds (for execute type)"
+              },
+              // For searchcode operations
+              query: {
+                type: "string",
+                description: "Search query (for searchcode type)"
+              },
+              searchPath: {
+                type: "string",
+                description: "Path to search within (for searchcode type, defaults to working directory)"
+              },
+              // For parse_ast operations
+              filePath: {
+                type: "string",
+                description: "File path to parse (for parse_ast type)"
+              },
+              language: {
+                type: "string",
+                description: "Programming language (for parse_ast type)"
+              },
+              // For astgrep operations
+              pattern: {
+                type: "string",
+                description: "AST-grep pattern (for astgrep_search, astgrep_replace, astgrep_lint types)"
+              },
+              replacement: {
+                type: "string",
+                description: "Replacement pattern (for astgrep_replace type)"
+              },
+              grepPath: {
+                type: "string",
+                description: "Path to search/replace in (for astgrep operations)"
+              },
+              // For retrieve_overflow operations
+              contentId: {
+                type: "string",
+                description: "Content ID to retrieve (for retrieve_overflow type)"
+              },
+              cursor: {
+                type: "string",
+                description: "Pagination cursor (for retrieve_overflow type)"
+              },
+              listFiles: {
+                type: "boolean",
+                description: "List available items (for retrieve_overflow type)"
               }
             },
             required: ["type"]
           },
-          description: "Array of operations to execute"
+          description: "Array of glootie tool operations to execute"
         }
       },
       required: ["workingDirectory", "operations"]
     },
-    handler: createTimeoutToolHandler(async ({ operations, workingDirectory }) => {
+    handler: createRecoveryToolHandler(async ({ operations, workingDirectory }) => {
       const startTime = Date.now();
 
       const paramError = validateRequiredParams({ operations, workingDirectory }, ['operations', 'workingDirectory'], startTime);
@@ -524,9 +859,16 @@ export const batchTools = [
           const result = await executeBatchOperation(operation, dirValidation.effectiveDir);
           results.push(result);
         } catch (error) {
+          // Classify the error and get recovery suggestions
+          const errorInfo = classifyError(error, operation.type);
+          const recovery = getRecoveryAction(errorInfo, operation.type);
+
           results.push({
             success: false,
             error: error.message,
+            errorType: errorInfo.type,
+            recoverySuggestions: recovery.alternatives,
+            operationType: operation.type,
             executionTimeMs: Date.now() - startTime
           });
         }
@@ -536,3 +878,6 @@ export const batchTools = [
     }, 'batch_execute', 300000)
   }
 ];
+
+// Export executeBatchOperation for direct use
+export { executeBatchOperation };
