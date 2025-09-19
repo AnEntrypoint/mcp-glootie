@@ -656,8 +656,26 @@ async function executeBatchOperation(operation, workingDirectory) {
         const { filePath, language = 'javascript', code: astCode } = operation;
         // Import and call parseAST function
         const astToolsModule = await import('./ast-tools.js');
+
+        // If filePath is provided but no code, read the file first
+        let codeToParse = astCode;
+        if (filePath && !astCode) {
+          try {
+            const fs = await import('fs');
+            const path = await import('path');
+            const fullPath = path.resolve(workingDirectory, filePath);
+            codeToParse = fs.readFileSync(fullPath, 'utf8');
+          } catch (error) {
+            throw new Error(`Failed to read file ${filePath}: ${error.message}`);
+          }
+        }
+
+        if (!codeToParse) {
+          throw new Error('Missing required parameters: Either code or filePath must be provided');
+        }
+
         if (typeof astToolsModule.parseAST === 'function') {
-          return await astToolsModule.parseAST(astCode, language, workingDirectory, filePath);
+          return await astToolsModule.parseAST(codeToParse, language, workingDirectory, filePath);
         } else {
           throw new Error('parseAST function not available in ast-tools module');
         }
