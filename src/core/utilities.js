@@ -39,7 +39,7 @@ export const validateWorkingDirectory = (workingDirectory, defaultWorkingDir) =>
   if (!workingDirectory) {
     return {
       valid: false,
-      error: 'workingDirectory parameter is required for this operation',
+      error: 'REQUIRED PARAMETER MISSING: workingDirectory is mandatory for all tool operations. Please provide a valid directory path.',
       effectiveDir: null
     };
   }
@@ -50,7 +50,7 @@ export const validateWorkingDirectory = (workingDirectory, defaultWorkingDir) =>
     if (!existsSync(resolvedPath)) {
       return {
         valid: false,
-        error: `Working directory '${workingDirectory}' does not exist`,
+        error: `DIRECTORY NOT FOUND: Working directory '${workingDirectory}' does not exist. Please provide an existing directory path.`,
         effectiveDir: null
       };
     }
@@ -60,7 +60,7 @@ export const validateWorkingDirectory = (workingDirectory, defaultWorkingDir) =>
     if (!stats.isDirectory()) {
       return {
         valid: false,
-        error: `Working directory '${workingDirectory}' is not a directory`,
+        error: `INVALID PATH TYPE: '${workingDirectory}' exists but is not a directory. Please provide a valid directory path.`,
         effectiveDir: null
       };
     }
