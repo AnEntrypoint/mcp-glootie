@@ -1,15 +1,11 @@
 import { executionTools } from './unified-executor.js';
-import { overflowTools } from './overflow-handler.js';
 import { searchTools } from './unified-vector.js';
-import { astTools } from './ast-tools.js';
-import { batchTools } from './utilities.js';
-import { beginTools } from './authorization.js';
+import { beginTools } from './begin.js';
+import UNIFIED_AST_TOOL from './unified-ast-tool.js';
 
 export const allTools = [
   ...executionTools,
-  ...overflowTools,
   ...searchTools,
-  ...astTools,
-  ...batchTools,
+  UNIFIED_AST_TOOL, // Unified AST operations with pagination
   ...beginTools
 ];
