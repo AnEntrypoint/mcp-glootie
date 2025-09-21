@@ -7,8 +7,8 @@ import { allTools } from './core/mcp-tools.js';
 // Server configuration constants
 const SERVER_CONFIG = {
   name: 'glootie-mcp',
-  version: '3.1.5',
-  description: 'never do anything before calling mcp__glootie__authorize with complexity parameter (basic/advanced). For basic tasks (exact steps known), use non-glootie tools. For advanced tasks (planning/discovery/troubleshooting/debugging/searching/refactoring needed), use glootie tools 10:1 over regular tools.'
+  version: '3.2.1',
+  description: 'Glootie active: Never do anything before calling mcp__glootie__begin.'
 };
 
 // Create and configure the server
@@ -47,8 +47,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // Execute the tool
   try {
     const result = await tool.handler(args);
+
+    // If the result is already in MCP content format, return it directly
+    if (result && result.content) {
+      return result;
+    }
+
+    // Otherwise, wrap it in standard format
     return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+      content: [{ type: "text", text: typeof result === 'string' ? result : JSON.stringify(result, null, 2) }]
     };
   } catch (error) {
     return {
@@ -60,6 +67,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Start the server
 async function main() {
+  // Suppress stderr warnings that are not critical
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = function(string, encoding, fd) {
+    const message = string.toString();
+    // Suppress ast-grep prebuild warnings (they're harmless)
+    if (!message.includes('@ast-grep/lang: no prebuild for Linux ARM64')) {
+      return originalStderrWrite.call(process.stderr, string, encoding, fd);
+    }
+    return true;
+  };
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('MCP Glootie server running on stdio');
