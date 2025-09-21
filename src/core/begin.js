@@ -1,5 +1,4 @@
 
-import { understandProject } from "./project-understand.js"
 export async function handleAuthorization(args) {
   const { complexity, workingDirectory } = args;
 
@@ -12,92 +11,11 @@ export async function handleAuthorization(args) {
   response += `searchcode: FIND PATTERNS - Use when you need semantic understanding or need to find all occurances of a vague idea\n`;
   response += `ast_tool: ANALYZE CODE - Use for structural code analysis, pattern matching, and transformations\n\n`;
   response += `every tool call will reset the context, remember that during your workflow`
-  // For advanced/expert complexity, include project understanding
+  // For advanced/expert complexity, note that project analysis is available via searchcode
   if (complexity === 'advanced' || complexity === 'expert') {
-    try {
-      const projectResult = understandProject(effectiveWorkingDirectory);
-      if (projectResult.success) {
-        const data = projectResult.data;
-        response += `📁 PROJECT OVERVIEW:\n`;
-        response += `Files: ${data.overview.files} | Lines: ${data.overview.lines} | Language: ${data.overview.lang}\n`;
-        response += `Avg Size: ${data.overview.avgSize} bytes | Quality Issues: ${data.quality.duplicates} duplicates\n\n`;
-
-        // Show detailed file breakdown with imports/exports
-        response += `📋 FILE BREAKDOWN:\n`;
-        data.details.allFiles.forEach(file => {
-          response += `• ${file.p} (${file.t}, ${file.l} lines, ${file.s} bytes)\n`;
-
-          // Show imports and exports for this file
-          const deps = data.details.dependencies[file.p];
-          if (deps) {
-            if (deps.imports.length > 0) {
-              response += `  IMPORTS: ${deps.imports.map(imp => imp.from).join(', ')}\n`;
-            }
-            if (deps.exports.length > 0) {
-              response += `  EXPORTS: ${deps.exports.map(exp => exp.name).join(', ')}\n`;
-            }
-          }
-        });
-        response += `\n`;
-
-        // Show dependency relationships
-        response += `🔗 DEPENDENCY MAPPING:\n`;
-        const importMap = {};
-        Object.entries(data.details.dependencies).forEach(([file, deps]) => {
-          deps.imports.forEach(imp => {
-            if (!importMap[imp.from]) importMap[imp.from] = [];
-            importMap[imp.from].push(file);
-          });
-        });
-
-        Object.entries(importMap).slice(0, 10).forEach(([module, importers]) => {
-          response += `• ${module} is imported by: ${importers.join(', ')}\n`;
-        });
-        response += `\n`;
-
-        // Code quality metrics
-        response += `📊 CODE QUALITY:\n`;
-        response += `• Exact duplicates: ${data.quality.duplicates}\n`;
-        response += `• Similar functions: ${data.quality.similar}\n`;
-        response += `• Adverb usage: ${data.quality.adverbs}\n`;
-        response += `• Commented files: ${data.quality.commented}\n`;
-        response += `\n`;
-
-        // Top issues and opportunities
-        if (data.topIssues && data.topIssues.length > 0) {
-          response += `🚨 HIGH IMPACT ISSUES:\n`;
-          data.topIssues.slice(0, 5).forEach(issue => {
-            response += `• ${issue.type.toUpperCase()}: ${issue.suggestion}\n`;
-            if (issue.file) response += `  - File: ${issue.file}\n`;
-            if (issue.complexity) response += `  - Complexity: ${issue.complexity}\n`;
-            if (issue.size) response += `  - Size: ${issue.size} bytes\n`;
-          });
-          response += `\n`;
-        }
-
-        // Linting suggestions
-        response += `🔍 LINTING RECOMMENDATIONS:\n`;
-        if (data.details.metadata.comments.length > 0) {
-          response += `• High comment density files may need refactoring\n`;
-        }
-        if (data.quality.adverbs > 10) {
-          response += `• Consider renaming functions with adverbs for clarity\n`;
-        }
-        if (data.quality.duplicates > 0) {
-          response += `• Extract duplicate code to shared utilities\n`;
-        }
-        if (data.largeFiles && data.largeFiles.length > 0) {
-          response += `• Large files (>10KB) should be modularized\n`;
-        }
-        response += `\n`;
-
-        response += `Use this comprehensive overview to plan your approach efficiently.\n\n`;
-      } else {
-        response += `Project analysis unavailable: ${projectResult.error}\n\n`;
-      }
-    } catch (error) {
-      response += `Project analysis error: ${error.message}\n\n`;
-    }
+    response += `📁 PROJECT ANALYSIS:\n`;
+    response += `Use searchcode tool for semantic project understanding and pattern discovery\n`;
+    response += `Use ast_tool for structural code analysis and transformations\n\n`;
   }
   // For basic tasks, encourage simple standard tools and discourage complex MCP tools
   if (complexity === 'expert') {
