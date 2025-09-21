@@ -5,5 +5,4 @@ export * from './unified-executor.js';
 export * from './unified-vector.js';
 export * from './error-handling.js';
 export * from './shared-hooks.js';
-export * from './ast-tools.js';
 export * from './utilities.js';

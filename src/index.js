@@ -7,7 +7,7 @@ import { allTools } from './core/mcp-tools.js';
 // Server configuration constants
 const SERVER_CONFIG = {
   name: 'glootie-mcp',
-  version: '3.2.3',
+  version: '3.2.2',
   description: 'Glootie active: Never do anything before calling mcp__glootie__begin.'
 };
 
