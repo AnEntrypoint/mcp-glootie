@@ -26,7 +26,7 @@ async function testProjectOverview() {
   // Wait for server to start
   await new Promise(resolve => setTimeout(resolve, 2000));
 
-  // Test the begin tool with advanced complexity
+  // Test the begin tool with advanced complexity (no workingDirectory - should default to current dir)
   const testRequest = {
     jsonrpc: "2.0",
     id: 1,
@@ -34,8 +34,8 @@ async function testProjectOverview() {
     params: {
       name: "begin",
       arguments: {
-        complexity: "advanced",
-        workingDirectory: "/config/workspace/mcp-repl"
+        complexity: "advanced"
+        // No workingDirectory provided - should default to current directory
       }
     }
   };

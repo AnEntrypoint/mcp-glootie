@@ -3,6 +3,9 @@ import { understandProject } from "./project-understand.js"
 export async function handleAuthorization(args) {
   const { complexity, workingDirectory } = args;
 
+  // Default to current working directory if none provided
+  const effectiveWorkingDirectory = workingDirectory || process.cwd();
+
   let response = `🔐 AUTHORIZATION COMPLETE\nYour PRIMARY TOOL is execute, use it for grounding yourself in truth and give its code short timeouts for all relevant tasks`;
 
   response += `🔧 KEY MCP TOOLS (use only when needed):\n`;
@@ -10,9 +13,9 @@ export async function handleAuthorization(args) {
   response += `ast_tool: ANALYZE CODE - Use for structural code analysis, pattern matching, and transformations\n\n`;
   response += `every tool call will reset the context, remember that during your workflow`
   // For advanced/expert complexity, include project understanding
-  if (workingDirectory) {
+  if (complexity === 'advanced' || complexity === 'expert') {
     try {
-      const projectResult = understandProject(workingDirectory);
+      const projectResult = understandProject(effectiveWorkingDirectory);
       if (projectResult.success) {
         const data = projectResult.data;
         response += `📁 PROJECT OVERVIEW:\n`;
@@ -134,7 +137,7 @@ export const beginTools = [
         },
         workingDirectory: {
           type: 'string',
-          description: 'REQUIRED: Absolute path to working directory for project analysis. Use full paths like "/Users/username/project" not relative paths like "./project". Required for advanced complexity to provide project overview'
+          description: 'Optional: Absolute path to working directory for project analysis. If not provided, defaults to current working directory. Use full paths like "/Users/username/project" not relative paths like "./project". Used for advanced complexity to provide project overview'
         }
       },
       required: ['complexity']
