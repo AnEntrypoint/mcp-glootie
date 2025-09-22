@@ -1,10 +1,10 @@
-import * as path from 'node:path';
+import { resolve, join, dirname } from 'path';
 import { existsSync, statSync } from 'fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath } from 'url';
 
 // Get current directory for absolute imports
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = dirname(__filename);
 
 function createErrorResponse(error, startTime, context = {}) {
   return {
@@ -45,7 +45,7 @@ export const validateWorkingDirectory = (workingDirectory, defaultWorkingDir) =>
   }
 
   try {
-    const resolvedPath = path.resolve(workingDirectory);
+    const resolvedPath = resolve(workingDirectory);
 
     if (!existsSync(resolvedPath)) {
       return {
@@ -162,18 +162,15 @@ export function getDefaultIgnorePatterns(workingDirectory) {
   };
 
   try {
-    const fs = require('fs');
-    const path = require('path');
-
     const searchDefaultsPath = path.join(workingDirectory, '.search-defaults.json');
-    if (fs.existsSync(searchDefaultsPath)) {
-      const customDefaults = JSON.parse(fs.readFileSync(searchDefaultsPath, 'utf8'));
+    if (existsSync(searchDefaultsPath)) {
+      const customDefaults = JSON.parse(readFileSync(searchDefaultsPath, 'utf8'));
       return { ...defaultPatterns, ...customDefaults };
     }
 
     const gitignorePath = path.join(workingDirectory, '.gitignore');
-    if (fs.existsSync(gitignorePath)) {
-      const gitignoreContent = fs.readFileSync(gitignorePath, 'utf8');
+    if (existsSync(gitignorePath)) {
+      const gitignoreContent = readFileSync(gitignorePath, 'utf8');
       const gitignorePatterns = gitignoreContent
         .split('\n')
         .filter(line => line.trim() && !line.startsWith('#'))

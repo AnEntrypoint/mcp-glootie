@@ -1,6 +1,6 @@
 // Shared utilities module - extracted from duplicate functions across the codebase
 import { existsSync, statSync } from 'fs';
-import * as path from 'node:path';
+import { resolve } from 'path';
 
 // Default ignore patterns used across multiple modules
 export function getDefaultIgnorePatterns() {
@@ -187,7 +187,7 @@ export function validateWorkingDirectory(workingDirectory, defaultWorkingDir) {
   }
 
   try {
-    const resolvedPath = path.resolve(workingDirectory);
+    const resolvedPath = resolve(workingDirectory);
 
     if (!existsSync(resolvedPath)) {
       return {
