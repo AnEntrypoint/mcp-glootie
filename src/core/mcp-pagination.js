@@ -1,4 +1,4 @@
-import { generateId } from './utilities.js';
+import { generateId } from './utilities-consolidated.js';
 
 /**
  * Standardized MCP Pagination Handler
