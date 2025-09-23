@@ -1,4 +1,4 @@
-import { generateId } from './utilities-consolidated.js';
+import { generateId } from './utilities.js';
 
 /**
  * Standardized MCP Pagination Handler
@@ -219,7 +219,7 @@ export function withPagination(handler, resourceName = 'items') {
       const result = await handler(args);
 
       if (Array.isArray(result)) {
-        return createMCPResponse(result, {
+        const paginatedResult = createMCPResponse(result, {
           cursor: args.cursor,
           pageSize: args.pageSize,
           metadata: {
@@ -227,11 +227,27 @@ export function withPagination(handler, resourceName = 'items') {
             timestamp: new Date().toISOString()
           }
         });
+
+        // Return in MCP content format to ensure hooks are applied
+        return {
+          content: [{ type: "text", text: JSON.stringify(paginatedResult, null, 2) }]
+        };
       }
 
-      return result;
+      // If not an array, ensure it's in MCP content format
+      if (result && result.content) {
+        return result;
+      }
+
+      return {
+        content: [{ type: "text", text: typeof result === 'string' ? result : JSON.stringify(result, null, 2) }]
+      };
     } catch (error) {
-      return createPaginationError(error);
+      // Return error in MCP content format
+      return {
+        content: [{ type: "text", text: `Error: ${error.message}` }],
+        isError: true
+      };
     }
   };
 }
