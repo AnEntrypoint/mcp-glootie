@@ -8,7 +8,6 @@ export class ToolError extends Error {
     this.retryable = retryable;
     this.suggestions = suggestions;
   }
-
   toJSON() {
     return {
       code: this.code,
@@ -20,7 +19,6 @@ export class ToolError extends Error {
     };
   }
 }
-
 export class ValidationError extends ToolError {
   constructor(message, toolName = 'unknown') {
     super(message, 'VALIDATION_ERROR', toolName, false, [
@@ -31,7 +29,6 @@ export class ValidationError extends ToolError {
     this.name = 'ValidationError';
   }
 }
-
 export class ExecutionError extends ToolError {
   constructor(message, toolName = 'unknown') {
     super(message, 'EXECUTION_ERROR', toolName, true, [
@@ -42,7 +39,6 @@ export class ExecutionError extends ToolError {
     this.name = 'ExecutionError';
   }
 }
-
 export class SearchError extends ToolError {
   constructor(message, toolName = 'unknown') {
     super(message, 'SEARCH_ERROR', toolName, true, [
@@ -53,7 +49,6 @@ export class SearchError extends ToolError {
     this.name = 'SearchError';
   }
 }
-
 export class TimeoutError extends ToolError {
   constructor(message, toolName = 'unknown', timeoutMs = 0) {
     super(message, 'TIMEOUT', toolName, true, [
@@ -66,7 +61,6 @@ export class TimeoutError extends ToolError {
     this.timeoutMs = timeoutMs;
   }
 }
-
 export class PermissionError extends ToolError {
   constructor(message, toolName = 'unknown') {
     super(message, 'PERMISSION_DENIED', toolName, false, [
@@ -77,7 +71,6 @@ export class PermissionError extends ToolError {
     this.name = 'PermissionError';
   }
 }
-
 export class NetworkError extends ToolError {
   constructor(message, toolName = 'unknown') {
     super(message, 'NETWORK_ERROR', toolName, true, [
@@ -88,7 +81,6 @@ export class NetworkError extends ToolError {
     this.name = 'NetworkError';
   }
 }
-
 export class ResourceError extends ToolError {
   constructor(message, toolName = 'unknown') {
     super(message, 'RESOURCE_ERROR', toolName, true, [
@@ -99,12 +91,10 @@ export class ResourceError extends ToolError {
     this.name = 'ResourceError';
   }
 }
-
 export class ToolErrorHandler {
   constructor(toolName = 'unknown') {
     this.toolName = toolName;
   }
-
   handleError(error, context = {}) {
     if (error instanceof ToolError) {
       if (error instanceof ToolError) {
@@ -113,7 +103,6 @@ export class ToolErrorHandler {
         }
         return error;
       }
-
       if (error.code === 'ENOENT' || error.message.includes('no such file')) {
         return new ToolError(
           `File or directory not found: ${error.message}`,
@@ -127,14 +116,12 @@ export class ToolErrorHandler {
           ]
         );
       }
-
       if (error.code === 'EACCES' || error.message.includes('permission denied')) {
         return new PermissionError(
           `Permission denied: ${error.message}`,
           this.toolName
         );
       }
-
       if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
         return new TimeoutError(
           `Operation timed out: ${error.message}`,
@@ -142,28 +129,24 @@ export class ToolErrorHandler {
           context.timeout || 0
         );
       }
-
       if (error.code === 'ENOTDIR' || error.message.includes('not a directory')) {
         return new ValidationError(
           `Invalid directory path: ${error.message}`,
           this.toolName
         );
       }
-
       if (error.code === 'EMFILE' || error.code === 'ENFILE' || error.message.includes('too many files')) {
         return new ResourceError(
           `Resource limit exceeded: ${error.message}`,
           this.toolName
         );
       }
-
       if (error.message.includes('network') || error.message.includes('connection')) {
         return new NetworkError(
           `Network error: ${error.message}`,
           this.toolName
         );
       }
-
       return new ToolError(
         error.message || 'Unknown error occurred',
         'UNKNOWN_ERROR',
@@ -177,7 +160,6 @@ export class ToolErrorHandler {
       )
     }
   }
-
   async withTimeout(operation, timeoutMs = 30000) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -187,7 +169,6 @@ export class ToolErrorHandler {
           timeoutMs
         ));
       }, timeoutMs);
-
       Promise.resolve(operation())
         .then(result => {
           clearTimeout(timer);
@@ -199,29 +180,23 @@ export class ToolErrorHandler {
         });
     });
   }
-
   async withRetry(operation, maxRetries = 3, delayMs = 1000) {
     let lastError;
-
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await operation();
       } catch (error) {
         lastError = this.handleError(error);
-
         if (!lastError.retryable || attempt === maxRetries) {
           throw lastError;
         }
-
         await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
         await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
       }
     }
-
     throw lastError;
   }
 }
-
 export function createErrorHandler(toolName) {
   const errorHandler = new ToolErrorHandler(toolName);
   return async (operation, errorMessage = `${toolName} failed`) => {
@@ -232,25 +207,21 @@ export function createErrorHandler(toolName) {
     }
   };
 }
-
 export function withErrorHandling(handler, toolName) {
   const errorHandler = new ToolErrorHandler(toolName);
-
   return async (args) => {
     try {
       return await handler(args);
     } catch (error) {
       const toolError = errorHandler.handleError(error);
       console.error(`Error in ${toolName}:`, toolError.toJSON());
-
-      // Create detailed error response with suggestions
+      
       const errorText = [
         `${toolError.code}: ${toolError.message}`,
         '',
         'Suggestions:',
         ...toolError.suggestions.map(s => `• ${s}`)
       ].join('\n');
-
       if (toolError.retryable) {
         return {
           content: [{
@@ -260,7 +231,6 @@ export function withErrorHandling(handler, toolName) {
           isError: true
         };
       }
-
       return {
         content: [{ type: "text", text: errorText }],
         isError: true
@@ -268,10 +238,8 @@ export function withErrorHandling(handler, toolName) {
     }
   };
 }
-
 export function validateParams(params, schema) {
   const errors = [];
-
   if (schema.required) {
     if (schema.required) {
       for (const required of schema.required) {
@@ -280,7 +248,6 @@ export function validateParams(params, schema) {
         }
       }
     }
-
     if (schema.properties) {
       if (schema.properties) {
         for (const [key, value] of Object.entries(params)) {
@@ -289,24 +256,20 @@ export function validateParams(params, schema) {
             if (propertySchema.type && !validateType(value, propertySchema.type)) {
               errors.push(`Invalid type for parameter ${key}: expected ${propertySchema.type}`);
             }
-
             if (propertySchema.enum && !propertySchema.enum.includes(value)) {
               errors.push(`Invalid value for parameter ${key}: must be one of ${propertySchema.enum.join(', ')}`);
             }
           }
         }
       }
-
       if (errors.length > 0) {
         throw new ValidationError(errors.join(', '));
       }
     }
-
     function validateType(value, expectedType) {
       if (Array.isArray(expectedType)) {
         return expectedType.some(type => validateType(value, type));
       }
-
       switch (expectedType) {
         case 'string':
           return typeof value === 'string';
@@ -324,11 +287,9 @@ export function validateParams(params, schema) {
     }
   }
 }
-
 export function createToolErrorHandler(toolName) {
   return new ToolErrorHandler(toolName);
 }
-
 export function createAdvancedToolHandler(handler, toolName, options = {}) {
   const {
     timeout = 30000,
@@ -337,35 +298,28 @@ export function createAdvancedToolHandler(handler, toolName, options = {}) {
     enableTimeout = false,
     enableRetry = false
   } = options;
-
   const errorHandler = new ToolErrorHandler(toolName);
-
   return async (args) => {
     let operation = () => handler(args);
-
     if (enableTimeout) {
       const originalOperation = operation;
       operation = () => errorHandler.withTimeout(originalOperation, timeout);
     }
-
     if (enableRetry) {
       const originalOperation = operation;
       operation = () => errorHandler.withRetry(originalOperation, retries, retryDelay);
     }
-
     try {
       return await operation();
     } catch (error) {
       const toolError = errorHandler.handleError(error);
       console.error(`Error in ${toolName}:`, toolError.toJSON());
-
       const errorText = [
         `${toolError.code}: ${toolError.message}`,
         '',
         'Suggestions:',
         ...toolError.suggestions.map(s => `• ${s}`)
       ].join('\n');
-
       if (toolError.retryable && !enableRetry) {
         return {
           content: [{
@@ -375,7 +329,6 @@ export function createAdvancedToolHandler(handler, toolName, options = {}) {
           isError: true
         };
       }
-
       return {
         content: [{ type: "text", text: errorText }],
         isError: true
