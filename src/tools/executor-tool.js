@@ -155,17 +155,9 @@ function validateRequiredParams(params, required, startTime) {
 
 export async function executeProcess(command, args = [], options = {}) {
   const startTime = Date.now();
-  const { timeout = 300000, cwd, input, encoding = 'utf8' } = options;
+  const { timeout = 120000, cwd, input, encoding = 'utf8' } = options;
 
   return new Promise((resolve) => {
-    const fullCommand = `${command} ${args.join(' ')}`;
-
-    let adjustedTimeout = timeout;
-
-    if (fullCommand.includes('npm install') || fullCommand.includes('npm ci')) {
-      adjustedTimeout = Math.max(timeout, 600000);
-    }
-
     const child = spawn(command, args, {
       cwd,
       stdio: input ? 'pipe' : ['pipe', 'pipe', 'pipe']
@@ -179,9 +171,9 @@ export async function executeProcess(command, args = [], options = {}) {
       if (!isResolved) {
         child.kill('SIGTERM');
         isResolved = true;
-        resolve(createTimeoutError(fullCommand, adjustedTimeout, startTime));
+        resolve(createTimeoutError(`${command} ${args.join(' ')}`, timeout, startTime));
       }
-    }, adjustedTimeout);
+    }, timeout);
 
     if (child.stdout) {
       child.stdout.on('data', (data) => {
@@ -247,7 +239,7 @@ const EXECUTION_CONFIGS = {
 };
 
 export async function executeWithRuntime(codeOrCommands, runtime, options = {}) {
-  const { workingDirectory, timeout = 300000 } = options;
+  const { workingDirectory, timeout = 120000 } = options;
   const config = EXECUTION_CONFIGS[runtime];
 
   if (!config) {
@@ -611,7 +603,7 @@ export const executionTools = [
       },
       required: ["workingDirectory"]
     },
-    handler: async ({ code, commands, workingDirectory, runtime = "auto", timeout = 300000 }) => {
+    handler: async ({ code, commands, workingDirectory, runtime = "auto", timeout = 120000 }) => {
       
       const consoleRestore = suppressConsoleOutput();
       const effectiveWorkingDirectory = workingDirectory || process.cwd();
@@ -620,7 +612,16 @@ export const executionTools = [
       try {
         let result;
         if (code) {
-          const targetRuntime = runtime === "auto" ? "nodejs" : runtime;
+          let targetRuntime = runtime === "auto" ? "nodejs" : runtime;
+
+          if (runtime === "auto") {
+            const shellCommands = ['npm ', 'npx ', 'yarn ', 'pip ', 'python ', 'go ', 'rustc ', 'gcc ', 'g++ ', 'git ', 'mkdir ', 'rm ', 'ls ', 'cd '];
+            const isShellCommand = shellCommands.some(cmd => code.trim().startsWith(cmd));
+            if (isShellCommand) {
+              targetRuntime = 'bash';
+            }
+          }
+
           result = await executeWithRuntimeValidation(code, targetRuntime, { workingDirectory, timeout });
           result = enhanceExecutionResult(result, code, targetRuntime, workingDirectory);
         } else if (commands) {

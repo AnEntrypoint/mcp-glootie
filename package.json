@@ -1,6 +1,6 @@
 {
   "name": "mcp-glootie",
-  "version": "3.2.20",
+  "version": "3.2.21",
   "description": "MCP Glootie v3.2.0 - Multi-language development toolkit with intelligent error detection and troubleshooting guidance.",
   "main": "src/index.js",
   "type": "module",
