@@ -33,6 +33,165 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
+// Git-based linting for changed files
+async function lintGitChanges() {
+  try {
+    const { execSync } = await import('child_process');
+    const os = await import('os');
+
+    // Get changed files using git
+    const changedFilesCmd = 'git diff --name-only --cached';
+    const unstagedFilesCmd = 'git diff --name-only';
+
+    let changedFiles = [];
+
+    try {
+      const stagedOutput = execSync(changedFilesCmd, { encoding: 'utf8', timeout: 5000 });
+      const unstagedOutput = execSync(unstagedFilesCmd, { encoding: 'utf8', timeout: 5000 });
+
+      changedFiles = [
+        ...stagedOutput.trim().split('\n').filter(f => f),
+        ...unstagedOutput.trim().split('\n').filter(f => f)
+      ].filter((file, index, self) => self.indexOf(file) === index); // Remove duplicates
+
+    } catch (gitError) {
+      // Not a git repo or git not available
+      return '';
+    }
+
+    if (changedFiles.length === 0) {
+      return '';
+    }
+
+    // Filter for code files that we can lint
+    const codeFiles = changedFiles.filter(file => {
+      const ext = file.split('.').pop()?.toLowerCase();
+      return ['js', 'jsx', 'ts', 'tsx', 'py', 'go', 'rs', 'c', 'cpp'].includes(ext);
+    });
+
+    if (codeFiles.length === 0) {
+      return '';
+    }
+
+    // Lint each changed file
+    const lintResults = [];
+    for (const file of codeFiles) {
+      try {
+        const result = await lintFile(file);
+        if (result) {
+          lintResults.push(result);
+        }
+      } catch (error) {
+        // Skip files that can't be linted
+      }
+    }
+
+    if (lintResults.length === 0) {
+      return '';
+    }
+
+    // Format linting results
+    let output = '\n\n=== LINTING ISSUES IN CHANGED FILES ===\n';
+    lintResults.forEach(result => {
+      output += `\n${result.file}:\n${result.issues}\n`;
+    });
+
+    return output + '\nFix these issues before committing.\n';
+
+  } catch (error) {
+    // Silent fail for linting errors
+    return '';
+  }
+}
+
+// Lint a single file
+async function lintFile(filePath) {
+  try {
+    const { readFileSync, existsSync } = await import('fs');
+    const { join } = await import('path');
+    const { execSync } = await import('child_process');
+
+    if (!existsSync(filePath)) {
+      return null;
+    }
+
+    const content = readFileSync(filePath, 'utf8');
+    const ext = filePath.split('.').pop()?.toLowerCase();
+
+    // Try ESLint for JavaScript/TypeScript
+    if (['js', 'jsx', 'ts', 'tsx'].includes(ext)) {
+      try {
+        const result = execSync(`npx eslint --format json "${filePath}"`, {
+          encoding: 'utf8',
+          timeout: 10000,
+          stdio: 'pipe'
+        });
+
+        const eslintOutput = JSON.parse(result);
+        if (eslintOutput.length > 0 && eslintOutput[0].messages.length > 0) {
+          const errors = eslintOutput[0].messages.filter(msg => msg.severity === 2);
+          const warnings = eslintOutput[0].messages.filter(msg => msg.severity === 1);
+
+          if (errors.length > 0 || warnings.length > 0) {
+            const issues = errors.slice(0, 3).map(err =>
+              `Line ${err.line}:${err.column} - ${err.message} (${err.ruleId})`
+            ).join('\n');
+
+            return {
+              file: filePath,
+              issues: `${errors.length} errors, ${warnings.length} warnings:\n${issues}`
+            };
+          }
+        }
+      } catch (eslintError) {
+        // ESLint not available, skip
+      }
+    }
+
+    // Try Python linting
+    if (ext === 'py') {
+      try {
+        const result = execSync(`python -m py_compile "${filePath}"`, {
+          encoding: 'utf8',
+          timeout: 5000,
+          stdio: 'pipe'
+        });
+
+        // If py_compile succeeds, check for style issues
+        try {
+          const flakeResult = execSync(`flake8 "${filePath}"`, {
+            encoding: 'utf8',
+            timeout: 5000,
+            stdio: 'pipe'
+          });
+
+          if (flakeResult.trim()) {
+            return {
+              file: filePath,
+              issues: flakeResult.trim()
+            };
+          }
+        } catch (flakeError) {
+          // flake8 found issues
+          return {
+            file: filePath,
+            issues: flakeError.message.replace('Command failed: ', '').split('\n').slice(0, 5).join('\n')
+          };
+        }
+      } catch (pyError) {
+        return {
+          file: filePath,
+          issues: `Syntax error: ${pyError.message.replace('Command failed: ', '')}`
+        };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
 // Register call_tool handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
@@ -49,10 +208,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const result = await tool.handler(args);
 
+    // Run git-based linting after tool execution
+    const lintingOutput = await lintGitChanges();
+
     // If the result is already in MCP content format, return it directly
     if (result && result.content) {
-      // If there's hook output, prepend it to the first text content
-      if (hookOutput && result.content && result.content.length > 0) {
+      // Add linting output if there are issues
+      if (lintingOutput && result.content && result.content.length > 0) {
+        const firstContent = result.content[0];
+        if (firstContent.type === "text") {
+          firstContent.text = hookOutput + firstContent.text + lintingOutput;
+        }
+      } else if (hookOutput && result.content && result.content.length > 0) {
         const firstContent = result.content[0];
         if (firstContent.type === "text") {
           firstContent.text = hookOutput + firstContent.text;
@@ -61,8 +228,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return result;
     }
 
-    // Otherwise, wrap it in standard format with hook output
-    const finalText = hookOutput + (typeof result === 'string' ? result : JSON.stringify(result, null, 2));
+    // Otherwise, wrap it in standard format with hook and linting output
+    const finalText = hookOutput + (typeof result === 'string' ? result : JSON.stringify(result, null, 2)) + lintingOutput;
     return {
       content: [{ type: "text", text: finalText }]
     };
@@ -94,12 +261,14 @@ async function main() {
 // Built-in hooks state
 let requestCounter = 0;
 let sessionStartTime = null;
+let lastActivityTime = null;
 
 // Start built-in hooks for auto-linting and context management
 async function startBuiltInHooks() {
   try {
     sessionStartTime = new Date();
     requestCounter = 0;
+    lastActivityTime = new Date();
 
     // Console output is now suppressed by default
     // Only enable with ENABLE_CONSOLE_OUTPUT=true environment variable
@@ -108,6 +277,37 @@ async function startBuiltInHooks() {
     applyGlobalConsoleSuppression();
   } catch (error) {
     console.log('⚠️  Built-in hooks initialization failed:', error.message);
+  }
+}
+
+// Check if this is a new conversation (more than 5 minutes since last activity)
+function isNewConversation() {
+  if (!lastActivityTime) return true;
+
+  const now = new Date();
+  const timeSinceLastActivity = now - lastActivityTime;
+  const FIVE_MINUTES = 5 * 60 * 1000;
+
+  return timeSinceLastActivity > FIVE_MINUTES;
+}
+
+// Reset session for new conversation
+function resetSession() {
+  sessionStartTime = new Date();
+  requestCounter = 0;
+  lastActivityTime = new Date();
+
+  // Force re-analysis of codebase on next tool call
+  try {
+    // Clear any cached analysis data
+    if (global.codeChunks) {
+      global.codeChunks = [];
+    }
+    if (global.indexTimestamp) {
+      global.indexTimestamp = 0;
+    }
+  } catch (error) {
+    // Ignore errors when clearing cache
   }
 }
 
@@ -168,6 +368,14 @@ searchcode: to find patterns and understand codebase structure
 
 // Hook runner for request processing
 function runHooksForRequest(toolName, args) {
+  // Update activity time
+  lastActivityTime = new Date();
+
+  // Check if this is a new conversation and reset if needed
+  if (isNewConversation()) {
+    resetSession();
+  }
+
   requestCounter++;
 
   let hookOutput = ``;
