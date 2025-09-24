@@ -1,0 +1,126 @@
+{
+  "version": "1.0",
+  "workingDirectory": "/config/workspace/mcp-repl/src",
+  "data": {
+    "toolUsage": {
+      "ast_tool": {
+        "count": 4,
+        "lastUsed": 1758700187421,
+        "files": [
+          "/config/workspace/mcp-repl/src/core/simple-linter.js",
+          "/config/workspace/mcp-repl/src/core/simple-linter.js",
+          "/config/workspace/mcp-repl/src/core/utilities.js",
+          "/config/workspace/mcp-repl/src/core/utilities.js",
+          "/config/workspace/mcp-repl/src/core/utilities.js",
+          "/config/workspace/mcp-repl/src/core/utilities.js",
+          "/config/workspace/mcp-repl/src/index.js",
+          "/config/workspace/mcp-repl/src/index.js",
+          "/config/workspace/mcp-repl/src/index.js",
+          "/config/workspace/mcp-repl/src/index.js",
+          "/config/workspace/mcp-repl/src/index.js",
+          "/config/workspace/mcp-repl/src/index.js",
+          "/config/workspace/mcp-repl/src/tools/ast-tool.js",
+          "/config/workspace/mcp-repl/src/tools/ast-tool.js",
+          "/config/workspace/mcp-repl/src/tools/ast-tool.js",
+          "/config/workspace/mcp-repl/src/tools/ast-tool.js",
+          "/config/workspace/mcp-repl/src/tools/ast-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/core/console-suppression.js",
+          "/config/workspace/mcp-repl/src/core/console-suppression.js",
+          "/config/workspace/mcp-repl/src/core/console-suppression.js",
+          "/config/workspace/mcp-repl/src/core/simple-linter.js",
+          "/config/workspace/mcp-repl/src/core/simple-linter.js",
+          "/config/workspace/mcp-repl/src/core/utilities.js",
+          "/config/workspace/mcp-repl/src/core/utilities.js",
+          "/config/workspace/mcp-repl/src/core/utilities.js",
+          "/config/workspace/mcp-repl/src/core/utilities.js",
+          "/config/workspace/mcp-repl/src/index.js",
+          "/config/workspace/mcp-repl/src/index.js",
+          "/config/workspace/mcp-repl/src/index.js",
+          "/config/workspace/mcp-repl/src/tools/ast-tool.js",
+          "/config/workspace/mcp-repl/src/tools/ast-tool.js",
+          "/config/workspace/mcp-repl/src/tools/ast-tool.js",
+          "/config/workspace/mcp-repl/src/tools/ast-tool.js",
+          "/config/workspace/mcp-repl/src/tools/ast-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+          "/config/workspace/mcp-repl/src/tools/vector-tool.js"
+        ]
+      }
+    },
+    "insights": [
+      "AST search found 33 matches"
+    ]
+  },
+  "metadata": {
+    "totalToolCalls": 4,
+    "commonPatterns": [
+      {
+        "pattern": "console.log",
+        "count": 2,
+        "lastUsed": 1758700187421
+      }
+    ],
+    "preferredFiles": [
+      {
+        "path": "/config/workspace/mcp-repl/src/tools/vector-tool.js",
+        "count": 32,
+        "lastUsed": 1758700187421
+      },
+      {
+        "path": "/config/workspace/mcp-repl/src/tools/ast-tool.js",
+        "count": 10,
+        "lastUsed": 1758700187421
+      },
+      {
+        "path": "/config/workspace/mcp-repl/src/index.js",
+        "count": 9,
+        "lastUsed": 1758700187421
+      },
+      {
+        "path": "/config/workspace/mcp-repl/src/core/utilities.js",
+        "count": 8,
+        "lastUsed": 1758700187421
+      },
+      {
+        "path": "/config/workspace/mcp-repl/src/core/simple-linter.js",
+        "count": 4,
+        "lastUsed": 1758700187421
+      },
+      {
+        "path": "/config/workspace/mcp-repl/src/core/console-suppression.js",
+        "count": 3,
+        "lastUsed": 1758700187421
+      }
+    ],
+    "lastModified": 1758700187422
+  }
+}
