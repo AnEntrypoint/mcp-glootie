@@ -6,7 +6,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { allTools } from './core/mcp-tools.js';
 const SERVER_CONFIG = {
   name: 'glootie-mcp',
-  version: '3.2.20',
+  version: '3.2.21',
   description: 'Programming tools.'
 };
 
@@ -420,12 +420,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 
   try {
-    const result = await Promise.race([
-      tool.handler(args),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Tool execution timeout')), 900000)
-      )
-    ]);
+    const result = await tool.handler(args);
 
 
     const lintingOutput = await lintGitChanges();
@@ -453,12 +448,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [{ type: "text", text: finalText }]
     };
   } catch (error) {
-    if (error.message === 'Tool execution timeout') {
-      return {
-        content: [{ type: "text", text: hookOutput + 'Error: Tool execution timed out after 15 minutes' }],
-        isError: true
-      };
-    }
     return {
       content: [{ type: "text", text: hookOutput + `Error: ${error.message}` }],
       isError: true
