@@ -585,9 +585,9 @@ async function runHooksForRequest(toolName, args) {
   return hookOutput;
 }
 
-if (import.meta.url === `file:
+if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(error => {
-    
+
     process.exit(1);
   });
 }
