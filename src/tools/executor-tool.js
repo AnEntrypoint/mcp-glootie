@@ -544,7 +544,7 @@ export async function executeCppCode(code, options = {}) {
 export const executionTools = [
   {
     name: "execute",
-    description: "MANDATORY: TEST CODE IDEAS BEFORE IMPLEMENTING THEM - Execute code snippets in any languages (JS/TS, Go, Rust, Python, C, C++) with automatic runtime detection. ALWAYS USE THIS FIRST for: testing hypotheses, validating approaches, prototyping functions, debugging issues. Perfect for 'what if' scenarios before committing to implementation.",
+    description: "MANDATORY: TEST CODE IDEAS BEFORE IMPLEMENTING THEM - Execute code snippets in any languages (JS/TS, Go, Rust, Python, C, C++) with automatic runtime detection. ALWAYS USE THIS FIRST for: testing hypotheses, validating approaches, prototyping functions, debugging issues. Use this to analyse all important 'what if' scenarios before editing files. IMPORTANT: always use short sensible timeouts to prevent code getting stuck and write code extra carefully to avoid needing timeouts, since that slows things down.",
     inputSchema: {
       type: "object",
       properties: {
