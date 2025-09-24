@@ -6,7 +6,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { allTools } from './core/mcp-tools.js';
 const SERVER_CONFIG = {
   name: 'glootie-mcp',
-  version: '3.2.19',
+  version: '3.2.20',
   description: 'Programming tools.'
 };
 
@@ -415,19 +415,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     throw new Error(`Unknown tool: ${name}`);
   }
 
-  
+
   const hookOutput = await runHooksForRequest(name, args);
 
-  
-  try {
-    const result = await tool.handler(args);
 
-    
+  try {
+    const result = await Promise.race([
+      tool.handler(args),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Tool execution timeout')), 900000)
+      )
+    ]);
+
+
     const lintingOutput = await lintGitChanges();
 
-    
+
     if (result && result.content) {
-      
+
       if (lintingOutput && result.content && result.content.length > 0) {
         const firstContent = result.content[0];
         if (firstContent.type === "text") {
@@ -442,12 +447,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return result;
     }
 
-    
+
     const finalText = hookOutput + (typeof result === 'string' ? result : JSON.stringify(result, null, 2)) + lintingOutput;
     return {
       content: [{ type: "text", text: finalText }]
     };
   } catch (error) {
+    if (error.message === 'Tool execution timeout') {
+      return {
+        content: [{ type: "text", text: hookOutput + 'Error: Tool execution timed out after 15 minutes' }],
+        isError: true
+      };
+    }
     return {
       content: [{ type: "text", text: hookOutput + `Error: ${error.message}` }],
       isError: true
