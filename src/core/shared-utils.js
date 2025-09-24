@@ -33,7 +33,15 @@ export function getDefaultIgnorePatterns() {
     '**/*.cjs',         
     '**/*.mjs',         
     
-    '**/coverage.nyc_outputreports.turbo.vercel.netlifymigrationsseeds*.sql',
+    '**/coverage',
+  '**/.nyc_output',
+  '**/reports',
+  '**/.turbo',
+  '**/.vercel',
+  '**/.netlify',
+  '**/migrations',
+  '**/seeds',
+  '**/*.sql',
     '**/*.sqlite',
     '**/*.db',
     
