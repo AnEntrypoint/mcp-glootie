@@ -622,19 +622,50 @@ export const executionTools = [
             }
           }
 
-          result = await executeWithRuntimeValidation(code, targetRuntime, { workingDirectory, timeout });
+          try {
+            result = await executeWithRuntimeValidation(code, targetRuntime, { workingDirectory, timeout });
+          } catch (executionError) {
+            if (targetRuntime === 'bash') {
+              try {
+                result = await executeWithRuntimeValidation(code, 'nodejs', { workingDirectory, timeout });
+              } catch (fallbackError) {
+                result = {
+                  success: false,
+                  stdout: '',
+                  stderr: `Failed to execute as both bash and nodejs:\nBash error: ${executionError.message}\nNode.js error: ${fallbackError.message}`,
+                  executionTimeMs: 0
+                };
+              }
+            } else {
+              result = {
+                success: false,
+                stdout: '',
+                stderr: `Execution failed: ${executionError.message}`,
+                executionTimeMs: 0
+              };
+            }
+          }
           result = enhanceExecutionResult(result, code, targetRuntime, workingDirectory);
         } else if (commands) {
-          result = await executeWithRuntimeValidation(commands, 'bash', { workingDirectory, timeout });
+          try {
+            result = await executeWithRuntimeValidation(commands, 'bash', { workingDirectory, timeout });
+          } catch (executionError) {
+            result = {
+              success: false,
+              stdout: '',
+              stderr: `Command execution failed: ${executionError.message}`,
+              executionTimeMs: 0
+            };
+          }
           result = enhanceExecutionResult(result, commands, 'bash', workingDirectory);
         } else {
           result = { content: [{ type: "text", text: "No code or commands provided" }] };
         }
 
-        
+
         const insights = generateExecutionInsights(result, query, effectiveWorkingDirectory);
 
-        
+
         const toolContext = createToolContext('execute', effectiveWorkingDirectory, query, {
           ...result,
           duration: result.executionTimeMs || 0,
@@ -643,18 +674,22 @@ export const executionTools = [
           insights: insights
         });
 
-        
+
         await workingDirectoryContext.updateContext(effectiveWorkingDirectory, 'execute', toolContext);
 
         return result;
       } catch (error) {
-        
+
         const errorContext = createToolContext('execute', effectiveWorkingDirectory, query, {
           error: error.message,
           duration: 0
         });
         await workingDirectoryContext.updateContext(effectiveWorkingDirectory, 'execute', errorContext);
-        throw error;
+
+        return {
+          content: [{ type: "text", text: `Execution error: ${error.message}` }],
+          isError: true
+        };
       } finally {
         
         consoleRestore.restore();
