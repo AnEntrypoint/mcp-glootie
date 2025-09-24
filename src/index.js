@@ -118,71 +118,172 @@ async function lintFile(filePath) {
     const content = readFileSync(filePath, 'utf8');
     const ext = filePath.split('.').pop()?.toLowerCase();
 
-    // Try ESLint for JavaScript/TypeScript
+    // Try ast-grep for JavaScript/TypeScript
     if (['js', 'jsx', 'ts', 'tsx'].includes(ext)) {
       try {
-        const result = execSync(`npx eslint --format json "${filePath}"`, {
-          encoding: 'utf8',
-          timeout: 10000,
-          stdio: 'pipe'
-        });
+        const { unifiedASTOperation } = await import('./src/tools/ast-tool.js');
 
-        const eslintOutput = JSON.parse(result);
-        if (eslintOutput.length > 0 && eslintOutput[0].messages.length > 0) {
-          const errors = eslintOutput[0].messages.filter(msg => msg.severity === 2);
-          const warnings = eslintOutput[0].messages.filter(msg => msg.severity === 1);
+        // Define common linting patterns
+        const lintingPatterns = [
+          { pattern: 'debugger', severity: 'error', name: 'Debugger statement' },
+          { pattern: 'console.log', severity: 'warning', name: 'Console log' },
+          { pattern: 'var $', severity: 'warning', name: 'Var declaration' },
+          { pattern: '{\n}', severity: 'warning', name: 'Empty block' },
+          { pattern: ': any', severity: 'warning', name: 'Any type' }
+        ];
 
-          if (errors.length > 0 || warnings.length > 0) {
-            const issues = errors.slice(0, 3).map(err =>
-              `Line ${err.line}:${err.column} - ${err.message} (${err.ruleId})`
-            ).join('\n');
+        const issues = [];
+        for (const { pattern, severity, name } of lintingPatterns) {
+          try {
+            const result = await unifiedASTOperation('search', {
+              path: filePath,
+              pattern: pattern
+            });
 
-            return {
-              file: filePath,
-              issues: `${errors.length} errors, ${warnings.length} warnings:\n${issues}`
-            };
+            if (result.success && result.totalMatches > 0) {
+              issues.push(`${name}: ${result.totalMatches} found`);
+
+              // Add specific locations for errors
+              if (severity === 'error' && result.results.length > 0) {
+                const locations = result.results.slice(0, 2).map(match =>
+                  `Line ${match.line}`
+                ).join(', ');
+                issues.push(`  at ${locations}`);
+              }
+            }
+          } catch (patternError) {
+            // Skip failed patterns
           }
         }
-      } catch (eslintError) {
-        // ESLint not available, skip
+
+        if (issues.length > 0) {
+          return {
+            file: filePath,
+            issues: issues.join('\n')
+          };
+        }
+      } catch (astError) {
+        // ast-grep not available, skip
       }
     }
 
-    // Try Python linting
+    // Try ast-grep for Python files
     if (ext === 'py') {
       try {
-        const result = execSync(`python -m py_compile "${filePath}"`, {
-          encoding: 'utf8',
-          timeout: 5000,
-          stdio: 'pipe'
-        });
+        const { unifiedASTOperation } = await import('./src/tools/ast-tool.js');
 
-        // If py_compile succeeds, check for style issues
+        // Define Python linting patterns
+        const lintingPatterns = [
+          { pattern: 'print(', severity: 'warning', name: 'Print statement' },
+          { pattern: 'except:', severity: 'error', name: 'Bare except' },
+          { pattern: 'global ', severity: 'warning', name: 'Global variable' }
+        ];
+
+        const issues = [];
+        for (const { pattern, severity, name } of lintingPatterns) {
+          try {
+            const result = await unifiedASTOperation('search', {
+              path: filePath,
+              pattern: pattern,
+              language: 'python'
+            });
+
+            if (result.success && result.totalMatches > 0) {
+              issues.push(`${name}: ${result.totalMatches} found`);
+
+              // Add specific locations for errors
+              if (severity === 'error' && result.results.length > 0) {
+                const locations = result.results.slice(0, 2).map(match =>
+                  `Line ${match.line}`
+                ).join(', ');
+                issues.push(`  at ${locations}`);
+              }
+            }
+          } catch (patternError) {
+            // Skip failed patterns
+          }
+        }
+
+        // Also check for syntax errors using Python compiler
         try {
-          const flakeResult = execSync(`flake8 "${filePath}"`, {
+          execSync(`python -m py_compile "${filePath}"`, {
             encoding: 'utf8',
             timeout: 5000,
             stdio: 'pipe'
           });
+        } catch (pyError) {
+          issues.push(`Syntax error: ${pyError.message.replace('Command failed: ', '')}`);
+        }
 
-          if (flakeResult.trim()) {
-            return {
-              file: filePath,
-              issues: flakeResult.trim()
-            };
-          }
-        } catch (flakeError) {
-          // flake8 found issues
+        if (issues.length > 0) {
           return {
             file: filePath,
-            issues: flakeError.message.replace('Command failed: ', '').split('\n').slice(0, 5).join('\n')
+            issues: issues.join('\n')
           };
         }
-      } catch (pyError) {
-        return {
-          file: filePath,
-          issues: `Syntax error: ${pyError.message.replace('Command failed: ', '')}`
+      } catch (astError) {
+        // ast-grep not available, fall back to basic Python syntax check
+        try {
+          execSync(`python -m py_compile "${filePath}"`, {
+            encoding: 'utf8',
+            timeout: 5000,
+            stdio: 'pipe'
+          });
+        } catch (pyError) {
+          return {
+            file: filePath,
+            issues: `Syntax error: ${pyError.message.replace('Command failed: ', '')}`
+          };
+        }
+      }
+    }
+
+    // Try ast-grep for other languages
+    if (['go', 'rs', 'c', 'cpp'].includes(ext)) {
+      try {
+        const { unifiedASTOperation } = await import('./src/tools/ast-tool.js');
+
+        // Define common linting patterns for compiled languages
+        const languageMap = {
+          'go': 'go',
+          'rs': 'rust',
+          'c': 'c',
+          'cpp': 'cpp'
         };
+
+        const language = languageMap[ext];
+        if (language) {
+          const lintingPatterns = [
+            { pattern: 'TODO', severity: 'warning', name: 'TODO comment' },
+            { pattern: 'FIXME', severity: 'warning', name: 'FIXME comment' }
+          ];
+
+          const issues = [];
+          for (const { pattern, severity, name } of lintingPatterns) {
+            try {
+              const result = await unifiedASTOperation('search', {
+                path: filePath,
+                pattern: pattern,
+                language: language
+              });
+
+              if (result.success && result.totalMatches > 0) {
+                issues.push(`${name}: ${result.totalMatches} found`);
+              }
+            } catch (patternError) {
+              // Skip failed patterns
+            }
+          }
+
+          if (issues.length > 0) {
+            return {
+              file: filePath,
+              issues: issues.join('\n')
+            };
+          }
+        }
+      } catch (astError) {
+        // ast-grep not available for this language, skip
       }
     }
 
@@ -258,17 +359,21 @@ async function main() {
   // Suppress console.error to avoid EPIPE errors with stdio transport
 }
 
-// Built-in hooks state
-let requestCounter = 0;
-let sessionStartTime = null;
-let lastActivityTime = null;
+// Built-in hooks state - track per-tool sessions
+let toolSessionCounters = new Map(); // toolName -> counter
+let toolSessionStartTimes = new Map(); // toolName -> startTime
+let toolLastActivityTimes = new Map(); // toolName -> lastActivityTime
+let globalSessionStartTime = null;
 
 // Start built-in hooks for auto-linting and context management
 async function startBuiltInHooks() {
   try {
-    sessionStartTime = new Date();
-    requestCounter = 0;
-    lastActivityTime = new Date();
+    globalSessionStartTime = new Date();
+
+    // Initialize per-tool session tracking
+    toolSessionCounters = new Map();
+    toolSessionStartTimes = new Map();
+    toolLastActivityTimes = new Map();
 
     // Console output is now suppressed by default
     // Only enable with ENABLE_CONSOLE_OUTPUT=true environment variable
@@ -280,22 +385,23 @@ async function startBuiltInHooks() {
   }
 }
 
-// Check if this is a new conversation (more than 5 minutes since last activity)
-function isNewConversation() {
-  if (!lastActivityTime) return true;
+// Check if a tool session is new (more than 5 minutes since last activity for this tool)
+function isToolSessionNew(toolName) {
+  const lastActivity = toolLastActivityTimes.get(toolName);
+  if (!lastActivity) return true;
 
   const now = new Date();
-  const timeSinceLastActivity = now - lastActivityTime;
+  const timeSinceLastActivity = now - lastActivity;
   const FIVE_MINUTES = 5 * 60 * 1000;
 
   return timeSinceLastActivity > FIVE_MINUTES;
 }
 
-// Reset session for new conversation
-function resetSession() {
-  sessionStartTime = new Date();
-  requestCounter = 0;
-  lastActivityTime = new Date();
+// Reset session for a specific tool
+function resetToolSession(toolName) {
+  toolSessionStartTimes.set(toolName, new Date());
+  toolSessionCounters.set(toolName, 0);
+  toolLastActivityTimes.set(toolName, new Date());
 
   // Force re-analysis of codebase on next tool call
   try {
@@ -309,6 +415,25 @@ function resetSession() {
   } catch (error) {
     // Ignore errors when clearing cache
   }
+}
+
+// Get or initialize tool session counter
+function getToolSessionCounter(toolName) {
+  if (!toolSessionCounters.has(toolName)) {
+    toolSessionCounters.set(toolName, 0);
+    toolSessionStartTimes.set(toolName, new Date());
+    toolLastActivityTimes.set(toolName, new Date());
+    return 0;
+  }
+  return toolSessionCounters.get(toolName);
+}
+
+// Increment tool session counter
+function incrementToolSessionCounter(toolName) {
+  const current = getToolSessionCounter(toolName);
+  toolSessionCounters.set(toolName, current + 1);
+  toolLastActivityTimes.set(toolName, new Date());
+  return current + 1;
 }
 
 // Global console suppression to prevent JSON protocol corruption - NOW DEFAULT
@@ -368,19 +493,21 @@ searchcode: to find patterns and understand codebase structure
 
 // Hook runner for request processing
 function runHooksForRequest(toolName, args) {
-  // Update activity time
-  lastActivityTime = new Date();
+  // Update activity time for this tool
+  toolLastActivityTimes.set(toolName, new Date());
 
-  // Check if this is a new conversation and reset if needed
-  if (isNewConversation()) {
-    resetSession();
+  // Check if this tool session is new and reset if needed
+  if (isToolSessionNew(toolName)) {
+    resetToolSession(toolName);
   }
 
-  requestCounter++;
+  // Get and increment the session counter for this tool
+  const toolSessionCount = incrementToolSessionCounter(toolName);
 
   let hookOutput = ``;
 
-  if (requestCounter === 1) {
+  // Add initialization context on first call for this tool
+  if (toolSessionCount === 1) {
     hookOutput += runContextInitialization() + '\n\n';
   }
 
