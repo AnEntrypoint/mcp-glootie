@@ -6,7 +6,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { allTools } from './core/mcp-tools.js';
 const SERVER_CONFIG = {
   name: 'glootie-mcp',
-  version: '3.2.22',
+  version: '3.2.23',
   description: 'Programming tools.'
 };
 
