@@ -4,6 +4,9 @@ import { writeFileSync, chmodSync, unlinkSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import { workingDirectoryContext, createToolContext } from '../core/working-directory-context.js';
+import { suppressConsoleOutput } from '../core/console-suppression.js';
+
+// Console output is now suppressed globally in index.js when MCP_MODE is set
 
 /**
  * Generate context summary for tool output
@@ -570,6 +573,8 @@ export const executionTools = [
       required: ["workingDirectory"]
     },
     handler: createTimeoutToolHandler(async ({ code, commands, workingDirectory, runtime = "auto", timeout = 120000 }) => {
+      // Apply console output suppression for MCP mode
+      const consoleRestore = suppressConsoleOutput();
       const effectiveWorkingDirectory = workingDirectory || process.cwd();
       const query = code || commands || '';
 
@@ -616,6 +621,9 @@ export const executionTools = [
         });
         await workingDirectoryContext.updateContext(effectiveWorkingDirectory, 'execute', errorContext);
         throw error;
+      } finally {
+        // Always restore console output
+        consoleRestore.restore();
       }
     }, 'execute', 120000)
   }

@@ -1,6 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 
+// Console output is now suppressed globally in index.js when MCP_MODE is set
+
 /**
  * Working Directory Context Manager
  * Provides stateless, working directory-based context for MCP tools
