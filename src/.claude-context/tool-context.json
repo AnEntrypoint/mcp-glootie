@@ -1851,8 +1851,8 @@
         ]
       },
       "searchcode": {
-        "count": 14,
-        "lastUsed": 1758726737569,
+        "count": 16,
+        "lastUsed": 1758748708075,
         "files": [
           "/config/workspace/mcp-repl/src/tools/vector-tool.js",
           "/config/workspace/mcp-repl/src/tools/vector-tool.js",
@@ -1956,11 +1956,19 @@
       "Console operation detected - consider removing for production",
       "AST search found 0 matches for pattern: \"^\\s*//.*$\"",
       "Complex pattern search - results show structural code relationships",
-      "No matches found - pattern may be too specific or not present"
+      "No matches found - pattern may be too specific or not present",
+      "Found 0 results for query: \"export function\"",
+      "Low relevance results (avg score: NaN) - consider refining query",
+      "Function search - consider looking for related functions or usage patterns",
+      "No results found - try broader search terms or different keywords",
+      "Found 0 results for query: \"export function\"",
+      "Low relevance results (avg score: NaN) - consider refining query",
+      "Function search - consider looking for related functions or usage patterns",
+      "No results found - try broader search terms or different keywords"
     ]
   },
   "metadata": {
-    "totalToolCalls": 31,
+    "totalToolCalls": 33,
     "commonPatterns": [
       {
         "pattern": "console.log",
@@ -1976,6 +1984,11 @@
         "pattern": "const",
         "count": 2,
         "lastUsed": 1758708801268
+      },
+      {
+        "pattern": "export function",
+        "count": 2,
+        "lastUsed": 1758748708075
       },
       {
         "pattern": "semantic search initialization context",
@@ -2095,6 +2108,6 @@
         "lastUsed": 1758708801268
       }
     ],
-    "lastModified": 1758740144496
+    "lastModified": 1758748708076
   }
 }
