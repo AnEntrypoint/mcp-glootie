@@ -2,7 +2,6 @@ import { executionTools } from '../tools/executor-tool.js';
 import { searchTools } from '../tools/vector-tool.js';
 import AST_TOOL from '../tools/ast-tool.js';
 
-// Create backward-compatible aliases for tools with double prefix
 const createAliasTool = (originalTool, aliasName) => ({
   ...originalTool,
   name: aliasName,
@@ -12,5 +11,5 @@ const createAliasTool = (originalTool, aliasName) => ({
 export const allTools = [
   ...executionTools,
   ...searchTools,
-  AST_TOOL // AST operations with pagination
+  AST_TOOL 
 ];
