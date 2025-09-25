@@ -9,6 +9,8 @@ const SIMILARITY_THRESHOLD = 0.7; // Minimum similarity score to report
 const MIN_LINES_FOR_COMPARISON = 5; // Minimum line count to consider for similarity
 const MAX_CHUNKS_TO_COMPARE = 1000; // Performance limit
 const LINE_SIMILARITY_THRESHOLD = 0.8; // How many lines must be similar overall
+const TOP_SIMILARITY_THRESHOLD = 0.85; // Show only the most similar patterns
+const MAX_SIMILAR_RESULTS = 5; // Show maximum of 5 most similar patterns
 
 export class CodeSimilarityDetector {
   constructor(workingDirectory, options = {}) {
@@ -204,7 +206,13 @@ export class CodeSimilarityDetector {
       }
     }
 
-    return similarities;
+    // Filter to show only the most similar patterns
+    const filteredSimilarities = similarities.filter(sim => sim.similarity >= TOP_SIMILARITY_THRESHOLD);
+
+    // Sort by similarity (highest first) and limit to top results
+    return filteredSimilarities
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, MAX_SIMILAR_RESULTS);
   }
 
   calculateSimilarity(lines1, lines2) {
@@ -279,24 +287,24 @@ export function formatSimilarityOutput(result) {
   output += `📊 Analysis Summary:\n`;
   output += `   Files processed: ${result.summary.filesProcessed}\n`;
   output += `   Code chunks analyzed: ${result.summary.chunksAnalyzed}\n`;
-  output += `   Similar pairs found: ${result.summary.similarPairsFound}\n`;
+  output += `   High-similarity patterns found: ${result.summary.similarPairsFound}\n`;
   output += `   Processing time: ${result.summary.processingTime}ms\n`;
 
   if (result.similarities.length === 0) {
-    output += '\n✅ No significant code similarities found.\n';
+    output += '\n✅ No high-similarity code patterns found (threshold: 85%).\n';
     return output;
   }
 
-  output += `\n🔍 Similar Code Patterns (${result.similarities.length}):\n`;
+  output += `\n🔍 Top Similar Code Patterns (${result.similarities.length} most similar):\n`;
   output += '='.repeat(60) + '\n';
 
   result.similarities.forEach((similarity, index) => {
-    output += `\n${index + 1}. Similarity: ${(similarity.similarity * 100).toFixed(1)}%\n`;
-    output += `   File 1: ${similarity.chunk1.file} (lines ${similarity.chunk1.startLine}-${similarity.chunk1.endLine})\n`;
-    output += `   File 2: ${similarity.chunk2.file} (lines ${similarity.chunk2.startLine}-${similarity.chunk2.endLine})\n`;
-    output += `   Sample from file 1:\n`;
+    output += `\n${index + 1}. ${(similarity.similarity * 100).toFixed(1)}% Similar\n`;
+    output += `   📄 ${similarity.chunk1.file} (lines ${similarity.chunk1.startLine}-${similarity.chunk1.endLine})\n`;
+    output += `   📄 ${similarity.chunk2.file} (lines ${similarity.chunk2.startLine}-${similarity.chunk2.endLine})\n`;
+    output += `   💡 Code sample from file 1:\n`;
     output += `   ${similarity.sampleCode1.replace(/\n/g, '\n   ')}\n`;
-    output += `   Sample from file 2:\n`;
+    output += `   💡 Code sample from file 2:\n`;
     output += `   ${similarity.sampleCode2.replace(/\n/g, '\n   ')}\n`;
     output += `   ${'-'.repeat(40)}\n`;
   });
