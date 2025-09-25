@@ -1,7 +1,7 @@
 {
   "name": "mcp-glootie",
-  "version": "3.3.0",
-  "description": "MCP Glootie v3.3.0 - Multi-language development toolkit with async execution, vector embeddings, and intelligent error detection.",
+  "version": "3.4.0",
+  "description": "MCP Glootie v3.4.0 - Multi-language development toolkit with optimized execution, vector embeddings, and cross-tool status sharing.",
   "main": "src/index.js",
   "type": "module",
   "bin": {
