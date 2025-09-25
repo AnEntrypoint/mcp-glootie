@@ -1,7 +1,7 @@
 {
   "name": "mcp-glootie",
-  "version": "3.2.23",
-  "description": "MCP Glootie v3.2.0 - Multi-language development toolkit with intelligent error detection and troubleshooting guidance.",
+  "version": "3.3.0",
+  "description": "MCP Glootie v3.3.0 - Multi-language development toolkit with async execution, vector embeddings, and intelligent error detection.",
   "main": "src/index.js",
   "type": "module",
   "bin": {
@@ -19,7 +19,8 @@
     "@ast-grep/napi-linux-arm64-gnu": "^0.39.5",
     "@modelcontextprotocol/sdk": "^1.11.0",
     "@xenova/transformers": "^2.17.2",
-    "ignore": "^7.0.5"
+    "ignore": "^7.0.5",
+    "uuid": "^9.0.1"
   },
   "engines": {
     "node": ">=16.0.0"
