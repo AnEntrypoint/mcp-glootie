@@ -5,6 +5,7 @@ import path from 'path';
 import os from 'os';
 import { workingDirectoryContext, createToolContext } from '../core/working-directory-context.js';
 import { suppressConsoleOutput } from '../core/console-suppression.js';
+import { executionState, shouldExecuteAsync, addExecutionStatusToResponse } from '../core/execution-state.js';
 
 
 
@@ -610,6 +611,16 @@ export const executionTools = [
       const query = code || commands || '';
 
       try {
+        // Start execution tracking for all operations
+        const execution = executionState.startExecution({
+          type: 'execute',
+          code,
+          commands,
+          runtime,
+          workingDirectory: effectiveWorkingDirectory,
+          timeout
+        });
+
         let result;
         if (code) {
           let targetRuntime = runtime === "auto" ? "nodejs" : runtime;
@@ -623,7 +634,12 @@ export const executionTools = [
           }
 
           try {
+            const executionStart = Date.now();
             result = await executeWithRuntimeValidation(code, targetRuntime, { workingDirectory, timeout });
+            const executionDuration = Date.now() - executionStart;
+
+            // Complete execution (duration-based logic for cross-tool sharing)
+            executionState.completeExecution(execution.id, result);
           } catch (executionError) {
             if (targetRuntime === 'bash') {
               try {
@@ -644,11 +660,17 @@ export const executionTools = [
                 executionTimeMs: 0
               };
             }
+            executionState.failExecution(execution.id, executionError);
           }
           result = enhanceExecutionResult(result, code, targetRuntime, workingDirectory);
         } else if (commands) {
           try {
+            const executionStart = Date.now();
             result = await executeWithRuntimeValidation(commands, 'bash', { workingDirectory, timeout });
+            const executionDuration = Date.now() - executionStart;
+
+            // Complete execution
+            executionState.completeExecution(execution.id, result);
           } catch (executionError) {
             result = {
               success: false,
@@ -656,6 +678,7 @@ export const executionTools = [
               stderr: `Command execution failed: ${executionError.message}`,
               executionTimeMs: 0
             };
+            executionState.failExecution(execution.id, executionError);
           }
           result = enhanceExecutionResult(result, commands, 'bash', workingDirectory);
         } else {
@@ -676,6 +699,9 @@ export const executionTools = [
 
 
         await workingDirectoryContext.updateContext(effectiveWorkingDirectory, 'execute', toolContext);
+
+        // Clean up old executions
+        executionState.cleanup();
 
         return result;
       } catch (error) {
