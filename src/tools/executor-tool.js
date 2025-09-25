@@ -576,7 +576,7 @@ export { generateExecutionInsights };
 export const executionTools = [
   {
     name: "execute",
-    description: "TEST CODE IDEAS BEFORE IMPLEMENTING THEM - Execute code snippets in any languages (JS/TS, Go, Rust, Python, C, C++) with automatic runtime detection. test your hypotheses in code before implmenting, validating your approaches, prototype functions, debug issues. Use this to analyse all important 'what if' scenarios before editing files.",
+    description: "TEST CODE IDEAS BEFORE IMPLEMENTING THEM - Execute code snippets in any languages (JS/TS, Go, Rust, Python, C, C++) with automatic runtime detection. test your hypotheses in code before implmenting, validating your approaches, prototype functions, debug issues. Use this to analyse all important 'what if' scenarios before editing files. Make sure your code produces the ideal informative outputs so that you can easily understand what happened during execution",
     inputSchema: {
       type: "object",
       properties: {
