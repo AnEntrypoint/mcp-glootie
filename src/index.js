@@ -542,7 +542,7 @@ function runContextInitialization() {
   const workingDir = process.cwd();
   const caveats = formatCaveatsForDisplay();
 
-  return `MCP Glootie v3.4.15 Initialized
+  return `MCP Glootie v3.4.16 Initialized
 
 Working Directory: ${workingDir}
 Tools Available: execute, searchcode, ast_tool, caveat${caveats}`;
