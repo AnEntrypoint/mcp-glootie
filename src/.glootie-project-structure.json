@@ -1,0 +1,63 @@
+{
+  "projectType": "node-library",
+  "framework": null,
+  "languages": [
+    "json",
+    "javascript",
+    "unknown"
+  ],
+  "buildTools": [],
+  "packageManagers": [],
+  "testingFrameworks": [],
+  "dependencies": [],
+  "devDependencies": [],
+  "structure": {
+    "directories": [
+      "core",
+      "tools"
+    ],
+    "files": [
+      ".glootie-project-structure.json",
+      "connection-manager.js",
+      "console-suppression.js",
+      "cross-tool-context.js",
+      "error-handling.js",
+      "execution-state.js",
+      "file-analysis-tracker.js",
+      "ignore-manager.js",
+      "index.js",
+      "mcp-pagination.js",
+      "mcp-tools.js",
+      "project-intelligence.js",
+      "shared-utils.js",
+      "simple-linter.js",
+      "utilities.js",
+      "working-directory-context.js",
+      "index.js.backup",
+      "ast-tool.js",
+      "code-similarity-detector.js",
+      "executor-tool.js",
+      "vector-tool.js"
+    ],
+    "configFiles": [
+      ".glootie-project-structure.json"
+    ]
+  },
+  "patterns": {
+    "hasTypeScript": false,
+    "hasTests": false,
+    "hasSrcDir": false,
+    "hasPublicDir": false,
+    "monorepo": false,
+    "hasDocker": false,
+    "hasCI": false
+  },
+  "recommendations": [
+    "💡 Consider adding TypeScript for better type safety",
+    "🧪 Consider adding tests for better code quality",
+    "🔧 Consider adding a build tool like Vite or Webpack",
+    "🐳 Consider adding Docker for containerization",
+    "🔄 Consider adding CI/CD pipeline for automation"
+  ],
+  "lastAnalyzed": 1758878986898
+}

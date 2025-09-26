@@ -115,9 +115,9 @@ temp/
 tmp/
 
 # Claude specific
-.claude/
+glootie/.claude/
 .thoughts/
-results/
+glootie/results/
 
 # Search index files
 code_search_index/
