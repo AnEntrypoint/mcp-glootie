@@ -361,9 +361,14 @@ export class CrossToolContext {
     startTime = Date.now(),
     args = {}
   } = {}) {
-    // Check for duplicates
-    if (this.isDuplicate(toolName, workingDirectory, query, args)) {
-      throw new Error(`Duplicate operation suppressed: ${toolName}`);
+    // Check for duplicates - only for expensive operations
+    if (this.isDuplicate(toolName, workingDirectory, query, args) &&
+        ['searchcode', 'ast_tool'].includes(toolName)) {
+      // Silently return cached result instead of throwing error
+      const cachedResult = this.getCachedResult(toolName, workingDirectory, this.createOperationSignature(toolName, workingDirectory, query, args));
+      if (cachedResult) {
+        return cachedResult;
+      }
     }
 
     const session = {
