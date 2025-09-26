@@ -1,7 +1,7 @@
 {
   "name": "mcp-glootie",
-  "version": "3.4.13",
-  "description": "MCP Glootie v3.4.13 - Multi-language development toolkit with optimized execution, vector embeddings, cross-tool status sharing, robust AST error handling, automatic pattern fixing, proper initialization context, AST crash prevention, optimized initialization timing, refined code similarity detection, simplified initialization tracking, smart file analysis, enhanced tool descriptions, improved MCP stability, and organized directory structure.",
+  "version": "3.4.15",
+  "description": "MCP Glootie v3.4.15 - Multi-language development toolkit with optimized execution, vector embeddings, cross-tool status sharing, robust AST error handling, automatic pattern fixing, proper initialization context, AST crash prevention, optimized initialization timing, refined code similarity detection, simplified initialization tracking, smart file analysis, enhanced tool descriptions, improved MCP stability, organized directory structure, comprehensive caveat management, and optimized performance.",
   "main": "src/index.js",
   "type": "module",
   "bin": {

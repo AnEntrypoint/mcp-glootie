@@ -407,10 +407,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const result = await tool.handler(args);
 
 
-        const lintingOutput = await lintGitChanges();
+    const lintingOutput = await lintGitChanges();
 
     // Only run similarity detection for tools that modify files
-    const similarityOutput = (toolName === 'execute' || toolName === 'ast_tool')
+    const similarityOutput = (name === 'execute' || name === 'ast_tool')
       ? await detectCodeSimilarity()
       : '';
 
