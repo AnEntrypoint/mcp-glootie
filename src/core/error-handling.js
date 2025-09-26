@@ -96,14 +96,34 @@ export class ToolErrorHandler {
     this.toolName = toolName;
   }
   handleError(error, context = {}) {
+    // Handle null/undefined errors
+    if (!error) {
+      return new ToolError(
+        'Unknown error occurred',
+        'UNKNOWN_ERROR',
+        this.toolName,
+        false,
+        ['No error details available']
+      );
+    }
+
+    // Handle ToolError instances
     if (error instanceof ToolError) {
-      if (error instanceof ToolError) {
-        if (error.tool === 'unknown') {
-          error.tool = this.toolName;
-        }
-        return error;
+      if (error.tool === 'unknown') {
+        error.tool = this.toolName;
       }
-      if (error.code === 'ENOENT' || error.message.includes('no such file')) {
+      return error;
+    }
+
+    // Handle malformed error objects
+    if (typeof error === 'object' && error !== null) {
+      const message = error.message || 'Unknown error occurred';
+      const code = error.code || 'UNKNOWN_ERROR';
+
+      // Safely check message properties
+      const messageStr = String(message || '');
+
+      if (code === 'ENOENT' || messageStr.includes('no such file')) {
         return new ToolError(
           `File or directory not found: ${error.message}`,
           'FILE_NOT_FOUND',
@@ -116,32 +136,32 @@ export class ToolErrorHandler {
           ]
         );
       }
-      if (error.code === 'EACCES' || error.message.includes('permission denied')) {
+      if (error.code === 'EACCES' || messageStr.includes('permission denied')) {
         return new PermissionError(
           `Permission denied: ${error.message}`,
           this.toolName
         );
       }
-      if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+      if (error.code === 'ETIMEDOUT' || messageStr.includes('timeout')) {
         return new TimeoutError(
           `Operation timed out: ${error.message}`,
           this.toolName,
           context.timeout || 0
         );
       }
-      if (error.code === 'ENOTDIR' || error.message.includes('not a directory')) {
+      if (error.code === 'ENOTDIR' || messageStr.includes('not a directory')) {
         return new ValidationError(
           `Invalid directory path: ${error.message}`,
           this.toolName
         );
       }
-      if (error.code === 'EMFILE' || error.code === 'ENFILE' || error.message.includes('too many files')) {
+      if (error.code === 'EMFILE' || error.code === 'ENFILE' || messageStr.includes('too many files')) {
         return new ResourceError(
           `Resource limit exceeded: ${error.message}`,
           this.toolName
         );
       }
-      if (error.message.includes('network') || error.message.includes('connection')) {
+      if (messageStr.includes('network') || messageStr.includes('connection')) {
         return new NetworkError(
           `Network error: ${error.message}`,
           this.toolName
@@ -159,6 +179,15 @@ export class ToolErrorHandler {
         ]
       )
     }
+
+    // Handle non-object errors (strings, numbers, etc.)
+    return new ToolError(
+      String(error || 'Unknown error occurred'),
+      'UNKNOWN_ERROR',
+      this.toolName,
+      false,
+      ['Try the operation again', 'Check the console for more details']
+    );
   }
   async withTimeout(operation, timeoutMs = 30000) {
     return new Promise((resolve, reject) => {
@@ -214,7 +243,20 @@ export function withErrorHandling(handler, toolName) {
       return await handler(args);
     } catch (error) {
       const toolError = errorHandler.handleError(error);
-      console.error(`Error in ${toolName}:`, toolError.toJSON());
+
+      // Safely log error details without using toJSON which might fail
+      try {
+        console.error(`Error in ${toolName}:`, {
+          code: toolError.code,
+          message: toolError.message,
+          tool: toolError.tool,
+          timestamp: toolError.timestamp,
+          retryable: toolError.retryable,
+          suggestions: toolError.suggestions
+        });
+      } catch (logError) {
+        console.error(`Error in ${toolName}:`, toolError.message || 'Unknown error');
+      }
       
       const errorText = [
         `${toolError.code}: ${toolError.message}`,
@@ -313,7 +355,20 @@ export function createAdvancedToolHandler(handler, toolName, options = {}) {
       return await operation();
     } catch (error) {
       const toolError = errorHandler.handleError(error);
-      console.error(`Error in ${toolName}:`, toolError.toJSON());
+
+      // Safely log error details without using toJSON which might fail
+      try {
+        console.error(`Error in ${toolName}:`, {
+          code: toolError.code,
+          message: toolError.message,
+          tool: toolError.tool,
+          timestamp: toolError.timestamp,
+          retryable: toolError.retryable,
+          suggestions: toolError.suggestions
+        });
+      } catch (logError) {
+        console.error(`Error in ${toolName}:`, toolError.message || 'Unknown error');
+      }
       const errorText = [
         `${toolError.code}: ${toolError.message}`,
         '',

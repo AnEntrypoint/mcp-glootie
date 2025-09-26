@@ -1,317 +1,99 @@
-import fs from 'fs/promises';
-import path from 'path';
-class WorkingDirectoryContext {
+// Enhanced context system with project intelligence
+import { projectIntelligence } from './project-intelligence.js';
+
+export class WorkingDirectoryContext {
   constructor() {
-    this.contexts = new Map(); 
-    this.contextDir = '.claude-context';
-    this.contextFile = 'tool-context.json';
-    this.maxContextAge = 30 * 60 * 1000; 
-    this.maxContextSize = 100 * 1024; 
+    this.projectCache = new Map();
   }
-  
+
   async getContext(workingDirectory) {
-    const normalizedDir = path.resolve(workingDirectory);
-    if (this.contexts.has(normalizedDir)) {
-      const context = this.contexts.get(normalizedDir);
-      
-      if (Date.now() - context.lastAccessed < this.maxContextAge) {
-        context.lastAccessed = Date.now();
-        return context;
-      }
-    }
-    
-    const context = await this.loadContext(normalizedDir);
-    this.contexts.set(normalizedDir, context);
-    return context;
+    // Get project intelligence
+    const projectSummary = projectIntelligence.getProjectSummary(workingDirectory);
+
+    return {
+      workingDirectory,
+      data: {},
+      metadata: {
+        totalToolCalls: 0,
+        commonPatterns: [],
+        preferredFiles: [],
+        lastModified: Date.now()
+      },
+      lastAccessed: Date.now(),
+      persistent: false,
+      projectIntelligence: projectSummary
+    };
   }
-  
+
   async loadContext(workingDirectory) {
-    const contextPath = this.getContextPath(workingDirectory);
-    try {
-      const data = await fs.readFile(contextPath, 'utf8');
-      const parsed = JSON.parse(data);
-      
-      this.cleanupOldData(parsed);
-      return {
-        workingDirectory,
-        data: parsed.data || {},
-        metadata: parsed.metadata || {
-          totalToolCalls: 0,
-          commonPatterns: [],
-          preferredFiles: [],
-          lastModified: Date.now()
-        },
-        lastAccessed: Date.now(),
-        persistent: true
-      };
-    } catch (error) {
-      
-      return {
-        workingDirectory,
-        data: {},
-        metadata: {
-          totalToolCalls: 0,
-          commonPatterns: [],
-          preferredFiles: [],
-          lastModified: Date.now()
-        },
-        lastAccessed: Date.now(),
-        persistent: false
-      };
-    }
+    return this.getContext(workingDirectory);
   }
-  
+
   async saveContext(workingDirectory, context) {
-    try {
-      const contextPath = this.getContextPath(workingDirectory);
-      const contextDir = path.dirname(contextPath);
-      
-      await fs.mkdir(contextDir, { recursive: true });
-      
-      const storageData = {
-        version: '1.0',
-        workingDirectory,
-        data: context.data,
-        metadata: {
-          ...context.metadata,
-          lastModified: Date.now()
-        }
-      };
-      await fs.writeFile(contextPath, JSON.stringify(storageData, null, 2));
-      context.persistent = true;
-    } catch (error) {
-      console.warn(`Failed to save context for ${workingDirectory}:`, error);
-    }
+    // No-op - don't save context
   }
-  
+
   getContextPath(workingDirectory) {
-    return path.join(workingDirectory, this.contextDir, this.contextFile);
+    // Return a path that won't be used
+    return '/dev/null';
   }
-  
+
   async updateContext(workingDirectory, toolName, toolData) {
-    const context = await this.getContext(workingDirectory);
-    
-    context.metadata.totalToolCalls++;
-    context.metadata.lastModified = Date.now();
-    
-    if (!context.data.toolUsage) {
-      context.data.toolUsage = {};
-    }
-    if (!context.data.toolUsage[toolName]) {
-      context.data.toolUsage[toolName] = { count: 0, lastUsed: 0, files: [] };
-    }
-    context.data.toolUsage[toolName].count++;
-    context.data.toolUsage[toolName].lastUsed = Date.now();
-    
-    if (toolData) {
-      if (toolData.filesAccessed) {
-        context.data.toolUsage[toolName].files.push(...toolData.filesAccessed);
-        
-        this.updatePreferredFiles(context, toolData.filesAccessed);
-      }
-      if (toolData.patterns) {
-        this.updatePatterns(context, toolData.patterns);
-      }
-      if (toolData.insights && Array.isArray(toolData.insights) && toolData.insights.length > 0) {
-        if (!context.data.insights) {
-          context.data.insights = [];
-        }
-        context.data.insights.push(...toolData.insights);
-      }
-    }
-    
-    if (JSON.stringify(context).length > this.maxContextSize) {
-      this.cleanupContextData(context);
-    }
-    
-    await this.saveContext(workingDirectory, context);
-    return context;
+    // No-op - don't update context
+    return await this.getContext(workingDirectory);
   }
-  
+
   async getToolContext(workingDirectory, toolName, query) {
     const context = await this.getContext(workingDirectory);
-    const toolContext = {
+
+    // Get detailed project analysis for specific tools
+    let detailedAnalysis = null;
+    if (['searchcode', 'ast_tool', 'execute'].includes(toolName)) {
+      detailedAnalysis = projectIntelligence.analyzeProject(workingDirectory);
+    }
+
+    return {
       workingDirectory,
       toolName,
       query,
-      relevantFiles: this.getRelevantFiles(context, query),
-      commonPatterns: context.metadata.commonPatterns,
-      previousUsage: context.data.toolUsage?.[toolName] || null,
-      insights: context.data.insights || [],
+      relevantFiles: [],
+      commonPatterns: [],
+      previousUsage: null,
+      insights: [],
       sessionData: {
-        totalToolCalls: context.metadata.totalToolCalls,
-        lastAccessed: context.lastAccessed
-      }
-    };
-    return toolContext;
-  }
-  
-  getRelevantFiles(context, query) {
-    const allFiles = new Set();
-    
-    Object.values(context.data.toolUsage || {}).forEach(tool => {
-      tool.files.forEach(file => allFiles.add(file));
-    });
-    
-    context.metadata.preferredFiles.forEach(file => allFiles.add(file.path));
-    
-    const filesArray = Array.from(allFiles);
-    return this.prioritizeFiles(filesArray, query);
-  }
-  
-  prioritizeFiles(files, query) {
-    if (!query || typeof query !== 'string') return files;
-    const keywords = this.extractKeywords(query.toLowerCase());
-    return files.sort((a, b) => {
-      let scoreA = 0;
-      let scoreB = 0;
-      keywords.forEach(keyword => {
-        if (a.toLowerCase().includes(keyword)) scoreA++;
-        if (b.toLowerCase().includes(keyword)) scoreB++;
-      });
-      return scoreB - scoreA;
-    });
-  }
-  
-  extractKeywords(query) {
-    if (!query || typeof query !== 'string') return [];
-    const stopWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'];
-    return query
-      .toLowerCase()
-      .split(/\W+/)
-      .filter(word => word.length > 2 && !stopWords.includes(word));
-  }
-  
-  updatePreferredFiles(context, files) {
-    files.forEach(file => {
-      const existing = context.metadata.preferredFiles.find(f => f.path === file);
-      if (existing) {
-        existing.count++;
-        existing.lastUsed = Date.now();
-      } else {
-        context.metadata.preferredFiles.push({
-          path: file,
-          count: 1,
-          lastUsed: Date.now()
-        });
-      }
-    });
-    
-    context.metadata.preferredFiles.sort((a, b) => b.count - a.count);
-    context.metadata.preferredFiles = context.metadata.preferredFiles.slice(0, 20);
-  }
-  
-  updatePatterns(context, patterns) {
-    patterns.forEach(pattern => {
-      const existing = context.metadata.commonPatterns.find(p => p.pattern === pattern);
-      if (existing) {
-        existing.count++;
-        existing.lastUsed = Date.now();
-      } else {
-        context.metadata.commonPatterns.push({
-          pattern,
-          count: 1,
-          lastUsed: Date.now()
-        });
-      }
-    });
-    
-    context.metadata.commonPatterns.sort((a, b) => b.count - a.count);
-    context.metadata.commonPatterns = context.metadata.commonPatterns.slice(0, 10);
-  }
-  
-  cleanupOldData(parsed) {
-    const now = Date.now();
-    const maxAge = 7 * 24 * 60 * 60 * 1000; 
-    
-    if (parsed.data && parsed.data.toolUsage) {
-      Object.entries(parsed.data.toolUsage).forEach(([toolName, toolData]) => {
-        if (now - toolData.lastUsed > maxAge) {
-          delete parsed.data.toolUsage[toolName];
-        }
-      });
-    }
-    
-    if (parsed.data && parsed.data.insights) {
-      
-      
-    }
-  }
-  
-  cleanupContextData(context) {
-    
-    if (context.data.toolUsage) {
-      Object.entries(context.data.toolUsage).forEach(([toolName, toolData]) => {
-        
-        toolData.files = toolData.files.slice(-50);
-      });
-    }
-    
-    if (context.data.insights) {
-      context.data.insights = context.data.insights.slice(-100);
-    }
-    
-    context.metadata.preferredFiles = context.metadata.preferredFiles.slice(0, 10);
-  }
-  
-  async getContextStats(workingDirectory) {
-    try {
-      const context = await this.getContext(workingDirectory);
-      const contextPath = this.getContextPath(workingDirectory);
-      let fileSize = 0;
-      try {
-        const stats = await fs.stat(contextPath);
-        fileSize = stats.size;
-      } catch (error) {
-        
-      }
-      return {
-        workingDirectory,
-        persistent: context.persistent,
-        fileSize,
-        totalToolCalls: context.metadata.totalToolCalls,
-        toolsUsed: Object.keys(context.data.toolUsage || {}).length,
-        totalFiles: context.metadata.preferredFiles.length,
-        patterns: context.metadata.commonPatterns.length,
-        insights: context.data.insights?.length || 0,
-        lastModified: context.metadata.lastModified
-      };
-    } catch (error) {
-      return {
-        workingDirectory,
-        persistent: false,
-        fileSize: 0,
         totalToolCalls: 0,
-        toolsUsed: 0,
-        totalFiles: 0,
-        patterns: 0,
-        insights: 0,
-        lastModified: null
-      };
-    }
+        lastAccessed: Date.now()
+      },
+      projectIntelligence: context.projectIntelligence,
+      detailedProjectAnalysis: detailedAnalysis
+    };
   }
-  
+
+  async getContextStats(workingDirectory) {
+    return {
+      workingDirectory,
+      persistent: false,
+      fileSize: 0,
+      totalToolCalls: 0,
+      toolsUsed: 0,
+      totalFiles: 0,
+      patterns: 0,
+      insights: 0,
+      lastModified: null
+    };
+  }
+
   async clearContext(workingDirectory) {
-    const normalizedDir = path.resolve(workingDirectory);
-    this.contexts.delete(normalizedDir);
-    try {
-      const contextPath = this.getContextPath(workingDirectory);
-      await fs.unlink(contextPath);
-    } catch (error) {
-      
-    }
+    // No-op
   }
-  
+
   cleanupStaleContexts() {
-    const now = Date.now();
-    for (const [workingDirectory, context] of this.contexts) {
-      if (now - context.lastAccessed > this.maxContextAge) {
-        this.contexts.delete(workingDirectory);
-      }
-    }
+    // No-op
   }
 }
+
 export const workingDirectoryContext = new WorkingDirectoryContext();
+
 export function createToolContext(toolName, workingDirectory, query, result) {
   return {
     toolName,
@@ -325,54 +107,19 @@ export function createToolContext(toolName, workingDirectory, query, result) {
     insights: result.insights || []
   };
 }
+
 export function withContext(toolHandler, toolName) {
+  // Simply wrap the tool handler without adding context functionality
   return async (args) => {
-    const workingDirectory = args.workingDirectory || process.cwd();
-    const query = args.query || args.pattern || args.code || '';
     try {
-      
-      const context = await workingDirectoryContext.getToolContext(workingDirectory, toolName, query);
-      
-      const result = await toolHandler(args);
-      
-      const toolContext = createToolContext(toolName, workingDirectory, query, result);
-      
-      await workingDirectoryContext.updateContext(workingDirectory, toolName, toolContext);
-      
-      if (result && result.content && result.content[0] && result.content[0].type === 'text') {
-        const contextInfo = getContextSummary(context);
-        result.content[0].text = contextInfo + result.content[0].text;
-      }
-      return result;
+      return await toolHandler(args);
     } catch (error) {
-      
-      const errorContext = createToolContext(toolName, workingDirectory, query, {
-        error: error.message,
-        duration: 0
-      });
-      await workingDirectoryContext.updateContext(workingDirectory, toolName, errorContext);
       throw error;
     }
   };
 }
-function getContextSummary(context) {
-  if (!context || !context.sessionData) {
-    return '';
-  }
-  const lines = [];
-  lines.push(`📁 Context: ${context.workingDirectory}`);
-  lines.push(`🔧 Tool: ${context.toolName}`);
-  lines.push(`📊 Session: ${context.sessionData.totalToolCalls} tool calls`);
-  if (context.previousUsage) {
-    lines.push(`📈 Used ${context.previousUsage.count} times before`);
-  }
-  if (context.relevantFiles.length > 0) {
-    lines.push(`📄 ${context.relevantFiles.length} relevant files available`);
-  }
-  if (context.insights.length > 0) {
-    lines.push(`💡 ${context.insights.length} insights from previous tasks`);
-  }
-  lines.push(''); 
-  return lines.join('\n') + '\n';
+
+export function getContextSummary(context) {
+  // Return empty string since context is disabled
+  return '';
 }
-export { getContextSummary };

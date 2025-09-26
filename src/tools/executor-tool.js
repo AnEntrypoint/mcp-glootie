@@ -1,11 +1,14 @@
 import { spawn, execSync } from 'child_process';
-import { validateWorkingDirectory, createToolResponse } from '../core/utilities.js';
+import { validateWorkingDirectory, createToolResponse, validateRequiredParams as validateRequiredParamsUtil } from '../core/utilities.js';
 import { writeFileSync, chmodSync, unlinkSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import { workingDirectoryContext, createToolContext } from '../core/working-directory-context.js';
 import { suppressConsoleOutput } from '../core/console-suppression.js';
 import { executionState, shouldExecuteAsync, addExecutionStatusToResponse } from '../core/execution-state.js';
+import { ToolError, ToolErrorHandler } from '../core/error-handling.js';
+import { withConnectionManagement, getGlobalConnectionManager } from '../core/connection-manager.js';
+import { withCrossToolAwareness, addToolMetadata } from '../core/cross-tool-context.js';
 
 
 
@@ -15,23 +18,11 @@ function getContextSummary(context) {
   }
 
   const lines = [];
-  lines.push(`📁 Context: ${context.workingDirectory}`);
-  lines.push(`🔧 Tool: ${context.toolName}`);
-  lines.push(`📊 Session: ${context.sessionData.totalToolCalls} tool calls`);
 
-  if (context.previousUsage) {
-    lines.push(`📈 Used ${context.previousUsage.count} times before`);
+  // Only include practically useful information
+  if (context.workingDirectory !== process.cwd()) {
+    lines.push(`Working directory: ${context.workingDirectory}`);
   }
-
-  if (context.relevantFiles.length > 0) {
-    lines.push(`📄 ${context.relevantFiles.length} relevant files available`);
-  }
-
-  if (context.insights.length > 0) {
-    lines.push(`💡 ${context.insights.length} insights from previous tasks`);
-  }
-
-  lines.push(''); 
 
   return lines.join('\n') + '\n';
 }
@@ -45,59 +36,60 @@ function createExecutionErrorResponse(error, startTime, context = {}) {
   };
 }
 
+// Enhance execution result with error analysis and actionable suggestions
+function enhanceExecutionResult(result, code, runtime, workingDirectory) {
+  if (!result || result.success) {
+    return result;
+  }
+
+  // Perform error analysis for syntax errors
+  const errorAnalysis = analyzeExecutionError(result.stderr, result.stdout, runtime, code);
+
+  // Create enhanced error response
+  const enhancedResult = {
+    ...result,
+    _errorAnalysis: errorAnalysis,
+    _requiresTroubleshooting: errorAnalysis.isSyntaxError || !result.success,
+    _suggestions: errorAnalysis.suggestions || [],
+    _confidence: errorAnalysis.confidence
+  };
+
+  // If this is a syntax error, provide detailed guidance
+  if (errorAnalysis.isSyntaxError) {
+    enhancedResult.error = `🐛 SYNTAX ERROR DETECTED: ${errorAnalysis.specificError}`;
+    enhancedResult._troubleshootingRequired = true;
+    enhancedResult._nextSteps = [
+      'Review the code syntax carefully',
+      'Fix the identified syntax issues',
+      'Test the corrected code again',
+      'Use language-specific documentation if needed'
+    ];
+  }
+
+  return enhancedResult;
+}
+
 
 function generateExecutionInsights(result, query, workingDirectory) {
   const insights = [];
 
-  
   if (result.success) {
-    insights.push(`Execution successful: ${query}`);
-
-    
     if (result.filesAccessed && result.filesAccessed.length > 0) {
       insights.push(`Modified ${result.filesAccessed.length} files: ${result.filesAccessed.slice(0, 3).join(', ')}${result.filesAccessed.length > 3 ? '...' : ''}`);
     }
 
-    
     if (result.executionTimeMs) {
-      if (result.executionTimeMs > 5000) {
-        insights.push(`Slow execution (${result.executionTimeMs}ms) - consider optimization`);
-      } else if (result.executionTimeMs < 100) {
-        insights.push(`Fast execution (${result.executionTimeMs}ms)`);
-      }
+      insights.push(`Execution time: ${result.executionTimeMs}ms`);
     }
 
-    
     if (result.stdout && result.stdout.length > 0) {
       const lines = result.stdout.split('\n').length;
       insights.push(`Generated ${lines} lines of output`);
     }
-
-    
-    if (result.success && query.includes('test')) {
-      insights.push('Consider running additional tests or checking test coverage');
-    }
-
-    if (result.success && (query.includes('install') || query.includes('build'))) {
-      insights.push('Verify installation/build completed successfully');
-    }
-
-  } else {
-    insights.push(`Execution failed: ${result.error || 'Unknown error'}`);
-
-    
-    if (result.error?.includes('ENOENT')) {
-      insights.push('Command not found - check installation or PATH');
-    } else if (result.error?.includes('EACCES')) {
-      insights.push('Permission denied - check file permissions');
-    } else if (result.error?.includes('timeout')) {
-      insights.push('Operation timed out - consider increasing timeout or optimizing');
-    }
   }
 
-  
   if (workingDirectory !== process.cwd()) {
-    insights.push(`Executed in: ${workingDirectory}`);
+    insights.push(`Working directory: ${workingDirectory}`);
   }
 
   return insights;
@@ -123,36 +115,140 @@ function createTimeoutError(operation, timeoutMs, startTime) {
 function handleProcessError(error, command, startTime) {
   let errorMessage = 'Process execution failed';
   let errorContext = { command };
+  let suggestions = [];
 
   if (error.code === 'ENOENT') {
     errorMessage = `Command not found: ${command}`;
     errorContext.missingCommand = true;
+    suggestions = [
+      `Install ${command} using your package manager`,
+      `Check if ${command} is in your PATH`,
+      `Verify the command name is correct`
+    ];
   } else if (error.code === 'EACCES') {
     errorMessage = `Permission denied executing: ${command}`;
     errorContext.permissionDenied = true;
+    suggestions = [
+      `Check file permissions for ${command}`,
+      `Run with appropriate permissions`,
+      `Verify the command is executable`
+    ];
   } else if (error.signal) {
     errorMessage = `Process terminated with signal: ${error.signal}`;
     errorContext.signal = error.signal;
+    suggestions = [
+      `Process was killed by signal ${error.signal}`,
+      `Check for resource limits or timeouts`,
+      `Verify system resources are available`
+    ];
   } else if (error.code) {
     errorMessage = `Process failed with code: ${error.code}`;
     errorContext.exitCode = error.code;
+    suggestions = [
+      `Check the error output for details`,
+      `Verify the command syntax and arguments`,
+      `Check if all required dependencies are available`
+    ];
   }
 
-  return createExecutionErrorResponse(errorMessage, startTime, errorContext);
+  return {
+    ...createExecutionErrorResponse(errorMessage, startTime, errorContext),
+    suggestions,
+    requiresTroubleshooting: true
+  };
 }
 
-function validateRequiredParams(params, required, startTime) {
-  for (const param of required) {
-    if (!params[param]) {
-      return createExecutionErrorResponse(
-        `Parameter '${param}' is required`,
-        startTime,
-        { parameterError: true, parameter: param }
-      );
+// Enhanced syntax error detection and analysis
+function analyzeExecutionError(stderr, stdout, runtime, code) {
+  const analysis = {
+    isSyntaxError: false,
+    errorType: 'unknown',
+    specificError: null,
+    suggestions: [],
+    confidence: 0,
+    context: {}
+  };
+
+  const errorOutput = (stderr || stdout || '').toLowerCase();
+
+  // JavaScript/TypeScript syntax errors
+  if (['nodejs', 'deno'].includes(runtime)) {
+    if (errorOutput.includes('syntaxerror')) {
+      analysis.isSyntaxError = true;
+      analysis.errorType = 'syntax';
+      analysis.specificError = extractJavaScriptError(errorOutput);
+            analysis.confidence = 0.9;
     }
   }
-  return null;
+
+  // Python syntax errors
+  else if (runtime === 'python') {
+    if (errorOutput.includes('syntaxerror')) {
+      analysis.isSyntaxError = true;
+      analysis.errorType = 'syntax';
+      analysis.specificError = extractPythonError(errorOutput);
+            analysis.confidence = 0.9;
+    }
+  }
+
+  // Go compilation errors
+  else if (runtime === 'go') {
+    if (errorOutput.includes('syntax error') || errorOutput.includes('expected')) {
+      analysis.isSyntaxError = true;
+      analysis.errorType = 'syntax';
+      analysis.specificError = extractGoError(errorOutput);
+            analysis.confidence = 0.85;
+    }
+  }
+
+  // Rust compilation errors
+  else if (runtime === 'rust') {
+    if (errorOutput.includes('error:') && errorOutput.includes('expected')) {
+      analysis.isSyntaxError = true;
+      analysis.errorType = 'syntax';
+      analysis.specificError = extractRustError(errorOutput);
+            analysis.confidence = 0.85;
+    }
+  }
+
+  // C/C++ compilation errors
+  else if (['c', 'cpp'].includes(runtime)) {
+    if (errorOutput.includes('error:') && errorOutput.includes('expected')) {
+      analysis.isSyntaxError = true;
+      analysis.errorType = 'syntax';
+      analysis.specificError = extractCppError(errorOutput);
+            analysis.confidence = 0.85;
+    }
+  }
+
+  return analysis;
 }
+
+function extractJavaScriptError(errorOutput) {
+  const match = errorOutput.match(/syntaxerror:\s*(.+?)(?=\n|$)/i);
+  return match ? match[1].trim() : 'Unknown JavaScript syntax error';
+}
+
+function extractPythonError(errorOutput) {
+  const match = errorOutput.match(/syntaxerror:\s*(.+?)(?=\n|$)/i);
+  return match ? match[1].trim() : 'Unknown Python syntax error';
+}
+
+function extractGoError(errorOutput) {
+  const match = errorOutput.match(/syntax error:\s*(.+?)(?=\n|$)/i);
+  return match ? match[1].trim() : 'Unknown Go syntax error';
+}
+
+function extractRustError(errorOutput) {
+  const match = errorOutput.match(/error\[E\d+\]:\s*(.+?)(?=\n|$)/i);
+  return match ? match[1].trim() : 'Unknown Rust syntax error';
+}
+
+function extractCppError(errorOutput) {
+  const match = errorOutput.match(/error:\s*(.+?)(?=\n|$)/i);
+  return match ? match[1].trim() : 'Unknown C/C++ syntax error';
+}
+
 
 export async function executeProcess(command, args = [], options = {}) {
   const startTime = Date.now();
@@ -465,12 +561,7 @@ function createBashScript(commands) {
 }
 
 
-function validateRequiredParamsUtil(params, requiredParams) {
-  const missingParams = requiredParams.filter(param => !params[param]);
-  if (missingParams.length > 0) {
-    throw new Error(`Missing required parameters: ${missingParams.join(', ')}`);
-  }
-}
+// validateRequiredParamsUtil is now imported from utilities.js
 
 function validateExecutionContent(content, type) {
   if (!content || (typeof content !== 'string' && !Array.isArray(content))) {
@@ -576,13 +667,13 @@ export { generateExecutionInsights };
 export const executionTools = [
   {
     name: "execute",
-    description: "TEST CODE IDEAS BEFORE IMPLEMENTING THEM - Execute code snippets in any languages (JS/TS, Go, Rust, Python, C, C++) with automatic runtime detection. test your hypotheses in code before implmenting, validating your approaches, prototype functions, debug issues. Use this to analyse all important 'what if' scenarios before editing files. Make sure your code produces the ideal informative outputs so that you can easily understand what happened during execution",
+    description: "Execute code snippets in multiple languages (JS/TS, Go, Rust, Python, C, C++) with automatic runtime detection. Supports both code execution and bash commands.",
     inputSchema: {
       type: "object",
       properties: {
         workingDirectory: {
           type: "string",
-          description: "REQUIRED: Absolute path to working directory for execution."
+          description: "Path to working directory for execution."
         },
         code: {
           type: "string",
@@ -604,13 +695,23 @@ export const executionTools = [
       },
       required: ["workingDirectory"]
     },
-    handler: async ({ code, commands, workingDirectory, runtime = "auto", timeout = 120000 }) => {
-      
+    handler: withCrossToolAwareness(withConnectionManagement(async ({ code, commands, workingDirectory, runtime = "auto", timeout = 120000 }) => {
       const consoleRestore = suppressConsoleOutput();
-      const effectiveWorkingDirectory = workingDirectory || process.cwd();
+      const effectiveWorkingDirectory = workingDirectory;
       const query = code || commands || '';
 
       try {
+        // Validate required parameters
+        if (!workingDirectory) {
+          throw new ToolError(
+            'Working directory is required',
+            'MISSING_PARAMETER',
+            'execute',
+            false,
+            ['Provide absolute path to working directory', 'Check tool documentation']
+          );
+        }
+
         // Start execution tracking for all operations
         const execution = executionState.startExecution({
           type: 'execute',
@@ -688,22 +789,51 @@ export const executionTools = [
 
         const insights = generateExecutionInsights(result, query, effectiveWorkingDirectory);
 
+        // Format response with enhanced error information
+        let responseContent = result;
+
+        if (result._errorAnalysis && result._errorAnalysis.isSyntaxError) {
+          // Simple error response
+          responseContent = {
+            ...result,
+            content: [{ type: "text", text: result.error || result.stderr || 'Execution failed' }]
+          };
+        } else if (!result.success) {
+          // Simple error format
+          responseContent = {
+            ...result,
+            content: [{ type: "text", text: result.error || result.stderr || 'Execution failed' }]
+          };
+        } else if (!result.content) {
+          // Format successful execution or basic error
+          let outputText = '';
+
+          if (result.success) {
+            outputText = result.stdout || 'Execution successful';
+          } else {
+            outputText = result.error || result.stderr || 'Execution failed';
+          }
+
+          responseContent = {
+            ...result,
+            content: [{ type: "text", text: outputText }]
+          };
+        }
 
         const toolContext = createToolContext('execute', effectiveWorkingDirectory, query, {
-          ...result,
-          duration: result.executionTimeMs || 0,
-          filesAccessed: result.filesAccessed || [],
-          patterns: result.patterns || [],
+          ...responseContent,
+          duration: responseContent.executionTimeMs || 0,
+          filesAccessed: responseContent.filesAccessed || [],
+          patterns: responseContent.patterns || [],
           insights: insights
         });
-
 
         await workingDirectoryContext.updateContext(effectiveWorkingDirectory, 'execute', toolContext);
 
         // Clean up old executions
         executionState.cleanup();
 
-        return result;
+        return responseContent;
       } catch (error) {
 
         const errorContext = createToolContext('execute', effectiveWorkingDirectory, query, {
@@ -717,78 +847,13 @@ export const executionTools = [
           isError: true
         };
       } finally {
-        
+
         consoleRestore.restore();
       }
-    }
+    }, 'execute', {
+      maxRetries: 2,
+      retryDelay: 1000
+    }), 'execute')
   }
 ];
 
-function enhanceExecutionResult(result, code, runtime, workingDirectory) {
-  
-  if (result.content) {
-    return result;
-  }
-
-  
-  const stdout = result.stdout || '';
-  const stderr = result.stderr || '';
-  const hasError = !result.success || stderr.includes('Error') || stderr.includes('error') || stderr.includes('SyntaxError');
-
-  let enhancedContent = '';
-
-  if (result.success) {
-    enhancedContent += `✅ Execution successful (${result.executionTimeMs}ms)\n\n`;
-    if (stdout) {
-      enhancedContent += `📋 Output:\n${stdout}\n`;
-    }
-    if (stderr && !stderr.includes('Error') && !stderr.includes('error')) {
-      enhancedContent += `⚠️ Warnings:\n${stderr}\n`;
-    }
-  } else {
-    enhancedContent += `❌ Execution failed (${result.executionTimeMs}ms)\n\n`;
-    enhancedContent += `🔍 Error Analysis:\n`;
-    enhancedContent += `• Error: ${result.error}\n`;
-    if (stderr) {
-      enhancedContent += `• Details: ${stderr}\n`;
-    }
-    enhancedContent += `\n💡 Troubleshooting Steps:\n`;
-
-    
-    if (runtime === 'nodejs' || runtime === 'javascript') {
-      enhancedContent += generateJavaScriptTroubleshooting(code, stderr);
-    } else if (runtime === 'python') {
-      enhancedContent += generatePythonTroubleshooting(code, stderr);
-    } else if (runtime === 'bash') {
-      enhancedContent += generateBashTroubleshooting(code, stderr);
-    } else {
-      enhancedContent += generateGenericTroubleshooting(code, stderr);
-    }
-  }
-
-  
-  enhancedContent += `\n📊 Execution Summary:\n`;
-  enhancedContent += `• Runtime: ${runtime}\n`;
-  enhancedContent += `• Duration: ${result.executionTimeMs}ms\n`;
-
-  return {
-    content: [{ type: "text", text: enhancedContent }],
-    isError: hasError
-  };
-}
-
-function generateJavaScriptTroubleshooting(code, stderr) {
-  return stderr;
-}
-
-function generatePythonTroubleshooting(code, stderr) {
-  return stderr;
-}
-
-function generateBashTroubleshooting(code, stderr) {
-  return stderr;
-}
-
-function generateGenericTroubleshooting(code, stderr) {
-  return stderr;
-}

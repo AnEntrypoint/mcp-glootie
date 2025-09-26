@@ -143,11 +143,12 @@ export class ExecutionState {
 // Global instance
 export const executionState = new ExecutionState();
 
-// Middleware function to add execution status to tool responses
+// Middleware function to add execution status ONLY to execute tool responses
 export function addExecutionStatusToResponse(toolResponse, toolName) {
   const currentExecution = executionState.getCurrentExecution();
 
-  if (!currentExecution || currentExecution.type !== 'execute') {
+  // Only add execution status for execute tool responses
+  if (!currentExecution || currentExecution.type !== 'execute' || toolName !== 'execute') {
     return toolResponse;
   }
 
