@@ -4,8 +4,8 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSy
 import { join, dirname, basename } from 'path';
 import { execSync } from 'child_process';
 
-const ANALYSIS_METADATA_FILE = './.mcp-file-analysis-metadata.json';
-const METADATA_DIR = './.mcp-metadata';
+const ANALYSIS_METADATA_FILE = './glootie/.mcp-file-analysis-metadata.json';
+const METADATA_DIR = './glootie/.mcp-metadata';
 
 export class FileAnalysisTracker {
   constructor(workingDirectory) {
