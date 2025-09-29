@@ -434,11 +434,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       });
     }
 
-    // Run similarity detection non-blocking for tools that modify files
+    // Only run similarity detection for execute tool (file modifications) - NOT for search/ast tools
     let similarityOutput = '';
     try {
-      // Only run for tools that modify files, but don't block on the result
-      if (['execute', 'ast_tool', 'searchcode'].includes(name)) {
+      // Only run for tools that actually modify files, not search tools
+      if (name === 'execute') {
         similarityOutput = await detectCodeSimilarity();
       }
     } catch (similarityError) {

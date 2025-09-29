@@ -7,7 +7,8 @@ import { performance } from 'perf_hooks';
 
 const SIMILARITY_THRESHOLD = 0.7; // Minimum similarity score to report
 const MIN_LINES_FOR_COMPARISON = 5; // Minimum line count to consider for similarity
-const MAX_CHUNKS_TO_COMPARE = 1000; // Performance limit
+const MAX_CHUNKS_TO_COMPARE = 500; // Reduced performance limit for faster processing
+const MAX_FILE_SIZE = 100 * 1024; // Skip files larger than 100KB
 const LINE_SIMILARITY_THRESHOLD = 0.8; // How many lines must be similar overall
 const TOP_SIMILARITY_THRESHOLD = 0.85; // Show only the most similar patterns
 const MAX_SIMILAR_RESULTS = 5; // Show maximum of 5 most similar patterns
@@ -119,6 +120,12 @@ export class CodeSimilarityDetector {
 
     for (const filePath of files) {
       try {
+        // Skip large files for performance
+        const stats = existsSync(filePath) ? require('fs').statSync(filePath) : null;
+        if (stats && stats.size > MAX_FILE_SIZE) {
+          continue;
+        }
+
         const content = readFileSync(filePath, 'utf8');
         const lines = content.split('\n');
         const relativePath = relative(this.workingDirectory, filePath);
