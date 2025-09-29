@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
 
-const CAVEATS_FILE = '.caveats.txt';
+const CAVEATS_FILE = './glootie/.caveats.txt';
 
 function loadCaveats() {
   try {

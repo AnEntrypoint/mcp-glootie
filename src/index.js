@@ -7,6 +7,7 @@ import { allTools } from './core/mcp-tools.js';
 import { detectCodeSimilarity as detectCodeSimilarityModule, formatSimilarityOutput } from './tools/code-similarity-detector.js';
 import { getFileAnalysisTracker } from './core/file-analysis-tracker.js';
 import { formatCaveatsForDisplay } from './core/caveat-manager.js';
+import { createEnhancedErrorHandler } from './core/enhanced-error-handler.js';
 const SERVER_CONFIG = {
   name: 'glootie',
   version: '3.4.15',
@@ -69,7 +70,12 @@ async function lintGitChanges() {
           });
         }
       } catch (error) {
-        console.warn(`Warning: Could not analyze file ${file.path}: ${error.message}`);
+        const errorHandler = createEnhancedErrorHandler('file-analysis');
+        const enhancedError = errorHandler.handleErrorWithFeedback(error, {
+          file: file.path,
+          operation: 'file-analysis'
+        });
+        console.warn(`File analysis failed for ${file.path}: ${error.message}`);
       }
     }
 
@@ -367,6 +373,11 @@ async function lintFile(filePath) {
 
     return null;
   } catch (error) {
+    const errorHandler = createEnhancedErrorHandler('file-analysis');
+    errorHandler.handleErrorWithFeedback(error, {
+      filePath,
+      operation: 'analyzeFile'
+    });
     return null;
   }
 }
@@ -386,7 +397,10 @@ async function detectCodeSimilarity() {
 
     return formatSimilarityOutput(result);
   } catch (error) {
-    console.error('Error in code similarity detection:', error);
+    const errorHandler = createEnhancedErrorHandler('code-similarity');
+    errorHandler.handleErrorWithFeedback(error, {
+      operation: 'detectCodeSimilarity'
+    });
     return '';
   }
 }
@@ -399,24 +413,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     throw new Error(`Unknown tool: ${name}`);
   }
 
-
-  const hookOutput = await runHooksForRequest(name, args);
-
+  // Create enhanced error handler for this tool execution
+  const errorHandler = createEnhancedErrorHandler(name);
+  const startTime = Date.now();
 
   try {
+    const hookOutput = await runHooksForRequest(name, args);
+
+    // Execute tool without timeout protection
     const result = await tool.handler(args);
 
+    // Safely run linting - don't let failures break the connection
+    let lintingOutput = '';
+    try {
+      lintingOutput = await lintGitChanges();
+    } catch (lintError) {
+      const lintErrorHandler = createEnhancedErrorHandler('linting');
+      lintErrorHandler.handleErrorWithFeedback(lintError, {
+        operation: 'lintGitChanges'
+      });
+    }
 
-    const lintingOutput = await lintGitChanges();
-
-    // Only run similarity detection for tools that modify files
-    const similarityOutput = (name === 'execute' || name === 'ast_tool')
-      ? await detectCodeSimilarity()
-      : '';
-
+    // Run similarity detection non-blocking for tools that modify files
+    let similarityOutput = '';
+    try {
+      // Only run for tools that modify files, but don't block on the result
+      if (['execute', 'ast_tool', 'searchcode'].includes(name)) {
+        similarityOutput = await detectCodeSimilarity();
+      }
+    } catch (similarityError) {
+      // Don't let similarity detection failures break the main tool functionality
+      const similarityErrorHandler = createEnhancedErrorHandler('similarity-detection');
+      similarityErrorHandler.handleErrorWithFeedback(similarityError, {
+        operation: 'detectCodeSimilarity',
+        toolName: name
+      });
+    }
 
     if (result && result.content) {
-
+      // Append outputs to the first content item
       if (lintingOutput && similarityOutput && result.content && result.content.length > 0) {
         const firstContent = result.content[0];
         if (firstContent.type === "text") {
@@ -441,16 +476,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return result;
     }
 
-
     const finalText = hookOutput + (typeof result === 'string' ? result : JSON.stringify(result, null, 2)) + lintingOutput + similarityOutput;
     return {
       content: [{ type: "text", text: finalText }]
     };
+
   } catch (error) {
-    return {
-      content: [{ type: "text", text: hookOutput + `Error: ${error.message}` }],
-      isError: true
+    // Create detailed error context for logging
+    const errorContext = {
+      toolName: name,
+      args: args,
+      workingDirectory: args.workingDirectory || process.cwd(),
+      query: args.query || args.pattern || '',
+      operation: args.operation || 'unknown',
+      duration: Date.now() - startTime
     };
+
+    // Use enhanced error handling with logging and clear feedback
+    return errorHandler.createErrorResponse(error, errorContext);
   }
 });
 
@@ -473,7 +516,7 @@ async function main() {
 
 // Simple in-memory initialization tracking with file backup
 let initializationShown = false;
-const INIT_FLAG_FILE = './.mcp-init-flag.json';
+const INIT_FLAG_FILE = './glootie/.mcp-init-flag.json';
 
 async function startBuiltInHooks() {
   try {
