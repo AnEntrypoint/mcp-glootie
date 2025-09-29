@@ -7,8 +7,11 @@ try {
   astGrep = module;
   astGrepAvailable = true;
 } catch (error) {
-  console.warn('⚠️  @ast-grep/napi native binding not available. AST features will be disabled.');
-  console.warn('   Try running: npm run postinstall');
+  // Silently degrade - only log in development
+  if (process.env.NODE_ENV === 'development') {
+    console.error('⚠️  @ast-grep/napi native binding not available. AST features will be disabled.');
+    console.error('   Try running: npm run postinstall');
+  }
   astGrepAvailable = false;
 }
 
