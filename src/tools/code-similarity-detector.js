@@ -11,7 +11,7 @@ let lastCacheTime = 0;
 
 const SIMILARITY_THRESHOLD = 0.8; // Increased threshold for more relevant results
 const MIN_LINES_FOR_COMPARISON = 6; // Slightly increased minimum for better matches
-const MAX_CHUNKS_TO_COMPARE = 300; // Further reduced for faster processing
+const MAX_CHUNKS_TO_COMPARE = 1000; // Restore comprehensive analysis
 const MAX_FILE_SIZE = 50 * 1024; // Skip files larger than 50KB for faster processing
 const CACHE_TTL = 60 * 1000; // Cache results for 1 minute to avoid reprocessing
 const LINE_SIMILARITY_THRESHOLD = 0.8; // How many lines must be similar overall
