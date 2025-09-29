@@ -1,7 +1,7 @@
 {
   "name": "mcp-glootie",
-  "version": "3.4.24",
-  "description": "MCP Glootie v3.4.24 - Multi-language development toolkit with comprehensive intelligent project analysis. Features non-blocking similarity detection for all tool operations, smart caching, 5-second timeout protection, and 1000-chunk comprehensive analysis. Provides valuable code insights after any tool usage without blocking performance.",
+  "version": "3.4.25",
+  "description": "MCP Glootie v3.4.25 - Multi-language development toolkit with comprehensive intelligent project analysis. Features Windows compatibility with graceful AST degradation, non-blocking similarity detection, smart caching, and 5-second timeout protection. Cross-platform support for all major operating systems.",
   "main": "src/index.js",
   "type": "module",
   "bin": {
@@ -50,5 +50,8 @@
     "execution"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "optionalDependencies": {
+    "@ast-grep/napi-win32-x64-msvc": "^0.39.5"
+  }
 }
