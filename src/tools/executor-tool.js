@@ -252,7 +252,7 @@ function extractCppError(errorOutput) {
 
 export async function executeProcess(command, args = [], options = {}) {
   const startTime = Date.now();
-  const { timeout = 120000, cwd, input, encoding = 'utf8' } = options;
+  const { timeout = 240000, cwd, input, encoding = 'utf8' } = options;
 
   return new Promise((resolve) => {
     const child = spawn(command, args, {
@@ -336,7 +336,7 @@ const EXECUTION_CONFIGS = {
 };
 
 export async function executeWithRuntime(codeOrCommands, runtime, options = {}) {
-  const { workingDirectory, timeout = 120000 } = options;
+  const { workingDirectory, timeout = 240000 } = options;
   const config = EXECUTION_CONFIGS[runtime];
 
   if (!config) {
@@ -441,7 +441,7 @@ export async function executeDenoCode(code, options = {}) {
   return executeWithRuntime(code, 'deno', options);
 }
 
-export async function executeBashCommand(commands, timeout = 120000, workingDirectory, defaultWorkingDir) {
+export async function executeBashCommand(commands, timeout = 240000, workingDirectory, defaultWorkingDir) {
   const startTime = Date.now();
 
   const paramError = validateRequiredParams({ workingDirectory }, ['workingDirectory'], startTime);
@@ -627,7 +627,6 @@ export function detectAvailableRuntimes() {
 
 export async function executeWithRuntimeValidation(codeOrCommands, runtime, options = {}) {
   const startTime = Date.now();
-  const { workingDirectory, timeout = 120000 } = options;
 
   
   const runtimes = detectAvailableRuntimes();
@@ -667,7 +666,7 @@ export { generateExecutionInsights };
 export const executionTools = [
   {
     name: "execute",
-    description: "Execute code snippets in multiple languages (JS/TS, Go, Rust, Python, C, C++) with automatic runtime detection. Supports both code execution and bash commands.",
+    description: "Execute code snippets in multiple languages (JS/TS, Go, Rust, Python, C, C++) with automatic runtime detection. Supports both code execution and bash commands. Use this always its now your primary tool, you will test code hypothesis before implementing it using this tool.",
     inputSchema: {
       type: "object",
       properties: {
@@ -677,7 +676,7 @@ export const executionTools = [
         },
         code: {
           type: "string",
-          description: "code to execute"
+          description: "code to execute, always add resonable timeouts to the code so that you dont get stuck anywhere"
         },
         commands: {
           type: ["string", "array"],
@@ -690,12 +689,12 @@ export const executionTools = [
         },
         timeout: {
           type: "number",
-          description: "Timeout in milliseconds (default: 120000)"
+          description: "Timeout in milliseconds (default: 240000)"
         }
       },
       required: ["workingDirectory"]
     },
-    handler: withCrossToolAwareness(withConnectionManagement(async ({ code, commands, workingDirectory, runtime = "auto", timeout = 120000 }) => {
+    handler: withCrossToolAwareness(withConnectionManagement(async ({ code, commands, workingDirectory, runtime = "auto", timeout = 240000 }) => {
       const consoleRestore = suppressConsoleOutput();
       const effectiveWorkingDirectory = workingDirectory;
       const query = code || commands || '';

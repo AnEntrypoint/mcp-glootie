@@ -15,6 +15,10 @@ glootie/**/*
 # Test results and temporary files
 *.tmp
 *.log
+results/
+analyze_step_data.py
+analyze_with_bash.sh
+END_USER_REVIEW.md
 
 # Development files
 .search-defaults.json
