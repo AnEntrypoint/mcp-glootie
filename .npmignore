@@ -1,0 +1,34 @@
+# Development files
+.claude/
+.claude-context/
+node_modules/
+test/
+*.log
+
+# Cache and build artifacts
+.transformers-cache/
+code_search_index/
+glootie/
+
+# Test files
+test-*.txt
+test-*.cjs
+test-*.js
+*.test.js
+
+# Git files
+.git/
+.gitignore
+
+# OS files
+.DS_Store
+Thumbs.db
+nul
+
+# Editor files
+.vscode/
+.idea/
+
+# Docker
+Dockerfile
+docker-compose.yml
