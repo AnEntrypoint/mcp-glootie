@@ -1,7 +1,7 @@
 {
   "name": "mcp-glootie",
-  "version": "3.4.29",
-  "description": "MCP Glootie v3.4.29 - Multi-language development toolkit with comprehensive intelligent project analysis. Features Windows native AST support with silent graceful degradation, cross-platform compatibility, automatic binding installation, non-blocking similarity detection, smart caching, and 5-second timeout protection. Optimized package size (83KB).",
+  "version": "3.4.30",
+  "description": "MCP Glootie v3.4.30 - Multi-language development toolkit with comprehensive intelligent project analysis. Features Windows native AST support with silent graceful degradation, cross-platform compatibility, automatic binding installation for npx usage, non-blocking similarity detection, smart caching, and 5-second timeout protection. Optimized package size (83KB).",
   "main": "src/index.js",
   "type": "module",
   "bin": {
