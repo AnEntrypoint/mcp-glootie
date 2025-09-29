@@ -171,20 +171,32 @@ export class CodeSimilarityDetector {
 
   async findSimilarities(chunks) {
     const similarities = [];
+    const reportedPairs = new Set(); // Track unique file pairs to prevent duplicates
 
     for (let i = 0; i < chunks.length; i++) {
       for (let j = i + 1; j < chunks.length; j++) {
         const chunk1 = chunks[i];
         const chunk2 = chunks[j];
 
-        // Skip chunks from the same file (optional, remove if you want intra-file similarities)
+        // Skip chunks from the same file
         if (chunk1.file === chunk2.file) {
+          continue;
+        }
+
+        // Create a unique key for this file pair (sorted to avoid duplicates)
+        const filePairKey = [chunk1.file, chunk2.file].sort().join('::');
+
+        // Skip if we've already reported this file pair
+        if (reportedPairs.has(filePairKey)) {
           continue;
         }
 
         const similarity = this.calculateSimilarity(chunk1.lines, chunk2.lines);
 
         if (similarity >= this.options.threshold) {
+          // Mark this file pair as reported
+          reportedPairs.add(filePairKey);
+
           similarities.push({
             similarity: Math.round(similarity * 100) / 100,
             chunk1: {
