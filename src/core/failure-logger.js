@@ -3,9 +3,9 @@ import { join } from 'path';
 
 export class FailureLogger {
   constructor(baseDir = null) {
-    // Use the MCP-REPL directory as the base for logging
-    const baseDirectory = baseDir || '/config/workspace/mcp-repl';
-    this.logFile = join(baseDirectory, 'glootie', 'mcp-failures.log');
+    // Use a writable temporary directory as the base for logging
+    const baseDirectory = baseDir || join(process.cwd(), '.glootie');
+    this.logFile = join(baseDirectory, 'mcp-failures.log');
     this.ensureLogDirectory();
   }
 
