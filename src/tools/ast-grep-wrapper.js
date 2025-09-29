@@ -8,7 +8,7 @@ try {
   astGrepAvailable = true;
 } catch (error) {
   console.warn('⚠️  @ast-grep/napi native binding not available. AST features will be disabled.');
-  console.warn('   This is expected on Windows due to optional dependency issues.');
+  console.warn('   Try running: npm run postinstall');
   astGrepAvailable = false;
 }
 
