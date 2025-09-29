@@ -5,10 +5,15 @@ import { existsSync, readFileSync } from 'fs';
 import { join, relative, dirname, basename } from 'path';
 import { performance } from 'perf_hooks';
 
-const SIMILARITY_THRESHOLD = 0.7; // Minimum similarity score to report
-const MIN_LINES_FOR_COMPARISON = 5; // Minimum line count to consider for similarity
-const MAX_CHUNKS_TO_COMPARE = 500; // Reduced performance limit for faster processing
-const MAX_FILE_SIZE = 100 * 1024; // Skip files larger than 100KB
+// Simple cache for similarity detection results
+const similarityCache = new Map();
+let lastCacheTime = 0;
+
+const SIMILARITY_THRESHOLD = 0.8; // Increased threshold for more relevant results
+const MIN_LINES_FOR_COMPARISON = 6; // Slightly increased minimum for better matches
+const MAX_CHUNKS_TO_COMPARE = 300; // Further reduced for faster processing
+const MAX_FILE_SIZE = 50 * 1024; // Skip files larger than 50KB for faster processing
+const CACHE_TTL = 60 * 1000; // Cache results for 1 minute to avoid reprocessing
 const LINE_SIMILARITY_THRESHOLD = 0.8; // How many lines must be similar overall
 const TOP_SIMILARITY_THRESHOLD = 0.85; // Show only the most similar patterns
 const MAX_SIMILAR_RESULTS = 5; // Show maximum of 5 most similar patterns
@@ -33,6 +38,16 @@ export class CodeSimilarityDetector {
   async detectSimilarCode() {
     const startTime = performance.now();
 
+    // Check cache first
+    const cacheKey = this.workingDirectory;
+    const now = Date.now();
+    if (similarityCache.has(cacheKey) && (now - lastCacheTime) < CACHE_TTL) {
+      const cachedResult = similarityCache.get(cacheKey);
+      cachedResult.summary.cached = true;
+      cachedResult.summary.processingTime = 0;
+      return cachedResult;
+    }
+
     try {
       // Find all source code files
       const codeFiles = await this.findCodeFiles();
@@ -55,7 +70,7 @@ export class CodeSimilarityDetector {
       // Find similarities between chunks
       const similarities = await this.findSimilarities(chunks);
 
-      return {
+      const result = {
         similarities: similarities.sort((a, b) => b.similarity - a.similarity),
         summary: {
           filesProcessed: codeFiles.length,
@@ -64,6 +79,12 @@ export class CodeSimilarityDetector {
           processingTime: Math.round(performance.now() - startTime)
         }
       };
+
+      // Cache the result
+      similarityCache.set(cacheKey, result);
+      lastCacheTime = now;
+
+      return result;
     } catch (error) {
       console.error('Error in code similarity detection:', error);
       return {
@@ -307,7 +328,12 @@ export function formatSimilarityOutput(result) {
   output += `   Files processed: ${result.summary.filesProcessed}\n`;
   output += `   Code chunks analyzed: ${result.summary.chunksAnalyzed}\n`;
   output += `   High-similarity patterns found: ${result.summary.similarPairsFound}\n`;
-  output += `   Processing time: ${result.summary.processingTime}ms\n`;
+
+  if (result.summary.cached) {
+    output += `   ⚡ Result cached (instant)\n`;
+  } else {
+    output += `   Processing time: ${result.summary.processingTime}ms\n`;
+  }
 
   if (result.similarities.length === 0) {
     output += '\n✅ No high-similarity code patterns found (threshold: 85%).\n';

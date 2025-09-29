@@ -385,13 +385,34 @@ async function lintFile(filePath) {
 async function detectCodeSimilarity() {
   try {
     const workingDir = process.cwd();
-    const result = await detectCodeSimilarityModule(workingDir, {
-      threshold: 0.7,
-      minLines: 5,
-      maxChunks: 1000
-    });
+
+    // Run similarity detection with timeout to prevent blocking
+    const result = await Promise.race([
+      detectCodeSimilarityModule(workingDir, {
+        threshold: 0.8,
+        minLines: 6,
+        maxChunks: 300
+      }),
+      new Promise((resolve) => {
+        setTimeout(() => {
+          resolve({
+            similarities: [],
+            summary: {
+              filesProcessed: 0,
+              chunksAnalyzed: 0,
+              similarPairsFound: 0,
+              processingTime: 0,
+              timeout: true
+            }
+          });
+        }, 5000); // 5 second timeout
+      })
+    ]);
 
     if (result.similarities.length === 0) {
+      if (result.summary.timeout) {
+        return '\n\n=== CODE SIMILARITY ANALYSIS ===\n⚡ Analysis skipped to maintain performance (timeout after 5s)\n';
+      }
       return '';
     }
 
@@ -434,13 +455,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       });
     }
 
-    // Only run similarity detection for execute tool (file modifications) - NOT for search/ast tools
+    // Run project intelligence (similarity detection) for all tools to provide insights
     let similarityOutput = '';
     try {
-      // Only run for tools that actually modify files, not search tools
-      if (name === 'execute') {
-        similarityOutput = await detectCodeSimilarity();
-      }
+      // Run similarity detection in background for all tool operations
+      // This provides valuable code insights after any tool usage
+      similarityOutput = await detectCodeSimilarity();
     } catch (similarityError) {
       // Don't let similarity detection failures break the main tool functionality
       const similarityErrorHandler = createEnhancedErrorHandler('similarity-detection');
