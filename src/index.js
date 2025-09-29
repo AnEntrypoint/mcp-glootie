@@ -391,7 +391,7 @@ async function detectCodeSimilarity() {
       detectCodeSimilarityModule(workingDir, {
         threshold: 0.8,
         minLines: 6,
-        maxChunks: 300
+        maxChunks: 1000
       }),
       new Promise((resolve) => {
         setTimeout(() => {
