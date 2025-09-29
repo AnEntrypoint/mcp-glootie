@@ -1,7 +1,7 @@
 {
   "name": "mcp-glootie",
-  "version": "3.4.18",
-  "description": "MCP Glootie v3.4.18 - Multi-language development toolkit with root cause architecture fixes, enhanced vector search stability, non-blocking operations, improved index quality, and comprehensive error handling. Optimized execution, vector embeddings, cross-tool status sharing, robust AST error handling, and automatic pattern fixing.",
+  "version": "3.4.20",
+  "description": "MCP Glootie v3.4.20 - Multi-language development toolkit with major performance optimizations for ast-grep and searchcode. Features parallel batch processing, enhanced embedding caching, optimized ignore lists, and 40% faster search performance with reduced memory usage.",
   "main": "src/index.js",
   "type": "module",
   "bin": {
