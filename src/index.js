@@ -519,21 +519,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 async function main() {
   try {
-    process.stderr.write('MCP Glootie: Starting server initialization...\n');
-
     await startBuiltInHooks();
-    process.stderr.write('MCP Glootie: Built-in hooks initialized\n');
-
-    process.stderr.write('MCP Glootie: Creating transport...\n');
     const transport = new StdioServerTransport();
-
-    process.stderr.write('MCP Glootie: Connecting server...\n');
     await server.connect(transport);
-
-    process.stderr.write('MCP Glootie: Server connected and ready\n');
   } catch (error) {
-    process.stderr.write(`MCP Glootie: Fatal error in main(): ${error}\n`);
-    process.stderr.write(`Stack: ${error.stack}\n`);
+    process.stderr.write(`MCP Glootie: Fatal error: ${error}\n`);
     throw error;
   }
 }
@@ -661,15 +651,14 @@ const isMainModule = () => {
   return normalizedUrl === normalizedScript || normalizedUrl.endsWith(normalizedScript);
 };
 
-// Add error handlers before starting - write directly to stderr to bypass console suppression
+// Add error handlers before starting
 process.on('unhandledRejection', (error) => {
-  process.stderr.write(`Unhandled rejection: ${error}\n`);
-  process.stderr.write(`Stack: ${error.stack}\n`);
+  process.stderr.write(`MCP Glootie: Unhandled rejection: ${error}\n`);
+  process.exit(1);
 });
 
 process.on('uncaughtException', (error) => {
-  process.stderr.write(`Uncaught exception: ${error}\n`);
-  process.stderr.write(`Stack: ${error.stack}\n`);
+  process.stderr.write(`MCP Glootie: Uncaught exception: ${error}\n`);
   process.exit(1);
 });
 
