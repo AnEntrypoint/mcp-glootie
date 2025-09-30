@@ -1,0 +1,10 @@
+# Ensure Unix line endings for all text files
+* text=auto eol=lf
+
+# Source code
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+
+# Scripts should always have LF
+*.sh text eol=lf
