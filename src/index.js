@@ -520,8 +520,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   try {
     await startBuiltInHooks();
+
     const transport = new StdioServerTransport();
     await server.connect(transport);
+
+    // Keep the process alive until stdin closes
+    process.stdin.on('close', () => {
+      process.exit(0);
+    });
   } catch (error) {
     process.stderr.write(`MCP Glootie: Fatal error: ${error}\n`);
     throw error;
