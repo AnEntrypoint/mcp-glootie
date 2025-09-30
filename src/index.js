@@ -524,10 +524,7 @@ async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
 
-    // Keep the process alive until stdin closes
-    process.stdin.on('close', () => {
-      process.exit(0);
-    });
+    // The StdioServerTransport handles stdin/stdout, don't add additional handlers
   } catch (error) {
     process.stderr.write(`MCP Glootie: Fatal error: ${error}\n`);
     throw error;
