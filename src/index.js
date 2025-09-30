@@ -646,9 +646,20 @@ async function runHooksForRequest(toolName, args) {
   return hookOutput;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch(error => {
+// Start the server when run directly (cross-platform)
+const isMainModule = () => {
+  const scriptPath = process.argv[1];
+  if (!scriptPath) return false;
 
+  const normalizedScript = scriptPath.replace(/\\/g, '/');
+  const normalizedUrl = import.meta.url.replace(/^file:\/\/\//, '').replace(/^file:\/\//, '');
+
+  return normalizedUrl === normalizedScript || normalizedUrl.endsWith(normalizedScript);
+};
+
+if (isMainModule()) {
+  main().catch(error => {
+    console.error('Fatal error:', error);
     process.exit(1);
   });
 }
