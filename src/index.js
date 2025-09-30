@@ -521,26 +521,8 @@ async function main() {
   try {
     process.stderr.write('MCP Glootie: Starting server initialization...\n');
 
-    // Keep stdin open and handle errors gracefully
-    process.stdin.on('error', (error) => {
-      process.stderr.write(`MCP Glootie: stdin error: ${error.message}\n`);
-    });
-
-    process.stdin.on('end', () => {
-      process.stderr.write('MCP Glootie: stdin closed, shutting down\n');
-      process.exit(0);
-    });
-
     await startBuiltInHooks();
     process.stderr.write('MCP Glootie: Built-in hooks initialized\n');
-
-
-    // Removed stderr suppression - this was causing MCP connection failures
-    // const originalStderrWrite = process.stderr.write.bind(process.stderr);
-    // process.stderr.write = function(string, encoding, fd) {
-    //
-    //   return true;
-    // };
 
     process.stderr.write('MCP Glootie: Creating transport...\n');
     const transport = new StdioServerTransport();
