@@ -519,15 +519,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 async function main() {
   try {
+    process.stderr.write(`[GLOOTIE] Starting main()...\n`);
+
     // Apply console suppression FIRST before any other code runs
     applyGlobalConsoleSuppression();
+    process.stderr.write(`[GLOOTIE] Console suppression applied\n`);
 
     await startBuiltInHooks();
+    process.stderr.write(`[GLOOTIE] Built-in hooks started\n`);
 
     const transport = new StdioServerTransport();
+    process.stderr.write(`[GLOOTIE] Transport created\n`);
+
     await server.connect(transport);
+    process.stderr.write(`[GLOOTIE] Server connected successfully\n`);
   } catch (error) {
-    process.stderr.write(`MCP Glootie: Fatal error: ${error}\n`);
+    process.stderr.write(`[GLOOTIE] Fatal error: ${error}\n${error.stack}\n`);
     throw error;
   }
 }
