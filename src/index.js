@@ -521,10 +521,14 @@ async function main() {
   try {
     await startBuiltInHooks();
 
+    // Keep stdin in flowing mode to prevent immediate close
+    process.stdin.resume();
+
     const transport = new StdioServerTransport();
     await server.connect(transport);
 
-    // The StdioServerTransport handles stdin/stdout, don't add additional handlers
+    // Keep process alive - don't exit on stdin end
+    setInterval(() => {}, 1000000);
   } catch (error) {
     process.stderr.write(`MCP Glootie: Fatal error: ${error}\n`);
     throw error;
