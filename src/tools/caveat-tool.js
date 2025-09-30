@@ -8,7 +8,7 @@ import { withCrossToolAwareness } from '../core/cross-tool-context.js';
 export const caveatTools = [
   {
     name: "caveat",
-    description: "Record, view, and delete technological caveats encountered during development. IMPORTANT: Record any technological limitations, constraints, or considerations you discover. Examples: 'This API endpoint has rate limiting of 100 requests per minute', 'Database connection pool is limited to 10 connections', 'Static files cannot be served from this directory', 'This library version has a known memory leak'. Delete caveats when they no longer apply or are resolved. Caveats are displayed during MCP initialization to inform future work.",
+    description: "Manage technological caveats/limitations discovered during development. Record constraints (rate limits, connection limits, known bugs), view all caveats, or delete resolved ones. Caveats persist across sessions and display at MCP initialization. Examples: 'API has 100 req/min limit', 'DB pool limited to 10 connections', 'Library v2.1 has memory leak'.",
     inputSchema: {
       type: "object",
       properties: {

@@ -666,7 +666,7 @@ export { generateExecutionInsights };
 export const executionTools = [
   {
     name: "execute",
-    description: "Execute code snippets in multiple languages (JS/TS, Go, Rust, Python, C, C++) with automatic runtime detection. Supports both code execution and bash commands. Use this always its now your primary tool, you will test code hypothesis before implementing it using this tool.",
+    description: "Execute code in JS/TS, Go, Rust, Python, C, C++, or bash with auto-runtime detection. Primary tool for testing hypotheses before implementation. Supports both code snippets and shell commands.",
     inputSchema: {
       type: "object",
       properties: {
@@ -676,7 +676,7 @@ export const executionTools = [
         },
         code: {
           type: "string",
-          description: "code to execute, always add resonable timeouts to the code so that you dont get stuck anywhere"
+          description: "Code to execute. Include timeouts for network/async operations to prevent hangs."
         },
         commands: {
           type: ["string", "array"],
