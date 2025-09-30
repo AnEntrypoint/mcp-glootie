@@ -519,6 +519,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 async function main() {
   try {
+    // Check if running as standalone (not via MCP client)
+    if (process.stdin.isTTY || process.argv.includes('--version') || process.argv.includes('-v') || process.argv.includes('--help') || process.argv.includes('-h')) {
+      const pkg = await import('./package-info.js');
+      console.log(`MCP Glootie v${pkg.version}`);
+      console.log('');
+      console.log('This is an MCP (Model Context Protocol) server.');
+      console.log('It must be run via an MCP client like Claude Desktop or Claude Code.');
+      console.log('');
+      console.log('For configuration instructions, visit:');
+      console.log('https://github.com/AnEntrypoint/mcp-glootie');
+      console.log('');
+      console.log('Available tools: execute, searchcode, ast_tool, caveat');
+      process.exit(0);
+    }
+
     // Apply console suppression FIRST before any other code runs
     applyGlobalConsoleSuppression();
 
