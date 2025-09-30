@@ -1,7 +1,7 @@
 {
   "name": "mcp-glootie",
-  "version": "3.4.43",
-  "description": "MCP Glootie v3.4.43 - Multi-language development toolkit with comprehensive intelligent project analysis. Fixed MCP server startup for reliable WSL2 connections. Features cross-platform compatibility, graceful AST degradation, non-blocking similarity detection, smart caching. Optimized package size (84KB).",
+  "version": "3.4.44",
+  "description": "MCP Glootie v3.4.44 - Multi-language development toolkit with comprehensive intelligent project analysis. Fixed line endings for WSL2 compatibility. Features cross-platform support, graceful AST degradation, non-blocking similarity detection, smart caching. Optimized package size (84KB).",
   "main": "src/index.js",
   "type": "module",
   "bin": {
