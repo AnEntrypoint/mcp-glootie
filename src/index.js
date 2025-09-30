@@ -519,16 +519,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 async function main() {
   try {
-    await startBuiltInHooks();
+    // Apply console suppression FIRST before any other code runs
+    applyGlobalConsoleSuppression();
 
-    // Keep stdin in flowing mode to prevent immediate close
-    process.stdin.resume();
+    await startBuiltInHooks();
 
     const transport = new StdioServerTransport();
     await server.connect(transport);
-
-    // Keep process alive - don't exit on stdin end
-    setInterval(() => {}, 1000000);
   } catch (error) {
     process.stderr.write(`MCP Glootie: Fatal error: ${error}\n`);
     throw error;
@@ -541,20 +538,13 @@ const INIT_FLAG_FILE = './glootie/.mcp-init-flag.json';
 
 async function startBuiltInHooks() {
   try {
-    
     // Reset initialization flag on server start
     initializationShown = false;
 
     // Initialize file analysis tracker
     await getFileAnalysisTracker(process.cwd());
-
-    
-    
-
-    
-    applyGlobalConsoleSuppression();
   } catch (error) {
-    console.log('⚠️  Built-in hooks initialization failed:', error.message);
+    process.stderr.write(`⚠️  Built-in hooks initialization failed: ${error.message}\n`);
   }
 }
 
