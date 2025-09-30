@@ -518,20 +518,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function main() {
-  
-  await startBuiltInHooks();
+  try {
+    process.stderr.write('MCP Glootie: Starting server initialization...\n');
 
-  
-  // Removed stderr suppression - this was causing MCP connection failures
-  // const originalStderrWrite = process.stderr.write.bind(process.stderr);
-  // process.stderr.write = function(string, encoding, fd) {
-  //
-  //   return true;
-  // };
+    // Keep stdin open and handle errors gracefully
+    process.stdin.on('error', (error) => {
+      process.stderr.write(`MCP Glootie: stdin error: ${error.message}\n`);
+    });
 
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  
+    process.stdin.on('end', () => {
+      process.stderr.write('MCP Glootie: stdin closed, shutting down\n');
+      process.exit(0);
+    });
+
+    await startBuiltInHooks();
+    process.stderr.write('MCP Glootie: Built-in hooks initialized\n');
+
+
+    // Removed stderr suppression - this was causing MCP connection failures
+    // const originalStderrWrite = process.stderr.write.bind(process.stderr);
+    // process.stderr.write = function(string, encoding, fd) {
+    //
+    //   return true;
+    // };
+
+    process.stderr.write('MCP Glootie: Creating transport...\n');
+    const transport = new StdioServerTransport();
+
+    process.stderr.write('MCP Glootie: Connecting server...\n');
+    await server.connect(transport);
+
+    process.stderr.write('MCP Glootie: Server connected and ready\n');
+  } catch (error) {
+    process.stderr.write(`MCP Glootie: Fatal error in main(): ${error}\n`);
+    process.stderr.write(`Stack: ${error.stack}\n`);
+    throw error;
+  }
 }
 
 // Simple in-memory initialization tracking with file backup
@@ -657,9 +679,22 @@ const isMainModule = () => {
   return normalizedUrl === normalizedScript || normalizedUrl.endsWith(normalizedScript);
 };
 
+// Add error handlers before starting - write directly to stderr to bypass console suppression
+process.on('unhandledRejection', (error) => {
+  process.stderr.write(`Unhandled rejection: ${error}\n`);
+  process.stderr.write(`Stack: ${error.stack}\n`);
+});
+
+process.on('uncaughtException', (error) => {
+  process.stderr.write(`Uncaught exception: ${error}\n`);
+  process.stderr.write(`Stack: ${error.stack}\n`);
+  process.exit(1);
+});
+
 if (isMainModule()) {
   main().catch(error => {
-    console.error('Fatal error:', error);
+    process.stderr.write(`Fatal error: ${error}\n`);
+    process.stderr.write(`Stack: ${error.stack}\n`);
     process.exit(1);
   });
 }
