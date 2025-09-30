@@ -639,13 +639,8 @@ async function runHooksForRequest(toolName, args) {
 
 // Start the server when run directly (cross-platform)
 const isMainModule = () => {
-  const scriptPath = process.argv[1];
-  if (!scriptPath) return false;
-
-  const normalizedScript = scriptPath.replace(/\\/g, '/');
-  const normalizedUrl = import.meta.url.replace(/^file:\/\/\//, '').replace(/^file:\/\//, '');
-
-  return normalizedUrl === normalizedScript || normalizedUrl.endsWith(normalizedScript);
+  // Always run as main module when executed
+  return true;
 };
 
 // Add error handlers before starting
