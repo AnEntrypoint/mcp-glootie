@@ -60,7 +60,6 @@ docker-compose.yml
 connection-manager.js
 cross-tool-context.js
 console-suppression.js
-error-handling.js
 execution-state.js
 file-analysis-tracker.js
 working-directory-context.js
