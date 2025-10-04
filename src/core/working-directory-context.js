@@ -1,5 +1,4 @@
-// Enhanced context system with project intelligence
-import { projectIntelligence } from './project-intelligence.js';
+// Enhanced context system for working directory management
 
 export class WorkingDirectoryContext {
   constructor() {
@@ -7,9 +6,6 @@ export class WorkingDirectoryContext {
   }
 
   async getContext(workingDirectory) {
-    // Get project intelligence
-    const projectSummary = projectIntelligence.getProjectSummary(workingDirectory);
-
     return {
       workingDirectory,
       data: {},
@@ -20,8 +16,7 @@ export class WorkingDirectoryContext {
         lastModified: Date.now()
       },
       lastAccessed: Date.now(),
-      persistent: false,
-      projectIntelligence: projectSummary
+      persistent: false
     };
   }
 
@@ -46,12 +41,6 @@ export class WorkingDirectoryContext {
   async getToolContext(workingDirectory, toolName, query) {
     const context = await this.getContext(workingDirectory);
 
-    // Get detailed project analysis for specific tools
-    let detailedAnalysis = null;
-    if (['searchcode', 'ast_tool', 'execute'].includes(toolName)) {
-      detailedAnalysis = projectIntelligence.analyzeProject(workingDirectory);
-    }
-
     return {
       workingDirectory,
       toolName,
@@ -63,9 +52,7 @@ export class WorkingDirectoryContext {
       sessionData: {
         totalToolCalls: 0,
         lastAccessed: Date.now()
-      },
-      projectIntelligence: context.projectIntelligence,
-      detailedProjectAnalysis: detailedAnalysis
+      }
     };
   }
 

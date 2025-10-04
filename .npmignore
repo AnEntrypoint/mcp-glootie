@@ -1,4 +1,8 @@
-# Development files
+# MCP Glootie - Universal npmignore
+# This file uses patterns from src/core/universal-ignore.txt
+# For comprehensive ignore patterns, see: src/core/universal-ignore.txt
+
+# Development and metadata
 .claude/
 .claude-context/
 node_modules/
@@ -9,26 +13,54 @@ test/
 .transformers-cache/
 code_search_index/
 glootie/
+glootie/**/*
+results/
+results/**/*
+shell-snapshots/
+shell-snapshots/**/*
+.mcp-metadata/
+.mcp-metadata/**/*
 
-# Test files
+# Test and analysis files
 test-*.txt
 test-*.cjs
 test-*.js
 *.test.js
+*.spec.js
+analyze_step_data.py
+analyze_with_bash.sh
+analyze-steps.js
+claude-output-*.json
+claude-output-*.json.*.log
+claude-steps-*.json
+*.stderr.log
+*.stdout.log
+mcp-performance-*.json
 
-# Git files
+# Git and version control
 .git/
 .gitignore
 
-# OS files
+# OS files (see universal-ignore.txt for comprehensive list)
 .DS_Store
 Thumbs.db
 nul
 
-# Editor files
+# Editor and IDE files (see universal-ignore.txt for comprehensive list)
 .vscode/
 .idea/
 
-# Docker
+# Docker and deployment
 Dockerfile
 docker-compose.yml
+
+# Development configuration
+.search-defaults.json
+.searchignore
+connection-manager.js
+cross-tool-context.js
+console-suppression.js
+error-handling.js
+execution-state.js
+file-analysis-tracker.js
+working-directory-context.js
