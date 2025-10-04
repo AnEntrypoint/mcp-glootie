@@ -57,9 +57,4 @@ docker-compose.yml
 # Development configuration
 .search-defaults.json
 .searchignore
-connection-manager.js
-cross-tool-context.js
-console-suppression.js
-execution-state.js
 file-analysis-tracker.js
-working-directory-context.js
