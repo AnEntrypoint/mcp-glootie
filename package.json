@@ -1,6 +1,6 @@
 {
   "name": "mcp-glootie",
-  "version": "3.4.57",
+  "version": "3.4.58",
   "description": "MCP Glootie v3.4.56 - Minimal multi-language development toolkit. Works with all MCP clients (Claude Code, Cursor, Copilot, VSCode). Features cross-platform support, graceful AST degradation, smart caching. Optimized package size with essential tools: execute, ast_tool, caveat.",
   "main": "src/index.js",
   "type": "module",
