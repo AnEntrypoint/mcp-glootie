@@ -1,30 +1,54 @@
-# Dependencies
+# MCP Glootie - Universal gitignore
+# This file uses patterns from src/core/universal-ignore.txt
+# For comprehensive ignore patterns, see: src/core/universal-ignore.txt
+
+# Core dependencies and outputs
 node_modules/
 .env
 **/node_modules
-
-# Build outputs
 optimized/
 dist/
 build/
 
-# glootie runtime files
+# Glootie runtime and generated files
 glootie/
 glootie/**/*
+results/
+results/**/*
+shell-snapshots/
+shell-snapshots/**/*
+code_search_index/
+code_search_index/**/*
+.transformers-cache/
+.transformers-cache/**/*
+.mcp-metadata/
+.mcp-metadata/**/*
 
-# Test results and temporary files
+# Test and analysis files
 *.tmp
 *.log
-results/
 analyze_step_data.py
 analyze_with_bash.sh
+analyze-steps.js
+claude-output-*.json
+claude-output-*.json.*.log
+claude-steps-*.json
+*.stderr.log
+*.stdout.log
+mcp-performance-*.json
 
-# Development files
+# Development configuration
 .search-defaults.json
 .searchignore
-analyze-steps.js
+connection-manager.js
+cross-tool-context.js
+console-suppression.js
+error-handling.js
+execution-state.js
+file-analysis-tracker.js
+working-directory-context.js
 
-# OS generated files
+# OS and IDE files (see universal-ignore.txt for comprehensive list)
 .DS_Store
 .DS_Store?
 ._*
@@ -32,8 +56,6 @@ analyze-steps.js
 .Trashes
 ehthumbs.db
 Thumbs.db
-
-# IDE files
 .vscode/
 .idea/
 *.swp

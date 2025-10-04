@@ -1,5 +1,4 @@
 import { ToolError, ToolErrorHandler } from './error-handling.js';
-import { failureLogger } from './failure-logger.js';
 
 export class EnhancedErrorHandler extends ToolErrorHandler {
   constructor(toolName = 'unknown') {
@@ -15,14 +14,20 @@ export class EnhancedErrorHandler extends ToolErrorHandler {
     const startTime = this.startTime;
     const duration = Date.now() - startTime;
 
-    // Log the failure for analysis
-    const failureContext = {
-      ...context,
-      duration,
-      toolName: this.toolName
+    // Create failure context for analysis
+    const loggedFailure = {
+      toolName: this.toolName,
+      error: {
+        code: error.code || 'UNKNOWN',
+        message: error.message
+      },
+      context: {
+        ...context,
+        duration,
+        toolName: this.toolName
+      },
+      timestamp: new Date().toISOString()
     };
-
-    const loggedFailure = failureLogger.logFailure(this.toolName, error, failureContext);
 
     // Get enhanced error details
     const enhancedError = this.enhanceErrorDetails(error, loggedFailure);
@@ -134,16 +139,7 @@ export class EnhancedErrorHandler extends ToolErrorHandler {
   }
 
   checkFrequency(toolName, errorCode) {
-    const recentFailures = failureLogger.getRecentFailures(20);
-    const similarFailures = recentFailures.filter(f =>
-      f.toolName === toolName && f.error.code === errorCode
-    );
-
-    if (similarFailures.length >= 5) {
-      return 'frequent';
-    } else if (similarFailures.length >= 2) {
-      return 'occasional';
-    }
+    // Simplified frequency check - always return 'rare' since we removed failureLogger
     return 'rare';
   }
 
@@ -177,9 +173,9 @@ export class EnhancedErrorHandler extends ToolErrorHandler {
       suggestions.push('Check if the system is under heavy load');
     }
 
-    if (loggedFailure.context.query) {
-      suggestions.push('Try modifying your search query to be more specific');
-      suggestions.push('Consider using different search terms');
+    if (loggedFailure.context.pattern) {
+      suggestions.push('Try modifying your AST pattern to be more specific');
+      suggestions.push('Consider using simpler patterns first');
     }
 
     return suggestions;
@@ -192,14 +188,14 @@ export class EnhancedErrorHandler extends ToolErrorHandler {
     nextSteps.push('Check the MCP failure logs for detailed analysis');
 
     // Add tool-specific next steps
-    if (loggedFailure.toolName.includes('search')) {
-      nextSteps.push('Try a more specific search query');
-      nextSteps.push('Consider using traditional search tools if this persists');
-    }
-
     if (loggedFailure.toolName.includes('ast')) {
       nextSteps.push('Verify your AST pattern syntax is correct');
       nextSteps.push('Try simpler patterns first');
+    }
+
+    if (loggedFailure.toolName.includes('execute')) {
+      nextSteps.push('Check your command syntax and parameters');
+      nextSteps.push('Verify the working directory is accessible');
     }
 
     // Add recovery steps based on frequency
