@@ -39,7 +39,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   const tool = tools.find(t => t.name === name);
   if (!tool) {
-    throw new Error(`Unknown tool: ${name}`);
+    return {
+      content: [{
+        type: "text",
+        text: `Error: Unknown tool '${name}'. Available tools: ${tools.map(t => t.name).join(', ')}`
+      }],
+      _isError: true
+    };
   }
 
   // Create enhanced error handler for this tool execution
@@ -223,22 +229,23 @@ const isMainModule = () => {
   return true;
 };
 
-// Add error handlers before starting
+// Add error handlers before starting - never exit, just log and continue
 process.on('unhandledRejection', (error) => {
-  process.stderr.write(`MCP Glootie: Unhandled rejection: ${error}\n`);
-  process.exit(1);
+  process.stderr.write(`MCP Glootie: Unhandled rejection (continuing): ${error}\n`);
+  // Don't exit - MCP tool should keep running
 });
 
 process.on('uncaughtException', (error) => {
-  process.stderr.write(`MCP Glootie: Uncaught exception: ${error}\n`);
-  process.exit(1);
+  process.stderr.write(`MCP Glootie: Uncaught exception (continuing): ${error}\n`);
+  // Don't exit - MCP tool should keep running
 });
 
 if (isMainModule()) {
   main().catch(error => {
-    process.stderr.write(`Fatal error: ${error}\n`);
+    process.stderr.write(`MCP Glootie: Fatal error in main (continuing): ${error}\n`);
     process.stderr.write(`Stack: ${error.stack}\n`);
-    process.exit(1);
+    // Don't exit - MCP tool should keep running even if main fails
+    // The MCP transport will handle communication errors
   });
 }
 

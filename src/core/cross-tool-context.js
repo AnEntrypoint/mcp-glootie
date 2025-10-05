@@ -573,9 +573,15 @@ export function withCrossToolAwareness(toolHandler, toolName) {
       return result;
 
     } catch (error) {
-      // Fail session and return error
+      // Fail session and return error gracefully
       crossToolContext.failCurrentSession(error);
-      throw error;
+      return {
+        content: [{
+          type: "text",
+          text: `Error in ${toolName}: ${error.message}${error.stack ? '\n' + error.stack : ''}`
+        }],
+        _isError: true
+      };
     }
   };
 }
