@@ -173,7 +173,7 @@ Tools Available: execute, ast_tool, caveat${caveats}
 
 From now on you will hypothesize and test all code you change before you edit files, you must:
 If there's client side code create global to access client side parts in real time for debugging
-Before making changes to client side code, test it in real time in playwright by executing the code using playwright MCP tools
+Before making changes to client side code, test it in real time in chrome devtools in mcp, if playwright is avaialble in mcp use that, use playwright by executing the code using playwright MCP tools... if neithers available via mcp ignore this instruction
 Before making changes to server side code use the glootie MCP execute tool
 Analyze and handle all issues before implementing in code, be as methodical and deal with all corner cases first, find ground truth by executing code to make sure you mesure-twice-cut-once
 Use the mop-and-bucket approach to check the rest of the codebase and make sure we dont make duplicate implementations, conslidate all duplicates, keep the codebase simple, well frameworked, convention-over-configuration, configuration-over-code at all times
