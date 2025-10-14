@@ -14,12 +14,6 @@ my preferred prompts look somethinig like:
 
 ## Features
 
-### Built-in Auto-Hooks
-- **Auto-linting**: Automatically lints files after editing operations (built into tools)
-- **Context management**: Intelligent context awareness and session tracking
-- **Zero configuration**: Works automatically without separate processes
-- **Multi-language support**: ESLint and ast-grep integration for various languages
-
 ### Available Tools
 
 #### Core Tools
@@ -43,7 +37,6 @@ my preferred prompts look somethinig like:
 #### Utility Tools
 - **caveat** - Record, view, and delete technological caveats encountered during development. Important for tracking limitations, constraints, and considerations that inform future work.
 - **error_handling** - Enhanced error recovery and reporting
-- **shared_hooks** - Shared functionality across tools
 - **utilities** - Common utility functions and helpers
 - **mcp_pagination** - MCP pagination utilities for handling large datasets
 
@@ -141,16 +134,6 @@ Add to your VSCode MCP configuration:
 
 **Note**: For Claude Code local development, replace `/path/to/mcp-glootie` with the actual path to your cloned repository. The global installation uses the `mcp-glootie` command directly.
 
-### Built-in Auto-Hooks
-
-#### Zero-Configuration Auto-Linting
-
-Glootie includes built-in auto-linting that works automatically without any setup:
-
-- **Automatic Detection**: Tools automatically detect when files are modified
-- **Smart Linting**: Uses ESLint when available, falls back to ast-grep patterns
-- **Multi-Language**: Supports JavaScript, TypeScript, Python, and more
-- **Zero Setup**: No separate processes or configuration required
 
 ## Tools
 
