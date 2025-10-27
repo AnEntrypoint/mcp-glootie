@@ -23,6 +23,9 @@ code_search_index/**/*
 .transformers-cache/**/*
 .mcp-metadata/
 .mcp-metadata/**/*
+.vexify.db
+*.tgz
+.claude-context/
 
 # Test and analysis files
 *.tmp
