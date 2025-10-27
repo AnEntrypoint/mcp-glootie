@@ -4,7 +4,6 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { allTools } from './core/mcp-tools.js';
-import { formatCaveatsForDisplay } from './core/caveat-manager.js';
 import { createEnhancedErrorHandler } from './core/enhanced-error-handler.js';
 
 const SERVER_CONFIG = {
