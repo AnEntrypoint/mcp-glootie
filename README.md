@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/anentrypoint-mcp-glootie-badge.png)](https://mseep.ai/app/anentrypoint-mcp-glootie)
+
 ![cd6d6b01e938ef486734ce8dd2544ae5-1](https://github.com/user-attachments/assets/c080416f-5fa3-44d0-aa36-8aa2cac0a7d2)
 
 MCP (Model Context Protocol) server for development tools with optimized execution and vector embeddings.
