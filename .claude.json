@@ -8,8 +8,9 @@
     "glootie": {
       "command": "node",
       "args": [
-        "./src/index.js"
+        "/mnt/c/dev/mcp-repl/src/index.js"
       ],
+      "cwd": "/mnt/c/dev/mcp-repl",
       "env": {}
     }
   },
