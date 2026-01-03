@@ -269,7 +269,6 @@ export class EnhancedErrorHandler extends ToolErrorHandler {
     }
 
     message += `**Failure ID:** ${error.failureId}\n`;
-    message += `**Check logs:** \`glootie/mcp-failures.log\` for detailed analysis\n`;
 
     return message;
   }

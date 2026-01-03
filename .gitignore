@@ -1,46 +1,8 @@
-# Core dependencies and outputs
+# Dependencies
 node_modules/
 .env
-**/node_modules
-optimized/
-dist/
-build/
 
-# Glootie runtime and generated files
-glootie/
-glootie/**/*
-results/
-results/**/*
-shell-snapshots/
-shell-snapshots/**/*
-code_search_index/
-code_search_index/**/*
-.transformers-cache/
-.transformers-cache/**/*
-.mcp-metadata/
-.mcp-metadata/**/*
-.vexify.db
-*.tgz
-.claude-context/
-
-# Test and analysis files
-*.tmp
-*.log
-analyze_step_data.py
-analyze_with_bash.sh
-analyze-steps.js
-claude-output-*.json
-claude-output-*.json.*.log
-claude-steps-*.json
-*.stderr.log
-*.stdout.log
-mcp-performance-*.json
-
-# Development configuration
-.search-defaults.json
-.searchignore
-
-# OS and IDE files
+# OS and IDE
 .DS_Store
 .DS_Store?
 ._*
