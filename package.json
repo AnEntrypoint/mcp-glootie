@@ -12,12 +12,10 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node src/index.js ./test",
-    "postinstall": "node scripts/postinstall.js"
+    "dev": "node src/index.js ./test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.2",
-    "ignore": "^7.0.5",
     "uuid": "^9.0.1"
   },
   "engines": {
