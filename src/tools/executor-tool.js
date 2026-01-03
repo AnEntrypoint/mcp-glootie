@@ -7,8 +7,6 @@ import { workingDirectoryContext, createToolContext } from '../core/working-dire
 import { suppressConsoleOutput } from '../core/console-suppression.js';
 import { executionState, shouldExecuteAsync, addExecutionStatusToResponse } from '../core/execution-state.js';
 import { ToolError, ToolErrorHandler } from '../core/error-handling.js';
-import { withConnectionManagement, getGlobalConnectionManager } from '../core/connection-manager.js';
-import { withCrossToolAwareness, addToolMetadata } from '../core/cross-tool-context.js';
 
 
 
@@ -694,7 +692,7 @@ export const executionTools = [
       },
       required: ["workingDirectory"]
     },
-    handler: withCrossToolAwareness(withConnectionManagement(async ({ code, commands, workingDirectory, runtime = "auto", timeout = 240000 }) => {
+    handler: async ({ code, commands, workingDirectory, runtime = "auto", timeout = 240000 }) => {
       const consoleRestore = suppressConsoleOutput();
       const effectiveWorkingDirectory = workingDirectory;
       const query = code || commands || '';
@@ -849,10 +847,7 @@ export const executionTools = [
 
         consoleRestore.restore();
       }
-    }, 'execute', {
-      maxRetries: 2,
-      retryDelay: 1000
-    }), 'execute')
+    }
   }
 ];
 
