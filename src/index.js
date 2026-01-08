@@ -87,10 +87,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     try {
-      const result = await Promise.race([
-        tool.handler(args || {}),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Tool execution timeout')), 120000))
-      ]);
+      const result = await tool.handler(args || {});
       return result;
     } catch (toolError) {
       return {
