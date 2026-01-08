@@ -15,8 +15,7 @@
     "dev": "node src/index.js ./test"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.18.2",
-    "uuid": "^9.0.1"
+    "@modelcontextprotocol/sdk": "^1.18.2"
   },
   "engines": {
     "node": ">=16.0.0"
