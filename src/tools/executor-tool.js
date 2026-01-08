@@ -633,6 +633,7 @@ export function detectAvailableRuntimes() {
     nodejs: { cmd: 'node --version', available: false, version: null },
     deno: { cmd: 'deno --version', available: false, version: null },
     bash: { cmd: 'bash --version', available: false, version: null },
+    cmd: { cmd: process.platform === 'win32' ? 'cmd /c ver' : 'false', available: false, version: null },
     go: { cmd: 'go version', available: false, version: null },
     rust: { cmd: 'rustc --version', available: false, version: null },
     python: { cmd: 'python3 --version', available: false, version: null },
@@ -710,10 +711,10 @@ const baseTools = [
           type: "string",
           description: "Code to execute. Include timeouts for network/async operations to prevent hangs."
         },
-        runtime: {
+        language: {
           type: "string",
-          enum: ["nodejs", "deno", "go", "rust", "python", "c", "cpp", "auto"],
-          description: "Execution runtime (default: auto-detect)"
+          enum: ["nodejs", "typescript", "deno", "go", "rust", "python", "c", "cpp", "auto"],
+          description: "Programming language (default: auto-detect). Maps to runtime: nodejs/typescript->nodejs, deno->deno, go->go, rust->rust, python->python, c->c, cpp->cpp"
         },
         timeout: {
           type: "number",
@@ -722,7 +723,7 @@ const baseTools = [
       },
       required: ["workingDirectory"]
     },
-    handler: async ({ code, workingDirectory, runtime = "auto", timeout = 240000 }) => {
+    handler: async ({ code, workingDirectory, language = "auto", timeout = 240000 }) => {
       const consoleRestore = suppressConsoleOutput();
       const effectiveWorkingDirectory = workingDirectory;
       const query = code || '';
@@ -742,16 +743,30 @@ const baseTools = [
           return { content: [{ type: "text", text: "Code is required" }], isError: true };
         }
 
+        const languageToRuntimeMap = {
+          'nodejs': 'nodejs',
+          'typescript': 'nodejs',
+          'deno': 'deno',
+          'go': 'go',
+          'rust': 'rust',
+          'python': 'python',
+          'c': 'c',
+          'cpp': 'cpp',
+          'auto': 'auto'
+        };
+
+        const targetRuntime = languageToRuntimeMap[language] || language;
+
         const execution = executionState.startExecution({
           type: 'execute',
           code,
-          runtime,
+          language,
+          runtime: targetRuntime,
           workingDirectory: effectiveWorkingDirectory,
           timeout
         });
 
         let result;
-        let targetRuntime = runtime === "auto" ? "nodejs" : runtime;
 
         try {
           const executionStart = Date.now();
@@ -851,6 +866,11 @@ const shellTools = process.platform === 'win32' ? [
           type: ["string", "array"],
           description: "Windows CMD command or array of commands to execute."
         },
+        language: {
+          type: "string",
+          enum: ["cmd", "powershell"],
+          description: "Command language variant (default: cmd)"
+        },
         timeout: {
           type: "number",
           description: "Timeout in milliseconds (default: 240000)"
@@ -858,7 +878,7 @@ const shellTools = process.platform === 'win32' ? [
       },
       required: ["workingDirectory", "commands"]
     },
-    handler: async ({ commands, workingDirectory, timeout = 240000 }) => {
+    handler: async ({ commands, workingDirectory, language = "cmd", timeout = 240000 }) => {
       const consoleRestore = suppressConsoleOutput();
       const query = Array.isArray(commands) ? commands.join(' && ') : commands;
 
@@ -958,6 +978,11 @@ const shellTools = process.platform === 'win32' ? [
           type: ["string", "array"],
           description: "Bash command or array of commands to execute."
         },
+        language: {
+          type: "string",
+          enum: ["bash", "sh", "zsh"],
+          description: "Shell language variant (default: bash)"
+        },
         timeout: {
           type: "number",
           description: "Timeout in milliseconds (default: 240000)"
@@ -965,7 +990,7 @@ const shellTools = process.platform === 'win32' ? [
       },
       required: ["workingDirectory", "commands"]
     },
-    handler: async ({ commands, workingDirectory, timeout = 240000 }) => {
+    handler: async ({ commands, workingDirectory, language = "bash", timeout = 240000 }) => {
       const consoleRestore = suppressConsoleOutput();
       const query = Array.isArray(commands) ? commands.join(' && ') : commands;
 
