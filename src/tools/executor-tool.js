@@ -326,6 +326,7 @@ const EXECUTION_CONFIGS = {
   nodejs: { command: 'node', args: ['-e'], description: 'Node.js JavaScript' },
   deno: { command: 'deno', args: ['eval', '--no-check'], description: 'Deno JavaScript/TypeScript' },
   bash: { command: 'bash', args: ['-c'], description: 'Bash shell commands' },
+  cmd: { command: 'cmd.exe', args: ['/c'], description: 'Windows terminal' },
   go: { command: 'go', args: ['run'], description: 'Go programming language', requiresFile: true },
   rust: { command: 'rustc', args: [], description: 'Rust programming language', requiresCompile: true },
   python: { command: 'python3', args: ['-c'], description: 'Python programming language' },
@@ -342,26 +343,27 @@ export async function executeWithRuntime(codeOrCommands, runtime, options = {}) 
   }
 
   
-  if (runtime === 'bash') {
-    
-    if (Array.isArray(codeOrCommands)) {
-      const script = createBashScript(codeOrCommands);
-      const tempScript = path.join(os.tmpdir(), `glootie_bash_${Date.now()}.sh`);
-      writeFileSync(tempScript, script);
-      chmodSync(tempScript, '755');
+  if (runtime === 'bash' || runtime === 'cmd') {
 
-      
+    if (Array.isArray(codeOrCommands)) {
+      const script = runtime === 'bash' ? createBashScript(codeOrCommands) : createCmdScript(codeOrCommands);
+      const ext = runtime === 'bash' ? '.sh' : '.bat';
+      const tempScript = path.join(os.tmpdir(), `glootie_${runtime}_${Date.now()}${ext}`);
+      writeFileSync(tempScript, script);
+
+      if (runtime === 'bash') {
+        chmodSync(tempScript, '755');
+      }
+
       return executeProcess(config.command, [tempScript], {
         cwd: workingDirectory,
         timeout,
         encoding: 'utf8'
       }).finally(() => {
-        try { unlinkSync(tempScript); } catch (e) {
-          
-        }
+        try { unlinkSync(tempScript); } catch (e) {}
       });
     } else {
-      
+
       return executeProcess(config.command, [...config.args, codeOrCommands], {
         cwd: workingDirectory,
         timeout,
@@ -558,6 +560,38 @@ function createBashScript(commands) {
   return scriptLines.join('\n');
 }
 
+function createCmdScript(commands) {
+  const scriptLines = [
+    '@echo off',
+    'setlocal enabledelayedexpansion',
+    '',
+    'echo === WINDOWS TERMINAL EXECUTION START ===',
+    `echo Commands to execute: ${commands.length}`,
+    'echo Working directory: %cd%',
+    'for /f "tokens=*" %%A in (\'date /t\') do set TODAY=%%A',
+    'for /f "tokens=*" %%A in (\'time /t\') do set TIMESTAMP=%%A',
+    'echo Timestamp: %TODAY% %TIMESTAMP%',
+    'echo.'
+  ];
+
+  commands.forEach((command, index) => {
+    scriptLines.push(`echo --- Command ${index + 1}/${commands.length} ---`);
+    scriptLines.push(`echo $ ${command}`);
+    scriptLines.push(command);
+    scriptLines.push('if !errorlevel! neq 0 (');
+    scriptLines.push(`  echo Command ${index + 1} failed with exit code !errorlevel! 1>&2`);
+    scriptLines.push('  exit /b !errorlevel!');
+    scriptLines.push(')');
+    scriptLines.push('echo.');
+  });
+
+  scriptLines.push('echo === WINDOWS TERMINAL EXECUTION COMPLETE ===');
+  scriptLines.push('echo All commands completed');
+  scriptLines.push('endlocal');
+
+  return scriptLines.join('\r\n');
+}
+
 
 // validateRequiredParamsUtil is now imported from utilities.js
 
@@ -661,10 +695,10 @@ export async function executeCppCode(code, options = {}) {
 
 export { generateExecutionInsights };
 
-export const executionTools = [
+const baseTools = [
   {
     name: "execute",
-    description: "Execute code in JS/TS, Go, Rust, Python, C, C++, or bash with auto-runtime detection. Primary tool for testing hypotheses before implementation. Supports both code snippets and shell commands.",
+    description: "Execute code in JS/TS, Go, Rust, Python, C, or C++ with auto-runtime detection. Primary tool for testing hypotheses before implementation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -676,13 +710,9 @@ export const executionTools = [
           type: "string",
           description: "Code to execute. Include timeouts for network/async operations to prevent hangs."
         },
-        commands: {
-          type: ["string", "array"],
-          description: "Bash commands (single or array for planned batch executions)"
-        },
         runtime: {
           type: "string",
-          enum: ["nodejs", "deno", "bash", "go", "rust", "python", "c", "cpp", "auto"],
+          enum: ["nodejs", "deno", "go", "rust", "python", "c", "cpp", "auto"],
           description: "Execution runtime (default: auto-detect)"
         },
         timeout: {
@@ -692,13 +722,12 @@ export const executionTools = [
       },
       required: ["workingDirectory"]
     },
-    handler: async ({ code, commands, workingDirectory, runtime = "auto", timeout = 240000 }) => {
+    handler: async ({ code, workingDirectory, runtime = "auto", timeout = 240000 }) => {
       const consoleRestore = suppressConsoleOutput();
       const effectiveWorkingDirectory = workingDirectory;
-      const query = code || commands || '';
+      const query = code || '';
 
       try {
-        // Validate required parameters
         if (!workingDirectory) {
           throw new ToolError(
             'Working directory is required',
@@ -709,79 +738,35 @@ export const executionTools = [
           );
         }
 
-        // Start execution tracking for all operations
+        if (!code) {
+          return { content: [{ type: "text", text: "Code is required" }], isError: true };
+        }
+
         const execution = executionState.startExecution({
           type: 'execute',
           code,
-          commands,
           runtime,
           workingDirectory: effectiveWorkingDirectory,
           timeout
         });
 
         let result;
-        if (code) {
-          let targetRuntime = runtime === "auto" ? "nodejs" : runtime;
+        let targetRuntime = runtime === "auto" ? "nodejs" : runtime;
 
-          if (runtime === "auto") {
-            const shellCommands = ['npm ', 'npx ', 'yarn ', 'pip ', 'python ', 'go ', 'rustc ', 'gcc ', 'g++ ', 'git ', 'mkdir ', 'rm ', 'ls ', 'cd '];
-            const isShellCommand = shellCommands.some(cmd => code.trim().startsWith(cmd));
-            if (isShellCommand) {
-              targetRuntime = 'bash';
-            }
-          }
-
-          try {
-            const executionStart = Date.now();
-            result = await executeWithRuntimeValidation(code, targetRuntime, { workingDirectory, timeout });
-            const executionDuration = Date.now() - executionStart;
-
-            // Complete execution (duration-based logic for cross-tool sharing)
-            executionState.completeExecution(execution.id, result);
-          } catch (executionError) {
-            if (targetRuntime === 'bash') {
-              try {
-                result = await executeWithRuntimeValidation(code, 'nodejs', { workingDirectory, timeout });
-              } catch (fallbackError) {
-                result = {
-                  success: false,
-                  stdout: '',
-                  stderr: `Failed to execute as both bash and nodejs:\nBash error: ${executionError.message}\nNode.js error: ${fallbackError.message}`,
-                  executionTimeMs: 0
-                };
-              }
-            } else {
-              result = {
-                success: false,
-                stdout: '',
-                stderr: `Execution failed: ${executionError.message}`,
-                executionTimeMs: 0
-              };
-            }
-            executionState.failExecution(execution.id, executionError);
-          }
-          result = enhanceExecutionResult(result, code, targetRuntime, workingDirectory);
-        } else if (commands) {
-          try {
-            const executionStart = Date.now();
-            result = await executeWithRuntimeValidation(commands, 'bash', { workingDirectory, timeout });
-            const executionDuration = Date.now() - executionStart;
-
-            // Complete execution
-            executionState.completeExecution(execution.id, result);
-          } catch (executionError) {
-            result = {
-              success: false,
-              stdout: '',
-              stderr: `Command execution failed: ${executionError.message}`,
-              executionTimeMs: 0
-            };
-            executionState.failExecution(execution.id, executionError);
-          }
-          result = enhanceExecutionResult(result, commands, 'bash', workingDirectory);
-        } else {
-          result = { content: [{ type: "text", text: "No code or commands provided" }] };
+        try {
+          const executionStart = Date.now();
+          result = await executeWithRuntimeValidation(code, targetRuntime, { workingDirectory, timeout });
+          executionState.completeExecution(execution.id, result);
+        } catch (executionError) {
+          result = {
+            success: false,
+            stdout: '',
+            stderr: `Execution failed: ${executionError.message}`,
+            executionTimeMs: 0
+          };
+          executionState.failExecution(execution.id, executionError);
         }
+        result = enhanceExecutionResult(result, code, targetRuntime, workingDirectory);
 
 
         const insights = generateExecutionInsights(result, query, effectiveWorkingDirectory);
@@ -848,6 +833,224 @@ export const executionTools = [
         consoleRestore.restore();
       }
     }
+  },
+];
+
+const shellTools = process.platform === 'win32' ? [
+  {
+    name: "cmd",
+    description: "Execute Windows Command Prompt commands and scripts. Supports single commands or arrays of commands for batch execution.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workingDirectory: {
+          type: "string",
+          description: "Path to working directory for execution."
+        },
+        commands: {
+          type: ["string", "array"],
+          description: "Windows CMD command or array of commands to execute."
+        },
+        timeout: {
+          type: "number",
+          description: "Timeout in milliseconds (default: 240000)"
+        }
+      },
+      required: ["workingDirectory", "commands"]
+    },
+    handler: async ({ commands, workingDirectory, timeout = 240000 }) => {
+      const consoleRestore = suppressConsoleOutput();
+      const query = Array.isArray(commands) ? commands.join(' && ') : commands;
+
+      try {
+        if (!workingDirectory) {
+          throw new ToolError(
+            'Working directory is required',
+            'MISSING_PARAMETER',
+            'cmd',
+            false,
+            ['Provide absolute path to working directory']
+          );
+        }
+
+        if (!commands) {
+          return { content: [{ type: "text", text: "Commands are required" }], isError: true };
+        }
+
+        const execution = executionState.startExecution({
+          type: 'cmd',
+          commands,
+          workingDirectory,
+          timeout
+        });
+
+        let result;
+        try {
+          const executionStart = Date.now();
+          result = await executeWithRuntimeValidation(commands, 'cmd', { workingDirectory, timeout });
+          executionState.completeExecution(execution.id, result);
+        } catch (executionError) {
+          result = {
+            success: false,
+            stdout: '',
+            stderr: `Command execution failed: ${executionError.message}`,
+            executionTimeMs: 0
+          };
+          executionState.failExecution(execution.id, executionError);
+        }
+
+        result = enhanceExecutionResult(result, Array.isArray(commands) ? commands.join('\n') : commands, 'cmd', workingDirectory);
+
+        let responseContent = result;
+        if (result._errorAnalysis && result._errorAnalysis.isSyntaxError) {
+          responseContent = {
+            ...result,
+            content: [{ type: "text", text: result.error || result.stderr || 'Execution failed' }]
+          };
+        } else if (!result.success) {
+          responseContent = {
+            ...result,
+            content: [{ type: "text", text: result.error || result.stderr || 'Execution failed' }]
+          };
+        } else if (!result.content) {
+          const outputText = result.success ? (result.stdout || 'Execution successful') : (result.error || result.stderr || 'Execution failed');
+          responseContent = {
+            ...result,
+            content: [{ type: "text", text: outputText }]
+          };
+        }
+
+        const toolContext = createToolContext('cmd', workingDirectory, query, {
+          ...responseContent,
+          duration: responseContent.executionTimeMs || 0
+        });
+        await workingDirectoryContext.updateContext(workingDirectory, 'cmd', toolContext);
+        executionState.cleanup();
+
+        return responseContent;
+      } catch (error) {
+        const errorContext = createToolContext('cmd', workingDirectory, query, {
+          error: error.message,
+          duration: 0
+        });
+        await workingDirectoryContext.updateContext(workingDirectory, 'cmd', errorContext);
+        return {
+          content: [{ type: "text", text: `CMD error: ${error.message}` }],
+          isError: true
+        };
+      } finally {
+        consoleRestore.restore();
+      }
+    }
+  }
+] : [
+  {
+    name: "bash",
+    description: "Execute bash shell commands and scripts. Supports single commands or arrays of commands for batch execution.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workingDirectory: {
+          type: "string",
+          description: "Path to working directory for execution."
+        },
+        commands: {
+          type: ["string", "array"],
+          description: "Bash command or array of commands to execute."
+        },
+        timeout: {
+          type: "number",
+          description: "Timeout in milliseconds (default: 240000)"
+        }
+      },
+      required: ["workingDirectory", "commands"]
+    },
+    handler: async ({ commands, workingDirectory, timeout = 240000 }) => {
+      const consoleRestore = suppressConsoleOutput();
+      const query = Array.isArray(commands) ? commands.join(' && ') : commands;
+
+      try {
+        if (!workingDirectory) {
+          throw new ToolError(
+            'Working directory is required',
+            'MISSING_PARAMETER',
+            'bash',
+            false,
+            ['Provide absolute path to working directory']
+          );
+        }
+
+        if (!commands) {
+          return { content: [{ type: "text", text: "Commands are required" }], isError: true };
+        }
+
+        const execution = executionState.startExecution({
+          type: 'bash',
+          commands,
+          workingDirectory,
+          timeout
+        });
+
+        let result;
+        try {
+          const executionStart = Date.now();
+          result = await executeWithRuntimeValidation(commands, 'bash', { workingDirectory, timeout });
+          executionState.completeExecution(execution.id, result);
+        } catch (executionError) {
+          result = {
+            success: false,
+            stdout: '',
+            stderr: `Command execution failed: ${executionError.message}`,
+            executionTimeMs: 0
+          };
+          executionState.failExecution(execution.id, executionError);
+        }
+
+        result = enhanceExecutionResult(result, Array.isArray(commands) ? commands.join('\n') : commands, 'bash', workingDirectory);
+
+        let responseContent = result;
+        if (result._errorAnalysis && result._errorAnalysis.isSyntaxError) {
+          responseContent = {
+            ...result,
+            content: [{ type: "text", text: result.error || result.stderr || 'Execution failed' }]
+          };
+        } else if (!result.success) {
+          responseContent = {
+            ...result,
+            content: [{ type: "text", text: result.error || result.stderr || 'Execution failed' }]
+          };
+        } else if (!result.content) {
+          const outputText = result.success ? (result.stdout || 'Execution successful') : (result.error || result.stderr || 'Execution failed');
+          responseContent = {
+            ...result,
+            content: [{ type: "text", text: outputText }]
+          };
+        }
+
+        const toolContext = createToolContext('bash', workingDirectory, query, {
+          ...responseContent,
+          duration: responseContent.executionTimeMs || 0
+        });
+        await workingDirectoryContext.updateContext(workingDirectory, 'bash', toolContext);
+        executionState.cleanup();
+
+        return responseContent;
+      } catch (error) {
+        const errorContext = createToolContext('bash', workingDirectory, query, {
+          error: error.message,
+          duration: 0
+        });
+        await workingDirectoryContext.updateContext(workingDirectory, 'bash', errorContext);
+        return {
+          content: [{ type: "text", text: `Bash error: ${error.message}` }],
+          isError: true
+        };
+      } finally {
+        consoleRestore.restore();
+      }
+    }
   }
 ];
+
+export const executionTools = [...baseTools, ...shellTools];
 
