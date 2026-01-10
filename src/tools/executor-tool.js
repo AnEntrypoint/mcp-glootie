@@ -219,7 +219,7 @@ const windowsTools = [
   baseExecuteTool,
   {
     name: 'cmd',
-    description: 'Execute Windows Command Prompt commands',
+    description: 'Execute Windows Command Prompt commands (Prefer coding over cli wherever possible)',
     inputSchema: {
       type: 'object',
       properties: {
