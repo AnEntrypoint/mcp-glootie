@@ -3,7 +3,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, SubscribeRequestSchema, UnsubscribeRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { executionTools, getProcessStatus } from './tools/executor-tool.js';
+import { executionTools, getProcessStatus, closeProcess } from './tools/executor-tool.js';
 
 const subscriptions = new Set();
 
@@ -50,7 +50,39 @@ const processStatusTool = {
   }
 };
 
-const tools = [...(executionTools || []), processStatusTool];
+const processCloseTool = {
+  name: 'process_close',
+  description: 'Close and terminate a backgrounded process',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      processId: { type: 'string', description: 'Process ID returned from execute/cmd/bash' }
+    },
+    required: ['processId']
+  },
+  handler: async ({ processId }) => {
+    try {
+      if (!processId || typeof processId !== 'string') {
+        return {
+          content: [{ type: 'text', text: 'Invalid processId' }],
+          isError: true
+        };
+      }
+      const result = closeProcess(processId);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        isError: result.error ? true : false
+      };
+    } catch (e) {
+      return {
+        content: [{ type: 'text', text: `Process close failed: ${e.message}` }],
+        isError: true
+      };
+    }
+  }
+};
+
+const tools = [...(executionTools || []), processStatusTool, processCloseTool];
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   try {

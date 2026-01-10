@@ -364,3 +364,30 @@ export function getProcessStatus(processId) {
     running: true
   };
 }
+
+export function closeProcess(processId) {
+  const proc = activeProcesses.get(processId);
+  if (!proc) return { error: 'Process not found', processId };
+
+  try {
+    if (proc.child && !proc.child.killed) {
+      proc.child.kill('SIGTERM');
+      setTimeout(() => {
+        if (proc.child && !proc.child.killed) {
+          proc.child.kill('SIGKILL');
+        }
+      }, 5000);
+    }
+    activeProcesses.delete(processId);
+    return {
+      success: true,
+      processId,
+      message: `Process ${processId} terminated`
+    };
+  } catch (error) {
+    return {
+      error: `Failed to close process: ${error?.message || String(error)}`,
+      processId
+    };
+  }
+}
