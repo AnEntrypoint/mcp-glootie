@@ -17,7 +17,7 @@ const CONFIGS = {
 };
 
 const activeProcesses = new Map();
-const BACKGROUND_THRESHOLD = 60000;
+const BACKGROUND_THRESHOLD = 30000;
 
 function executeProcess(command, args, options) {
   return new Promise((resolve, reject) => {
