@@ -107,6 +107,15 @@ function executeProcess(command, args, options) {
   });
 }
 
+function getRunningProcessesList() {
+  if (activeProcesses.size === 0) return '';
+  const processList = Array.from(activeProcesses.entries()).map(([pid, proc]) => {
+    const elapsed = Date.now() - proc.startTime;
+    return `  - ${pid} (${elapsed}ms elapsed)`;
+  }).join('\n');
+  return `\nRunning processes:\n${processList}`;
+}
+
 async function executeCode(code, runtime, workingDirectory, processId) {
   try {
     if (!code || typeof code !== 'string') {
@@ -168,13 +177,13 @@ const baseExecuteTool = {
     try {
       if (!code || typeof code !== 'string') {
         return {
-          content: [{ type: 'text', text: 'Error: code must be a non-empty string' }],
+          content: [{ type: 'text', text: 'Error: code must be a non-empty string' + getRunningProcessesList() }],
           isError: true
         };
       }
       if (!workingDirectory || typeof workingDirectory !== 'string') {
         return {
-          content: [{ type: 'text', text: 'Error: workingDirectory must be a non-empty string' }],
+          content: [{ type: 'text', text: 'Error: workingDirectory must be a non-empty string' + getRunningProcessesList() }],
           isError: true
         };
       }
@@ -195,7 +204,7 @@ const baseExecuteTool = {
         return {
           content: [{
             type: 'text',
-            text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\nCurrent output:\n${currentOutput}`
+            text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\nCurrent output:\n${currentOutput}` + getRunningProcessesList()
           }],
           isError: false
         };
@@ -208,19 +217,19 @@ const baseExecuteTool = {
           result.stderr ? `stderr:\n${result.stderr}` : null
         ].filter(Boolean).join('\n\n');
         return {
-          content: [{ type: 'text', text: errorOutput || '(no output)' }],
+          content: [{ type: 'text', text: (errorOutput || '(no output)') + getRunningProcessesList() }],
           isError: true
         };
       }
 
       return {
-        content: [{ type: 'text', text: result.stdout || 'Success' }],
+        content: [{ type: 'text', text: (result.stdout || 'Success') + getRunningProcessesList() }],
         isError: false
       };
     } catch (error) {
       activeProcesses.delete(processId);
       return {
-        content: [{ type: 'text', text: `Error: ${error?.message || String(error)}` }],
+        content: [{ type: 'text', text: `Error: ${error?.message || String(error)}` + getRunningProcessesList() }],
         isError: true
       };
     }
@@ -246,13 +255,13 @@ const windowsTools = [
       try {
         if (!commands) {
           return {
-            content: [{ type: 'text', text: 'Error: commands must be provided' }],
+            content: [{ type: 'text', text: 'Error: commands must be provided' + getRunningProcessesList() }],
             isError: true
           };
         }
         if (!workingDirectory || typeof workingDirectory !== 'string') {
           return {
-            content: [{ type: 'text', text: 'Error: workingDirectory must be a non-empty string' }],
+            content: [{ type: 'text', text: 'Error: workingDirectory must be a non-empty string' + getRunningProcessesList() }],
             isError: true
           };
         }
@@ -273,7 +282,7 @@ const windowsTools = [
           return {
             content: [{
               type: 'text',
-              text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\nCurrent output:\n${currentOutput}`
+              text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\nCurrent output:\n${currentOutput}` + getRunningProcessesList()
             }],
             isError: false
           };
@@ -286,19 +295,19 @@ const windowsTools = [
             result.stderr ? `stderr:\n${result.stderr}` : null
           ].filter(Boolean).join('\n\n');
           return {
-            content: [{ type: 'text', text: errorOutput || '(no output)' }],
+            content: [{ type: 'text', text: (errorOutput || '(no output)') + getRunningProcessesList() }],
             isError: true
           };
         }
 
         return {
-          content: [{ type: 'text', text: result.stdout || 'Success' }],
+          content: [{ type: 'text', text: (result.stdout || 'Success') + getRunningProcessesList() }],
           isError: false
         };
       } catch (error) {
         activeProcesses.delete(processId);
         return {
-          content: [{ type: 'text', text: `Error: ${error?.message || String(error)}` }],
+          content: [{ type: 'text', text: `Error: ${error?.message || String(error)}` + getRunningProcessesList() }],
           isError: true
         };
       }
@@ -325,13 +334,13 @@ const unixTools = [
       try {
         if (!commands) {
           return {
-            content: [{ type: 'text', text: 'Error: commands must be provided' }],
+            content: [{ type: 'text', text: 'Error: commands must be provided' + getRunningProcessesList() }],
             isError: true
           };
         }
         if (!workingDirectory || typeof workingDirectory !== 'string') {
           return {
-            content: [{ type: 'text', text: 'Error: workingDirectory must be a non-empty string' }],
+            content: [{ type: 'text', text: 'Error: workingDirectory must be a non-empty string' + getRunningProcessesList() }],
             isError: true
           };
         }
@@ -352,7 +361,7 @@ const unixTools = [
           return {
             content: [{
               type: 'text',
-              text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\nCurrent output:\n${currentOutput}`
+              text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\nCurrent output:\n${currentOutput}` + getRunningProcessesList()
             }],
             isError: false
           };
@@ -365,19 +374,19 @@ const unixTools = [
             result.stderr ? `stderr:\n${result.stderr}` : null
           ].filter(Boolean).join('\n\n');
           return {
-            content: [{ type: 'text', text: errorOutput || '(no output)' }],
+            content: [{ type: 'text', text: (errorOutput || '(no output)') + getRunningProcessesList() }],
             isError: true
           };
         }
 
         return {
-          content: [{ type: 'text', text: result.stdout || 'Success' }],
+          content: [{ type: 'text', text: (result.stdout || 'Success') + getRunningProcessesList() }],
           isError: false
         };
       } catch (error) {
         activeProcesses.delete(processId);
         return {
-          content: [{ type: 'text', text: `Error: ${error?.message || String(error)}` }],
+          content: [{ type: 'text', text: `Error: ${error?.message || String(error)}` + getRunningProcessesList() }],
           isError: true
         };
       }
