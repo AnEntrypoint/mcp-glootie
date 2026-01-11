@@ -201,9 +201,21 @@ const baseExecuteTool = {
         };
       }
 
+      if (!result.success) {
+        const errorOutput = [
+          `Command failed (exit code ${result.code})`,
+          result.stdout ? `stdout:\n${result.stdout}` : null,
+          result.stderr ? `stderr:\n${result.stderr}` : null
+        ].filter(Boolean).join('\n\n');
+        return {
+          content: [{ type: 'text', text: errorOutput || '(no output)' }],
+          isError: true
+        };
+      }
+
       return {
-        content: [{ type: 'text', text: result.success ? (result.stdout || 'Success') : result.stderr }],
-        isError: !result.success
+        content: [{ type: 'text', text: result.stdout || 'Success' }],
+        isError: false
       };
     } catch (error) {
       activeProcesses.delete(processId);
@@ -267,9 +279,21 @@ const windowsTools = [
           };
         }
 
+        if (!result.success) {
+          const errorOutput = [
+            `Command failed (exit code ${result.code})`,
+            result.stdout ? `stdout:\n${result.stdout}` : null,
+            result.stderr ? `stderr:\n${result.stderr}` : null
+          ].filter(Boolean).join('\n\n');
+          return {
+            content: [{ type: 'text', text: errorOutput || '(no output)' }],
+            isError: true
+          };
+        }
+
         return {
-          content: [{ type: 'text', text: result.success ? (result.stdout || 'Success') : result.stderr }],
-          isError: !result.success
+          content: [{ type: 'text', text: result.stdout || 'Success' }],
+          isError: false
         };
       } catch (error) {
         activeProcesses.delete(processId);
@@ -334,9 +358,21 @@ const unixTools = [
           };
         }
 
+        if (!result.success) {
+          const errorOutput = [
+            `Command failed (exit code ${result.code})`,
+            result.stdout ? `stdout:\n${result.stdout}` : null,
+            result.stderr ? `stderr:\n${result.stderr}` : null
+          ].filter(Boolean).join('\n\n');
+          return {
+            content: [{ type: 'text', text: errorOutput || '(no output)' }],
+            isError: true
+          };
+        }
+
         return {
-          content: [{ type: 'text', text: result.success ? (result.stdout || 'Success') : result.stderr }],
-          isError: !result.success
+          content: [{ type: 'text', text: result.stdout || 'Success' }],
+          isError: false
         };
       } catch (error) {
         activeProcesses.delete(processId);
