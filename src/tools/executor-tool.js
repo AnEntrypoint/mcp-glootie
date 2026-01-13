@@ -26,7 +26,14 @@ function executeProcess(command, args, options) {
       let child;
 
       try {
-        child = spawn(command, args, { cwd: options.cwd, stdio: ['pipe', 'pipe', 'pipe'] });
+        const spawnOptions = { cwd: options.cwd, stdio: ['pipe', 'pipe', 'pipe'] };
+        if (options.isBashCommand) {
+          spawnOptions.detached = true;
+        }
+        child = spawn(command, args, spawnOptions);
+        if (options.isBashCommand) {
+          child.unref();
+        }
       } catch (e) {
         return reject(new Error(`Failed to spawn process: ${e?.message || String(e)}`));
       }
@@ -146,7 +153,7 @@ async function executeCode(code, runtime, workingDirectory, processId) {
       }
 
       try {
-        return await executeProcess(config.command, [tempFile], { cwd: workingDirectory, processId });
+        return await executeProcess(config.command, [tempFile], { cwd: workingDirectory, processId, isBashCommand: runtime === 'bash' });
       } catch (e) {
         throw e;
       } finally {
