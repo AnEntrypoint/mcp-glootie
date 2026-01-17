@@ -82,7 +82,39 @@ const processCloseTool = {
   }
 };
 
-const tools = [...(executionTools || []), processStatusTool, processCloseTool];
+const sleepTool = {
+  name: 'sleep',
+  description: 'Sleep for a specified number of milliseconds',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      milliseconds: { type: 'number', description: 'Number of milliseconds to sleep' }
+    },
+    required: ['milliseconds']
+  },
+  handler: async ({ milliseconds }) => {
+    try {
+      if (typeof milliseconds !== 'number' || milliseconds < 0) {
+        return {
+          content: [{ type: 'text', text: 'Invalid milliseconds: must be a non-negative number' }],
+          isError: true
+        };
+      }
+      await new Promise(resolve => setTimeout(resolve, milliseconds));
+      return {
+        content: [{ type: 'text', text: `Slept for ${milliseconds}ms` }],
+        isError: false
+      };
+    } catch (e) {
+      return {
+        content: [{ type: 'text', text: `Sleep failed: ${e.message}` }],
+        isError: true
+      };
+    }
+  }
+};
+
+const tools = [...(executionTools || []), processStatusTool, processCloseTool, sleepTool];
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   try {
