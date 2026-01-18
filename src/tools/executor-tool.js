@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { writeFileSync, unlinkSync } from 'fs';
 import path from 'path';
 import os from 'os';
+import { execSync } from 'child_process';
 
 const CONFIGS = {
   nodejs: { command: 'node', args: ['-e'] },
@@ -25,18 +26,22 @@ function executeProcess(command, args, options) {
       const startTime = Date.now();
       let child;
 
-      try {
-        const spawnOptions = { cwd: options.cwd, stdio: ['pipe', 'pipe', 'pipe'] };
-        if (options.isBashCommand) {
-          spawnOptions.detached = true;
-        }
-        child = spawn(command, args, spawnOptions);
-        if (options.isBashCommand) {
-          child.unref();
-        }
-      } catch (e) {
-        return reject(new Error(`Failed to spawn process: ${e?.message || String(e)}`));
-      }
+       try {
+         const spawnOptions = { cwd: options.cwd, stdio: ['pipe', 'pipe', 'pipe'] };
+         // On Windows, use shell: true for cmd.exe to properly handle quoted paths
+         if (process.platform === 'win32' && command === 'cmd.exe') {
+           spawnOptions.shell = true;
+         }
+         if (options.isBashCommand) {
+           spawnOptions.detached = true;
+         }
+         child = spawn(command, args, spawnOptions);
+         if (options.isBashCommand) {
+           child.unref();
+         }
+       } catch (e) {
+         return reject(new Error(`Failed to spawn process: ${e?.message || String(e)}`));
+       }
 
       let stdout = '';
       let stderr = '';
@@ -45,17 +50,28 @@ function executeProcess(command, args, options) {
       const processId = options.processId;
       activeProcesses.set(processId, { child, startTime, stdout: '', stderr: '' });
 
-      const cleanupProcess = () => {
-        try {
-          if (child && !child.killed) {
-            child.kill('SIGTERM');
-            setTimeout(() => {
-              if (child && !child.killed) child.kill('SIGKILL');
-            }, 5000);
-          }
-        } catch (e) {}
-        activeProcesses.delete(processId);
-      };
+       const cleanupProcess = () => {
+         try {
+           if (child && !child.killed) {
+             if (process.platform === 'win32') {
+               // On Windows, use taskkill for reliable process termination
+               try {
+                 execSync(`taskkill /pid ${child.pid} /t /f`, { stdio: 'ignore' });
+               } catch (e) {
+                 // If taskkill fails, try standard kill
+                 child.kill();
+               }
+             } else {
+               // On Unix-like systems, use standard signals
+               child.kill('SIGTERM');
+               setTimeout(() => {
+                 if (child && !child.killed) child.kill('SIGKILL');
+               }, 5000);
+             }
+           }
+         } catch (e) {}
+         activeProcesses.delete(processId);
+       };
 
       const handleError = (error) => {
         if (timedOut) return;
@@ -135,8 +151,11 @@ async function executeCode(code, runtime, workingDirectory, processId) {
       throw new Error('Invalid workingDirectory specified');
     }
 
-    const config = CONFIGS[runtime];
-    if (!config) throw new Error(`Unsupported runtime: ${runtime}`);
+     const config = CONFIGS[runtime];
+     if (!config) {
+       const supportedRuntimes = Object.keys(CONFIGS).join(', ');
+       throw new Error(`Unsupported runtime: ${runtime}. Supported: ${supportedRuntimes}`);
+     }
 
     if (['bash', 'cmd'].includes(runtime)) {
       const ext = runtime === 'bash' ? '.sh' : '.bat';
@@ -152,20 +171,28 @@ async function executeCode(code, runtime, workingDirectory, processId) {
         throw new Error(`Failed to create temp file: ${e?.message || String(e)}`);
       }
 
-      try {
-        return await executeProcess(config.command, [tempFile], { cwd: workingDirectory, processId, isBashCommand: runtime === 'bash' });
-      } catch (e) {
-        throw e;
-      } finally {
-        try { unlinkSync(tempFile); } catch (e) {}
-      }
+       try {
+         // For cmd.exe, wrap the path in quotes to handle spaces
+         const args = runtime === 'cmd' 
+           ? ['/c', `"${tempFile}"`]  // Quote the path for cmd.exe
+           : [tempFile];
+         return await executeProcess(config.command, args, { cwd: workingDirectory, processId, isBashCommand: runtime === 'bash' });
+       } catch (e) {
+         throw e;
+       } finally {
+         try { unlinkSync(tempFile); } catch (e) {}
+       }
     }
 
-    return await executeProcess(config.command, [...config.args, code], { cwd: workingDirectory, processId });
-  } catch (error) {
-    throw new Error(`Code execution failed: ${error?.message || String(error)}`);
-  }
-}
+     return await executeProcess(config.command, [...config.args, code], { cwd: workingDirectory, processId });
+   } catch (error) {
+     const errorMsg = error?.message || String(error);
+     if (runtime === 'cmd' && errorMsg.includes('ENOENT')) {
+       throw new Error(`CMD execution failed: cmd.exe not found. Ensure you're running on Windows.`);
+     }
+     throw new Error(`Code execution failed: ${errorMsg}`);
+   }
+ }
 
 const baseExecuteTool = {
   name: 'execute',
