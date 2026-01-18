@@ -102,18 +102,18 @@ function executeProcess(command, args, options) {
       child.stdout?.on('data', (d) => handleData(false, d));
       child.stderr?.on('data', (d) => handleData(true, d));
 
-      child.on('close', (code) => {
-        if (timedOut) return;
-        timedOut = true;
-        cleanupProcess();
-        resolve({
-          success: code === 0,
-          stdout,
-          stderr: code !== 0 ? stderr : '',
-          executionTimeMs: Date.now() - startTime,
-          code
-        });
-      });
+       child.on('close', (code) => {
+         if (timedOut) return;
+         timedOut = true;
+         cleanupProcess();
+         resolve({
+           success: code === 0,
+           stdout,
+           stderr,  // Always include stderr, regardless of exit code
+           executionTimeMs: Date.now() - startTime,
+           code
+         });
+       });
 
       child.on('error', (error) => {
         handleError(new Error(`Process error: ${error?.message || String(error)}`));
@@ -131,13 +131,47 @@ function executeProcess(command, args, options) {
 }
 
 function getRunningProcessesList() {
-  if (activeProcesses.size === 0) return '';
-  const processList = Array.from(activeProcesses.entries()).map(([pid, proc]) => {
-    const elapsed = Date.now() - proc.startTime;
-    return `  - ${pid} (${elapsed}ms elapsed)`;
-  }).join('\n');
-  return `\nRunning processes:\n${processList}`;
-}
+   if (activeProcesses.size === 0) return '';
+   const processList = Array.from(activeProcesses.entries()).map(([pid, proc]) => {
+     const elapsed = Date.now() - proc.startTime;
+     return `  - ${pid} (${elapsed}ms elapsed)`;
+   }).join('\n');
+   return `\nRunning processes:\n${processList}`;
+ }
+
+function formatExecutionOutput(result) {
+   const parts = [];
+   
+   if (result.stdout) {
+     parts.push(`[STDOUT]\n${result.stdout}`);
+   }
+   
+   if (result.stderr) {
+     parts.push(`[STDERR]\n${result.stderr}`);
+   }
+   
+   if (parts.length === 0) {
+     parts.push('(no output)');
+   }
+   
+   return parts.join('\n\n');
+ }
+
+ function formatExecutionContext(result) {
+   const context = [
+     `Exit code: ${result.code}`,
+     `Time: ${result.executionTimeMs}ms`
+   ];
+   
+   if (result.stdout) {
+     context.push(`Stdout size: ${result.stdout.length} bytes`);
+   }
+   if (result.stderr) {
+     context.push(`Stderr size: ${result.stderr.length} bytes`);
+   }
+   
+   return context.join(' | ');
+ }
 
 async function executeCode(code, runtime, workingDirectory, processId) {
   try {
@@ -231,35 +265,34 @@ const baseExecuteTool = {
         new Promise(resolve => setTimeout(() => resolve(null), BACKGROUND_THRESHOLD))
       ]);
 
-      if (result === null) {
-        const proc = activeProcesses.get(processId);
-        const resourceUri = `glootie://process/${processId}`;
-        const currentOutput = proc?.stdout || '(no output yet)';
-        return {
-          content: [{
-            type: 'text',
-            text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\nCurrent output:\n${currentOutput}` + getRunningProcessesList()
-          }],
-          isError: false
-        };
-      }
+       if (result === null) {
+         const proc = activeProcesses.get(processId);
+         const resourceUri = `glootie://process/${processId}`;
+         const currentOutput = (proc?.stdout || '') + (proc?.stderr ? `\n[STDERR]\n${proc.stderr}` : '');
+         return {
+           content: [{
+             type: 'text',
+             text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\n\nCurrent output:\n${currentOutput || '(no output yet)'}` + getRunningProcessesList()
+           }],
+           isError: false
+         };
+       }
 
-      if (!result.success) {
-        const errorOutput = [
-          `Command failed (exit code ${result.code})`,
-          result.stdout ? `stdout:\n${result.stdout}` : null,
-          result.stderr ? `stderr:\n${result.stderr}` : null
-        ].filter(Boolean).join('\n\n');
-        return {
-          content: [{ type: 'text', text: (errorOutput || '(no output)') + getRunningProcessesList() }],
-          isError: true
-        };
-      }
+       if (!result.success) {
+         const output = formatExecutionOutput(result);
+         const context = formatExecutionContext(result);
+         return {
+           content: [{ type: 'text', text: `Command failed\n${context}\n\n${output}` + getRunningProcessesList() }],
+           isError: true
+         };
+       }
 
-      return {
-        content: [{ type: 'text', text: (result.stdout || 'Success') + getRunningProcessesList() }],
-        isError: false
-      };
+       const output = formatExecutionOutput(result);
+       const context = formatExecutionContext(result);
+       return {
+         content: [{ type: 'text', text: `${context}\n\n${output}` + getRunningProcessesList() }],
+         isError: false
+       };
     } catch (error) {
       activeProcesses.delete(processId);
       return {
@@ -302,42 +335,41 @@ const windowsTools = [
 
         const cmd = Array.isArray(commands) ? commands.join(' & ') : String(commands);
 
-        const resultPromise = executeCode(cmd, 'cmd', workingDirectory, processId);
+         const resultPromise = executeCode(cmd, 'cmd', workingDirectory, processId);
 
-        const result = await Promise.race([
-          resultPromise,
-          new Promise(resolve => setTimeout(() => resolve(null), BACKGROUND_THRESHOLD))
-        ]);
+         const result = await Promise.race([
+           resultPromise,
+           new Promise(resolve => setTimeout(() => resolve(null), BACKGROUND_THRESHOLD))
+         ]);
 
-        if (result === null) {
-          const proc = activeProcesses.get(processId);
-          const resourceUri = `glootie://process/${processId}`;
-          const currentOutput = proc?.stdout || '(no output yet)';
-          return {
-            content: [{
-              type: 'text',
-              text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\nCurrent output:\n${currentOutput}` + getRunningProcessesList()
-            }],
-            isError: false
-          };
-        }
+         if (result === null) {
+           const proc = activeProcesses.get(processId);
+           const resourceUri = `glootie://process/${processId}`;
+           const currentOutput = (proc?.stdout || '') + (proc?.stderr ? `\n[STDERR]\n${proc.stderr}` : '');
+           return {
+             content: [{
+               type: 'text',
+               text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\n\nCurrent output:\n${currentOutput || '(no output yet)'}` + getRunningProcessesList()
+             }],
+             isError: false
+           };
+         }
 
-        if (!result.success) {
-          const errorOutput = [
-            `Command failed (exit code ${result.code})`,
-            result.stdout ? `stdout:\n${result.stdout}` : null,
-            result.stderr ? `stderr:\n${result.stderr}` : null
-          ].filter(Boolean).join('\n\n');
-          return {
-            content: [{ type: 'text', text: (errorOutput || '(no output)') + getRunningProcessesList() }],
-            isError: true
-          };
-        }
+         if (!result.success) {
+           const output = formatExecutionOutput(result);
+           const context = formatExecutionContext(result);
+           return {
+             content: [{ type: 'text', text: `Command failed\n${context}\n\n${output}` + getRunningProcessesList() }],
+             isError: true
+           };
+         }
 
-        return {
-          content: [{ type: 'text', text: (result.stdout || 'Success') + getRunningProcessesList() }],
-          isError: false
-        };
+         const output = formatExecutionOutput(result);
+         const context = formatExecutionContext(result);
+         return {
+           content: [{ type: 'text', text: `${context}\n\n${output}` + getRunningProcessesList() }],
+           isError: false
+         };
       } catch (error) {
         activeProcesses.delete(processId);
         return {
@@ -381,42 +413,41 @@ const unixTools = [
 
         const cmd = Array.isArray(commands) ? commands.join(' && ') : String(commands);
 
-        const resultPromise = executeCode(cmd, 'bash', workingDirectory, processId);
+         const resultPromise = executeCode(cmd, 'bash', workingDirectory, processId);
 
-        const result = await Promise.race([
-          resultPromise,
-          new Promise(resolve => setTimeout(() => resolve(null), BACKGROUND_THRESHOLD))
-        ]);
+         const result = await Promise.race([
+           resultPromise,
+           new Promise(resolve => setTimeout(() => resolve(null), BACKGROUND_THRESHOLD))
+         ]);
 
-        if (result === null) {
-          const proc = activeProcesses.get(processId);
-          const resourceUri = `glootie://process/${processId}`;
-          const currentOutput = proc?.stdout || '(no output yet)';
-          return {
-            content: [{
-              type: 'text',
-              text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\nCurrent output:\n${currentOutput}` + getRunningProcessesList()
-            }],
-            isError: false
-          };
-        }
+         if (result === null) {
+           const proc = activeProcesses.get(processId);
+           const resourceUri = `glootie://process/${processId}`;
+           const currentOutput = (proc?.stdout || '') + (proc?.stderr ? `\n[STDERR]\n${proc.stderr}` : '');
+           return {
+             content: [{
+               type: 'text',
+               text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\n\nCurrent output:\n${currentOutput || '(no output yet)'}` + getRunningProcessesList()
+             }],
+             isError: false
+           };
+         }
 
-        if (!result.success) {
-          const errorOutput = [
-            `Command failed (exit code ${result.code})`,
-            result.stdout ? `stdout:\n${result.stdout}` : null,
-            result.stderr ? `stderr:\n${result.stderr}` : null
-          ].filter(Boolean).join('\n\n');
-          return {
-            content: [{ type: 'text', text: (errorOutput || '(no output)') + getRunningProcessesList() }],
-            isError: true
-          };
-        }
+         if (!result.success) {
+           const output = formatExecutionOutput(result);
+           const context = formatExecutionContext(result);
+           return {
+             content: [{ type: 'text', text: `Command failed\n${context}\n\n${output}` + getRunningProcessesList() }],
+             isError: true
+           };
+         }
 
-        return {
-          content: [{ type: 'text', text: (result.stdout || 'Success') + getRunningProcessesList() }],
-          isError: false
-        };
+         const output = formatExecutionOutput(result);
+         const context = formatExecutionContext(result);
+         return {
+           content: [{ type: 'text', text: `${context}\n\n${output}` + getRunningProcessesList() }],
+           isError: false
+         };
       } catch (error) {
         activeProcesses.delete(processId);
         return {
