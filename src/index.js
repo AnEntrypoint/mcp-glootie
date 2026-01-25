@@ -100,7 +100,8 @@ const sleepTool = {
           isError: true
         };
       }
-      await new Promise(resolve => setTimeout(resolve, milliseconds));
+      const cap = milliseconds < 295000?milliseconds:295000;
+      await new Promise(resolve => setTimeout(resolve, cap));
       return {
         content: [{ type: 'text', text: `Slept for ${milliseconds}ms` }],
         isError: false
