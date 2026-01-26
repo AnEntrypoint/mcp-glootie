@@ -1,232 +1,8 @@
-import { spawn } from 'child_process';
-import { writeFileSync, unlinkSync } from 'fs';
-import path from 'path';
-import os from 'os';
-import { execSync } from 'child_process';
+import { executeCode, validateExecuteParams, validateBashParams } from './execute-code.js';
+import { getProcessStatus, closeProcess, activeProcesses } from './process-manager.js';
+import { getRunningProcessesList, formatExecutionOutput, formatExecutionContext } from './formatters.js';
 
-const CONFIGS = {
-  nodejs: { command: 'node', args: ['-e'] },
-  typescript: { command: 'node', args: ['-e'] },
-  deno: { command: 'deno', args: ['eval', '--no-check'] },
-  bash: { command: 'bash', args: ['-c'] },
-  cmd: { command: 'cmd.exe', args: ['/c'] },
-  go: { command: 'go', args: ['run'] },
-  rust: { command: 'rustc', args: [] },
-  python: { command: 'python3', args: ['-c'] },
-  c: { command: 'gcc', args: [] },
-  cpp: { command: 'g++', args: [] }
-};
-
-const activeProcesses = new Map();
 const BACKGROUND_THRESHOLD = 30000;
-
-function executeProcess(command, args, options) {
-  return new Promise((resolve, reject) => {
-    try {
-      const startTime = Date.now();
-      let child;
-
-       try {
-         const spawnOptions = { cwd: options.cwd, stdio: ['pipe', 'pipe', 'pipe'] };
-         // On Windows, use shell: true for cmd.exe to properly handle quoted paths
-         if (process.platform === 'win32' && command === 'cmd.exe') {
-           spawnOptions.shell = true;
-         }
-         if (options.isBashCommand) {
-           spawnOptions.detached = true;
-         }
-         child = spawn(command, args, spawnOptions);
-         if (options.isBashCommand) {
-           child.unref();
-         }
-       } catch (e) {
-         return reject(new Error(`Failed to spawn process: ${e?.message || String(e)}`));
-       }
-
-      let stdout = '';
-      let stderr = '';
-      let timedOut = false;
-
-      const processId = options.processId;
-      activeProcesses.set(processId, { child, startTime, stdout: '', stderr: '' });
-
-       const cleanupProcess = () => {
-         try {
-           if (child && !child.killed) {
-             if (process.platform === 'win32') {
-               // On Windows, use taskkill for reliable process termination
-               try {
-                 execSync(`taskkill /pid ${child.pid} /t /f`, { stdio: 'ignore' });
-               } catch (e) {
-                 // If taskkill fails, try standard kill
-                 child.kill();
-               }
-             } else {
-               // On Unix-like systems, use standard signals
-               child.kill('SIGTERM');
-               setTimeout(() => {
-                 if (child && !child.killed) child.kill('SIGKILL');
-               }, 5000);
-             }
-           }
-         } catch (e) {}
-         activeProcesses.delete(processId);
-       };
-
-      const handleError = (error) => {
-        if (timedOut) return;
-        timedOut = true;
-        cleanupProcess();
-        reject(error);
-      };
-
-      const handleData = (isStderr, data) => {
-        try {
-          const chunk = data.toString('utf8');
-          if (isStderr) {
-            stderr += chunk;
-          } else {
-            stdout += chunk;
-          }
-          if (activeProcesses.has(processId)) {
-            const proc = activeProcesses.get(processId);
-            if (isStderr) {
-              proc.stderr += chunk;
-            } else {
-              proc.stdout += chunk;
-            }
-          }
-        } catch (e) {}
-      };
-
-      child.stdout?.on('data', (d) => handleData(false, d));
-      child.stderr?.on('data', (d) => handleData(true, d));
-
-       child.on('close', (code) => {
-         if (timedOut) return;
-         timedOut = true;
-         cleanupProcess();
-         resolve({
-           success: code === 0,
-           stdout,
-           stderr,  // Always include stderr, regardless of exit code
-           executionTimeMs: Date.now() - startTime,
-           code
-         });
-       });
-
-      child.on('error', (error) => {
-        handleError(new Error(`Process error: ${error?.message || String(error)}`));
-      });
-
-      child.on('disconnect', () => {
-        if (!timedOut && !child.killed) {
-          handleError(new Error('Process disconnected unexpectedly'));
-        }
-      });
-    } catch (error) {
-      reject(error);
-    }
-  });
-}
-
-function getRunningProcessesList() {
-   if (activeProcesses.size === 0) return '';
-   const processList = Array.from(activeProcesses.entries()).map(([pid, proc]) => {
-     const elapsed = Date.now() - proc.startTime;
-     return `  - ${pid} (${elapsed}ms elapsed)`;
-   }).join('\n');
-   return `\nRunning processes:\n${processList}`;
- }
-
-function formatExecutionOutput(result) {
-   const parts = [];
-   
-   if (result.stdout) {
-     parts.push(`[STDOUT]\n${result.stdout}`);
-   }
-   
-   if (result.stderr) {
-     parts.push(`[STDERR]\n${result.stderr}`);
-   }
-   
-   if (parts.length === 0) {
-     parts.push('(no output)');
-   }
-   
-   return parts.join('\n\n');
- }
-
- function formatExecutionContext(result) {
-   const context = [
-     `Exit code: ${result.code}`,
-     `Time: ${result.executionTimeMs}ms`
-   ];
-   
-   if (result.stdout) {
-     context.push(`Stdout size: ${result.stdout.length} bytes`);
-   }
-   if (result.stderr) {
-     context.push(`Stderr size: ${result.stderr.length} bytes`);
-   }
-   
-   return context.join(' | ');
- }
-
-async function executeCode(code, runtime, workingDirectory, processId) {
-  try {
-    if (!code || typeof code !== 'string') {
-      throw new Error('Invalid code: must be non-empty string');
-    }
-    if (!runtime || typeof runtime !== 'string') {
-      throw new Error('Invalid runtime specified');
-    }
-    if (!workingDirectory || typeof workingDirectory !== 'string') {
-      throw new Error('Invalid workingDirectory specified');
-    }
-
-     const config = CONFIGS[runtime];
-     if (!config) {
-       const supportedRuntimes = Object.keys(CONFIGS).join(', ');
-       throw new Error(`Unsupported runtime: ${runtime}. Supported: ${supportedRuntimes}`);
-     }
-
-    if (['bash', 'cmd'].includes(runtime)) {
-      const ext = runtime === 'bash' ? '.sh' : '.bat';
-      const script = runtime === 'bash'
-        ? `#!/bin/bash\nset -e\n${code}`
-        : `@echo off\nsetlocal enabledelayedexpansion\n${code}`;
-
-      let tempFile;
-      try {
-        tempFile = path.join(os.tmpdir(), `glootie_${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`);
-        writeFileSync(tempFile, script);
-      } catch (e) {
-        throw new Error(`Failed to create temp file: ${e?.message || String(e)}`);
-      }
-
-       try {
-         // For cmd.exe, wrap the path in quotes to handle spaces
-         const args = runtime === 'cmd' 
-           ? ['/c', `"${tempFile}"`]  // Quote the path for cmd.exe
-           : [tempFile];
-         return await executeProcess(config.command, args, { cwd: workingDirectory, processId, isBashCommand: runtime === 'bash' });
-       } catch (e) {
-         throw e;
-       } finally {
-         try { unlinkSync(tempFile); } catch (e) {}
-       }
-    }
-
-     return await executeProcess(config.command, [...config.args, code], { cwd: workingDirectory, processId });
-   } catch (error) {
-     const errorMsg = error?.message || String(error);
-     if (runtime === 'cmd' && errorMsg.includes('ENOENT')) {
-       throw new Error(`CMD execution failed: cmd.exe not found. Ensure you're running on Windows.`);
-     }
-     throw new Error(`Code execution failed: ${errorMsg}`);
-   }
- }
 
 const baseExecuteTool = {
   name: 'execute',
@@ -243,15 +19,10 @@ const baseExecuteTool = {
   handler: async ({ code, workingDirectory, language = 'auto' }) => {
     const processId = `proc_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     try {
-      if (!code || typeof code !== 'string') {
+      const paramError = validateExecuteParams(code, workingDirectory);
+      if (paramError) {
         return {
-          content: [{ type: 'text', text: 'Error: code must be a non-empty string' + getRunningProcessesList() }],
-          isError: true
-        };
-      }
-      if (!workingDirectory || typeof workingDirectory !== 'string') {
-        return {
-          content: [{ type: 'text', text: 'Error: workingDirectory must be a non-empty string' + getRunningProcessesList() }],
+          content: [{ type: 'text', text: paramError.error + getRunningProcessesList() }],
           isError: true
         };
       }
@@ -303,201 +74,76 @@ const baseExecuteTool = {
   }
 };
 
-const windowsTools = [
-  baseExecuteTool,
-  {
-    name: 'cmd',
-    description: 'Execute Windows Command Prompt commands (Prefer coding over cli wherever possible)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        workingDirectory: { type: 'string', description: 'Working directory' },
-        commands: { type: ['string', 'array'], description: 'Commands to execute' },
-        language: { type: 'string', enum: ['cmd', 'powershell'], description: 'Language (default: cmd)' }
-      },
-      required: ['workingDirectory', 'commands']
+const bashTool = {
+  name: 'bash',
+  description: 'Execute bash shell commands',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      workingDirectory: { type: 'string', description: 'Working directory' },
+      commands: { type: ['string', 'array'], description: 'Commands to execute' },
+      language: { type: 'string', enum: ['bash', 'sh', 'zsh'], description: 'Language (default: bash)' }
     },
-    handler: async ({ commands, workingDirectory, language = 'cmd' }) => {
-      const processId = `proc_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      try {
-        if (!commands) {
-          return {
-            content: [{ type: 'text', text: 'Error: commands must be provided' + getRunningProcessesList() }],
-            isError: true
-          };
-        }
-        if (!workingDirectory || typeof workingDirectory !== 'string') {
-          return {
-            content: [{ type: 'text', text: 'Error: workingDirectory must be a non-empty string' + getRunningProcessesList() }],
-            isError: true
-          };
-        }
-
-        const cmd = Array.isArray(commands) ? commands.join(' & ') : String(commands);
-
-         const resultPromise = executeCode(cmd, 'cmd', workingDirectory, processId);
-
-         const result = await Promise.race([
-           resultPromise,
-           new Promise(resolve => setTimeout(() => resolve(null), BACKGROUND_THRESHOLD))
-         ]);
-
-         if (result === null) {
-           const proc = activeProcesses.get(processId);
-           const resourceUri = `glootie://process/${processId}`;
-           const currentOutput = (proc?.stdout || '') + (proc?.stderr ? `\n[STDERR]\n${proc.stderr}` : '');
-           return {
-             content: [{
-               type: 'text',
-               text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\n\nCurrent output:\n${currentOutput || '(no output yet)'}` + getRunningProcessesList()
-             }],
-             isError: false
-           };
-         }
-
-         if (!result.success) {
-           const output = formatExecutionOutput(result);
-           const context = formatExecutionContext(result);
-           return {
-             content: [{ type: 'text', text: `Command failed\n${context}\n\n${output}` + getRunningProcessesList() }],
-             isError: true
-           };
-         }
-
-         const output = formatExecutionOutput(result);
-         const context = formatExecutionContext(result);
-         return {
-           content: [{ type: 'text', text: `${context}\n\n${output}` + getRunningProcessesList() }],
-           isError: false
-         };
-      } catch (error) {
-        activeProcesses.delete(processId);
+    required: ['workingDirectory', 'commands']
+  },
+  handler: async ({ commands, workingDirectory, language = 'bash' }) => {
+    const processId = `proc_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    try {
+      const paramError = validateBashParams(commands, workingDirectory);
+      if (paramError) {
         return {
-          content: [{ type: 'text', text: `Error: ${error?.message || String(error)}` + getRunningProcessesList() }],
+          content: [{ type: 'text', text: paramError.error + getRunningProcessesList() }],
           isError: true
         };
       }
-    }
-  }
-];
 
-const unixTools = [
-  baseExecuteTool,
-  {
-    name: 'bash',
-    description: 'Execute bash shell commands',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        workingDirectory: { type: 'string', description: 'Working directory' },
-        commands: { type: ['string', 'array'], description: 'Commands to execute' },
-        language: { type: 'string', enum: ['bash', 'sh', 'zsh'], description: 'Language (default: bash)' }
-      },
-      required: ['workingDirectory', 'commands']
-    },
-    handler: async ({ commands, workingDirectory, language = 'bash' }) => {
-      const processId = `proc_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      try {
-        if (!commands) {
-          return {
-            content: [{ type: 'text', text: 'Error: commands must be provided' + getRunningProcessesList() }],
-            isError: true
-          };
-        }
-        if (!workingDirectory || typeof workingDirectory !== 'string') {
-          return {
-            content: [{ type: 'text', text: 'Error: workingDirectory must be a non-empty string' + getRunningProcessesList() }],
-            isError: true
-          };
-        }
+      const cmd = Array.isArray(commands) ? commands.join(' && ') : String(commands);
 
-        const cmd = Array.isArray(commands) ? commands.join(' && ') : String(commands);
+       const resultPromise = executeCode(cmd, 'bash', workingDirectory, processId);
 
-         const resultPromise = executeCode(cmd, 'bash', workingDirectory, processId);
+       const result = await Promise.race([
+         resultPromise,
+         new Promise(resolve => setTimeout(() => resolve(null), BACKGROUND_THRESHOLD))
+       ]);
 
-         const result = await Promise.race([
-           resultPromise,
-           new Promise(resolve => setTimeout(() => resolve(null), BACKGROUND_THRESHOLD))
-         ]);
+       if (result === null) {
+         const proc = activeProcesses.get(processId);
+         const resourceUri = `glootie://process/${processId}`;
+         const currentOutput = (proc?.stdout || '') + (proc?.stderr ? `\n[STDERR]\n${proc.stderr}` : '');
+         return {
+           content: [{
+             type: 'text',
+             text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\n\nCurrent output:\n${currentOutput || '(no output yet)'}` + getRunningProcessesList()
+           }],
+           isError: false
+         };
+       }
 
-         if (result === null) {
-           const proc = activeProcesses.get(processId);
-           const resourceUri = `glootie://process/${processId}`;
-           const currentOutput = (proc?.stdout || '') + (proc?.stderr ? `\n[STDERR]\n${proc.stderr}` : '');
-           return {
-             content: [{
-               type: 'text',
-               text: `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\n\nCurrent output:\n${currentOutput || '(no output yet)'}` + getRunningProcessesList()
-             }],
-             isError: false
-           };
-         }
-
-         if (!result.success) {
-           const output = formatExecutionOutput(result);
-           const context = formatExecutionContext(result);
-           return {
-             content: [{ type: 'text', text: `Command failed\n${context}\n\n${output}` + getRunningProcessesList() }],
-             isError: true
-           };
-         }
-
+       if (!result.success) {
          const output = formatExecutionOutput(result);
          const context = formatExecutionContext(result);
          return {
-           content: [{ type: 'text', text: `${context}\n\n${output}` + getRunningProcessesList() }],
-           isError: false
+           content: [{ type: 'text', text: `Command failed\n${context}\n\n${output}` + getRunningProcessesList() }],
+           isError: true
          };
-      } catch (error) {
-        activeProcesses.delete(processId);
-        return {
-          content: [{ type: 'text', text: `Error: ${error?.message || String(error)}` + getRunningProcessesList() }],
-          isError: true
-        };
-      }
+       }
+
+       const output = formatExecutionOutput(result);
+       const context = formatExecutionContext(result);
+       return {
+         content: [{ type: 'text', text: `${context}\n\n${output}` + getRunningProcessesList() }],
+         isError: false
+       };
+    } catch (error) {
+      activeProcesses.delete(processId);
+      return {
+        content: [{ type: 'text', text: `Error: ${error?.message || String(error)}` + getRunningProcessesList() }],
+        isError: true
+      };
     }
   }
-];
+};
 
-export const executionTools = process.platform === 'win32' ? windowsTools : unixTools;
+export const executionTools = process.platform === 'win32' ? [baseExecuteTool] : [baseExecuteTool, bashTool];
 
-export function getProcessStatus(processId) {
-  const proc = activeProcesses.get(processId);
-  if (!proc) return { error: 'Process not found', processId };
-
-  const elapsed = Date.now() - proc.startTime;
-  return {
-    processId,
-    elapsed,
-    stdout: proc.stdout,
-    stderr: proc.stderr,
-    running: true
-  };
-}
-
-export function closeProcess(processId) {
-  const proc = activeProcesses.get(processId);
-  if (!proc) return { error: 'Process not found', processId };
-
-  try {
-    if (proc.child && !proc.child.killed) {
-      proc.child.kill('SIGTERM');
-      setTimeout(() => {
-        if (proc.child && !proc.child.killed) {
-          proc.child.kill('SIGKILL');
-        }
-      }, 5000);
-    }
-    activeProcesses.delete(processId);
-    return {
-      success: true,
-      processId,
-      message: `Process ${processId} terminated`
-    };
-  } catch (error) {
-    return {
-      error: `Failed to close process: ${error?.message || String(error)}`,
-      processId
-    };
-  }
-}
+export { getProcessStatus, closeProcess };

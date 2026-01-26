@@ -3,7 +3,8 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, SubscribeRequestSchema, UnsubscribeRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { executionTools, getProcessStatus, closeProcess } from './tools/executor-tool.js';
+import { getProcessStatus } from './tools/executor-tool.js';
+import { allTools } from './tools-registry.js';
 
 const subscriptions = new Set();
 
@@ -18,109 +19,10 @@ const server = new Server(
   }
 );
 
-const processStatusTool = {
-  name: 'process_status',
-  description: 'Get status of a backgrounded process',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      processId: { type: 'string', description: 'Process ID returned from execute/cmd/bash' }
-    },
-    required: ['processId']
-  },
-  handler: async ({ processId }) => {
-    try {
-      if (!processId || typeof processId !== 'string') {
-        return {
-          content: [{ type: 'text', text: 'Invalid processId' }],
-          isError: true
-        };
-      }
-      const status = getProcessStatus(processId);
-      return {
-        content: [{ type: 'text', text: JSON.stringify(status, null, 2) }],
-        isError: status.error ? true : false
-      };
-    } catch (e) {
-      return {
-        content: [{ type: 'text', text: `Status query failed: ${e.message}` }],
-        isError: true
-      };
-    }
-  }
-};
-
-const processCloseTool = {
-  name: 'process_close',
-  description: 'Close and terminate a backgrounded process',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      processId: { type: 'string', description: 'Process ID returned from execute/cmd/bash' }
-    },
-    required: ['processId']
-  },
-  handler: async ({ processId }) => {
-    try {
-      if (!processId || typeof processId !== 'string') {
-        return {
-          content: [{ type: 'text', text: 'Invalid processId' }],
-          isError: true
-        };
-      }
-      const result = closeProcess(processId);
-      return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-        isError: result.error ? true : false
-      };
-    } catch (e) {
-      return {
-        content: [{ type: 'text', text: `Process close failed: ${e.message}` }],
-        isError: true
-      };
-    }
-  }
-};
-
-const sleepTool = {
-  name: 'sleep',
-  description: 'Sleep for a specified number of milliseconds',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      milliseconds: { type: 'number', description: 'Number of milliseconds to sleep' }
-    },
-    required: ['milliseconds']
-  },
-  handler: async ({ milliseconds }) => {
-    try {
-      if (typeof milliseconds !== 'number' || milliseconds < 0) {
-        return {
-          content: [{ type: 'text', text: 'Invalid milliseconds: must be a non-negative number' }],
-          isError: true
-        };
-      }
-      const cap = milliseconds < 295000?milliseconds:295000;
-      await new Promise(resolve => setTimeout(resolve, cap));
-      return {
-        content: [{ type: 'text', text: `Slept for ${milliseconds}ms` }],
-        isError: false
-      };
-    } catch (e) {
-      return {
-        content: [{ type: 'text', text: `Sleep failed: ${e.message}` }],
-        isError: true
-      };
-    }
-  }
-};
-
-const tools = [...(executionTools || []), processStatusTool, processCloseTool, sleepTool];
-
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   try {
     return {
-      tools: tools.map(t => ({
+      tools: allTools.map(t => ({
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema
@@ -142,7 +44,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     const { name, arguments: args } = request.params;
-    const tool = tools.find(t => t.name === name);
+    const tool = allTools.find(t => t.name === name);
 
     if (!tool) {
       return {
