@@ -16,6 +16,19 @@ const CONFIGS = {
   cpp: { command: 'g++', args: [] }
 };
 
+const validate = {
+  execute({ code, workingDirectory }) {
+    if (!code || typeof code !== 'string') return 'Error: code must be a non-empty string';
+    if (!workingDirectory || typeof workingDirectory !== 'string') return 'Error: workingDirectory must be a non-empty string';
+    return null;
+  },
+  bash({ commands, workingDirectory }) {
+    if (!commands) return 'Error: commands must be provided';
+    if (!workingDirectory || typeof workingDirectory !== 'string') return 'Error: workingDirectory must be a non-empty string';
+    return null;
+  }
+};
+
 export async function executeCode(code, runtime, workingDirectory, processId) {
   try {
     if (!code || typeof code !== 'string') {
@@ -28,11 +41,11 @@ export async function executeCode(code, runtime, workingDirectory, processId) {
       throw new Error('Invalid workingDirectory specified');
     }
 
-     const config = CONFIGS[runtime];
-     if (!config) {
-       const supportedRuntimes = Object.keys(CONFIGS).join(', ');
-       throw new Error(`Unsupported runtime: ${runtime}. Supported: ${supportedRuntimes}`);
-     }
+    const config = CONFIGS[runtime];
+    if (!config) {
+      const supportedRuntimes = Object.keys(CONFIGS).join(', ');
+      throw new Error(`Unsupported runtime: ${runtime}. Supported: ${supportedRuntimes}`);
+    }
 
     if (['bash', 'cmd'].includes(runtime)) {
       const ext = runtime === 'bash' ? '.sh' : '.bat';
@@ -48,44 +61,26 @@ export async function executeCode(code, runtime, workingDirectory, processId) {
         throw new Error(`Failed to create temp file: ${e?.message || String(e)}`);
       }
 
-       try {
-         const args = runtime === 'cmd'
-           ? ['/c', `"${tempFile}"`]
-           : [tempFile];
-         return await executeProcess(config.command, args, { cwd: workingDirectory, processId, isBashCommand: runtime === 'bash' });
-       } catch (e) {
-         throw e;
-       } finally {
-         try { unlinkSync(tempFile); } catch (e) {}
-       }
+      try {
+        const args = runtime === 'cmd'
+          ? ['/c', `"${tempFile}"`]
+          : [tempFile];
+        return await executeProcess(config.command, args, { cwd: workingDirectory, processId, isBashCommand: runtime === 'bash' });
+      } catch (e) {
+        throw e;
+      } finally {
+        try { unlinkSync(tempFile); } catch (e) {}
+      }
     }
 
-     return await executeProcess(config.command, [...config.args, code], { cwd: workingDirectory, processId });
-   } catch (error) {
-     const errorMsg = error?.message || String(error);
-     if (runtime === 'cmd' && errorMsg.includes('ENOENT')) {
-       throw new Error(`CMD execution failed: cmd.exe not found. Ensure you're running on Windows.`);
-     }
-     throw new Error(`Code execution failed: ${errorMsg}`);
-   }
+    return await executeProcess(config.command, [...config.args, code], { cwd: workingDirectory, processId });
+  } catch (error) {
+    const errorMsg = error?.message || String(error);
+    if (runtime === 'cmd' && errorMsg.includes('ENOENT')) {
+      throw new Error(`CMD execution failed: cmd.exe not found. Ensure you're running on Windows.`);
+    }
+    throw new Error(`Code execution failed: ${errorMsg}`);
+  }
 }
 
-export function validateExecuteParams(code, workingDirectory) {
-  if (!code || typeof code !== 'string') {
-    return { error: 'Error: code must be a non-empty string' };
-  }
-  if (!workingDirectory || typeof workingDirectory !== 'string') {
-    return { error: 'Error: workingDirectory must be a non-empty string' };
-  }
-  return null;
-}
-
-export function validateBashParams(commands, workingDirectory) {
-  if (!commands) {
-    return { error: 'Error: commands must be provided' };
-  }
-  if (!workingDirectory || typeof workingDirectory !== 'string') {
-    return { error: 'Error: workingDirectory must be a non-empty string' };
-  }
-  return null;
-}
+export { validate };
