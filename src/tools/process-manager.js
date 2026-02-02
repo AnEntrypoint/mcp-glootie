@@ -1,8 +1,10 @@
 import { spawn } from 'child_process';
 import { execSync } from 'child_process';
+import { recoveryState } from '../recovery-state.js';
 
 export const activeProcesses = new Map();
 const SIGTERM_TIMEOUT = 5000;
+const MAX_BUFFER = 10 * 1024 * 1024;
 
 export function executeProcess(command, args, options) {
   return new Promise((resolve, reject) => {
@@ -31,7 +33,7 @@ export function executeProcess(command, args, options) {
       let timedOut = false;
 
       const processId = options.processId;
-      activeProcesses.set(processId, { child, startTime, stdout: '', stderr: '' });
+      activeProcesses.set(processId, { child, startTime, stdout: '', stderr: '', bufferOverflow: false });
 
        const cleanupProcess = () => {
          try {
@@ -72,8 +74,16 @@ export function executeProcess(command, args, options) {
             const proc = activeProcesses.get(processId);
             if (isStderr) {
               proc.stderr += chunk;
+              if (proc.stderr.length > MAX_BUFFER) {
+                proc.stderr = proc.stderr.slice(-Math.ceil(MAX_BUFFER * 0.5));
+                proc.bufferOverflow = true;
+              }
             } else {
               proc.stdout += chunk;
+              if (proc.stdout.length > MAX_BUFFER) {
+                proc.stdout = proc.stdout.slice(-Math.ceil(MAX_BUFFER * 0.5));
+                proc.bufferOverflow = true;
+              }
             }
           }
         } catch (e) {}
@@ -120,7 +130,8 @@ export function getProcessStatus(processId) {
     elapsed,
     stdout: proc.stdout,
     stderr: proc.stderr,
-    running: true
+    running: true,
+    bufferOverflow: proc.bufferOverflow || false
   };
 }
 
