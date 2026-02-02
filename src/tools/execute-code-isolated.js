@@ -13,7 +13,7 @@ const validate = {
   }
 };
 
-export async function executeCode(code, runtime, workingDirectory, timeout = 30000) {
+export async function executeCode(code, runtime, workingDirectory, timeout = 30000, backgroundTaskId = null) {
   try {
     if (!code || typeof code !== 'string') {
       throw new Error('Invalid code: must be non-empty string');
@@ -30,7 +30,11 @@ export async function executeCode(code, runtime, workingDirectory, timeout = 300
       throw new Error(`Unsupported runtime: ${runtime}. Supported: ${supportedRuntimes.join(', ')}`);
     }
 
-    const result = await globalPool.execute(code, runtime, workingDirectory, timeout);
+    const result = await globalPool.execute(code, runtime, workingDirectory, timeout, backgroundTaskId);
+
+    if (result.persisted) {
+      return result;
+    }
 
     return {
       success: result.success,

@@ -88,7 +88,32 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchem
         return { contents: [{ uri: 'unknown', mimeType: 'text/plain', text: 'Invalid URI' }] };
       }
 
-      return { contents: [{ uri, mimeType: 'text/plain', text: 'Resource tracking moved to worker pool' }] };
+      if (uri.startsWith('task://')) {
+        const { backgroundStore } = await import(baseUrl + 'background-tasks.js');
+        const taskId = parseInt(uri.slice(7), 10);
+        const task = backgroundStore.getTask(taskId);
+
+        if (!task) {
+          return { contents: [{ uri, mimeType: 'text/plain', text: 'Task not found' }] };
+        }
+
+        const result = task.result || {};
+        let text = '';
+        if (result.error) {
+          text = `Error: ${result.error}`;
+        } else {
+          text = '';
+          if (result.stdout) text += `[STDOUT]\n${result.stdout}`;
+          if (result.stderr) text += text ? `\n\n[STDERR]\n${result.stderr}` : `[STDERR]\n${result.stderr}`;
+          if (!text) text = '(no output)';
+        }
+
+        backgroundStore.deleteTask(taskId);
+
+        return { contents: [{ uri, mimeType: 'text/plain', text }] };
+      }
+
+      return { contents: [{ uri, mimeType: 'text/plain', text: 'Unknown resource type' }] };
     } catch (error) {
       console.error('[ReadResource] Error:', error);
       return { contents: [{ uri: 'unknown', mimeType: 'text/plain', text: 'Resource read failed' }] };
