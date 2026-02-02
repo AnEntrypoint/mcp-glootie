@@ -1,6 +1,7 @@
 import { executeCode, validate } from './execute-code-isolated.js';
+import { backgroundStore } from '../background-tasks.js';
 
-const BACKGROUND_THRESHOLD = 30000;
+const BACKGROUND_THRESHOLD = 10000;
 
 const formatters = {
   output(result) {
@@ -32,7 +33,7 @@ const response = {
 };
 
 const createExecutionHandler = (validateFn, isBash = false) => async (args) => {
-  const { code, commands, workingDirectory, language = isBash ? 'bash' : 'auto' } = args;
+  const { code, commands, workingDirectory, language = isBash ? 'bash' : 'auto', run_in_background } = args;
 
   try {
     const params = isBash ? { commands, workingDirectory } : { code, workingDirectory };
@@ -45,14 +46,31 @@ const createExecutionHandler = (validateFn, isBash = false) => async (args) => {
       runtime = 'nodejs';
     }
 
+    let backgroundTaskId = null;
+    if (run_in_background) {
+      backgroundTaskId = backgroundStore.createTask(cmd, runtime, workingDirectory);
+    }
+
     const result = await Promise.race([
-      executeCode(cmd, runtime, workingDirectory, BACKGROUND_THRESHOLD),
+      executeCode(cmd, runtime, workingDirectory, BACKGROUND_THRESHOLD, backgroundTaskId),
       new Promise(resolve => setTimeout(() => resolve(null), BACKGROUND_THRESHOLD))
     ]);
 
     if (!result) {
       return response.success(
-        `Process backgrounded after ${BACKGROUND_THRESHOLD}ms. Execution continues in worker pool.`
+        `Process persisted (ID: task_${backgroundTaskId || '?'}). Set run_in_background=true if task will run longer than 10 seconds. Check status with process_status tool.`
+      );
+    }
+
+    if (result.backgroundTaskId && result.completed) {
+      return response.success(
+        `Process completed (ID: task_${result.backgroundTaskId}). Output available as resource task://${result.backgroundTaskId}`
+      );
+    }
+
+    if (result.persisted) {
+      return response.success(
+        `Process persisted (ID: task_${result.backgroundTaskId}). Set run_in_background=true if task will run longer than 10 seconds. Check status with process_status tool.`
       );
     }
 
@@ -81,7 +99,8 @@ export const executionTools = process.platform === 'win32'
         properties: {
           workingDirectory: { type: 'string', description: 'Working directory' },
           code: { type: 'string', description: 'Code to execute' },
-          language: { type: 'string', enum: ['nodejs', 'typescript', 'deno', 'go', 'rust', 'python', 'c', 'cpp', 'auto'], description: 'Language (default: auto)' }
+          language: { type: 'string', enum: ['nodejs', 'typescript', 'deno', 'go', 'rust', 'python', 'c', 'cpp', 'auto'], description: 'Language (default: auto)' },
+          run_in_background: { type: 'boolean', description: 'Set to true if task will run longer than 10 seconds' }
         },
         required: ['workingDirectory', 'code']
       },
@@ -95,7 +114,8 @@ export const executionTools = process.platform === 'win32'
         properties: {
           workingDirectory: { type: 'string', description: 'Working directory' },
           code: { type: 'string', description: 'Code to execute' },
-          language: { type: 'string', enum: ['nodejs', 'typescript', 'deno', 'go', 'rust', 'python', 'c', 'cpp', 'auto'], description: 'Language (default: auto)' }
+          language: { type: 'string', enum: ['nodejs', 'typescript', 'deno', 'go', 'rust', 'python', 'c', 'cpp', 'auto'], description: 'Language (default: auto)' },
+          run_in_background: { type: 'boolean', description: 'Set to true if task will run longer than 10 seconds' }
         },
         required: ['workingDirectory', 'code']
       },
@@ -108,7 +128,8 @@ export const executionTools = process.platform === 'win32'
         properties: {
           workingDirectory: { type: 'string', description: 'Working directory' },
           commands: { type: ['string', 'array'], description: 'Commands to execute' },
-          language: { type: 'string', enum: ['bash', 'sh', 'zsh'], description: 'Language (default: bash)' }
+          language: { type: 'string', enum: ['bash', 'sh', 'zsh'], description: 'Language (default: bash)' },
+          run_in_background: { type: 'boolean', description: 'Set to true if task will run longer than 10 seconds' }
         },
         required: ['workingDirectory', 'commands']
       },
