@@ -4,6 +4,7 @@ set -e
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
+YELLOW='\033[1;33m'
 NC='\033[0m'
 
 # Exit handler
@@ -21,45 +22,57 @@ if ! command -v bun &> /dev/null; then
   exit 1
 fi
 
-if ! command -v curl &> /dev/null; then
-  echo -e "${RED}✗ curl is required but not installed${NC}" >&2
-  exit 1
-fi
+# Detect if running from cloned repository
+if [ -f "src/index.js" ] && [ -f "package.json" ]; then
+  echo -e "${YELLOW}Running from source directory${NC}"
+  WORK_DIR="."
+else
+  # Install to home directory
+  WORK_DIR="${HOME}/.mcp-glootie"
+  echo -e "${GREEN}Installing to: $WORK_DIR${NC}"
 
-if ! command -v tar &> /dev/null; then
-  echo -e "${RED}✗ tar is required but not installed${NC}" >&2
-  exit 1
-fi
+  # Create directory
+  mkdir -p "$WORK_DIR"
+  cd "$WORK_DIR"
 
-# Use safe hidden folder in home directory
-INSTALL_DIR="${HOME}/.mcp-glootie"
-echo -e "${GREEN}Installing to: $INSTALL_DIR${NC}"
+  # Download and extract (with retry logic)
+  MAX_RETRIES=3
+  RETRY=0
 
-# Create or update installation
-mkdir -p "$INSTALL_DIR"
-cd "$INSTALL_DIR"
+  # First check if we already have a valid installation
+  if [ ! -f "src/index.js" ] || [ ! -f "package.json" ]; then
+    while [ $RETRY -lt $MAX_RETRIES ]; do
+      # Use temp file instead of process substitution for MCP compatibility
+      TEMP_TAR=$(mktemp /tmp/mcp-glootie.XXXXXX.tar.gz)
+      if curl -fsSL https://github.com/AnEntrypoint/mcp-glootie/archive/main.tar.gz -o "$TEMP_TAR" 2>/dev/null && \
+         tar xzf "$TEMP_TAR" 2>/dev/null && \
+         rm -f "$TEMP_TAR"; then
+        # Move extracted files to current directory
+        if [ -d "mcp-glootie-main" ]; then
+          mv mcp-glootie-main/* . 2>/dev/null || true
+          rmdir mcp-glootie-main 2>/dev/null || true
+        fi
+        break
+      fi
 
-# Download and extract (with retry logic)
-MAX_RETRIES=3
-RETRY=0
-while [ $RETRY -lt $MAX_RETRIES ]; do
-  if curl -fsSL https://github.com/AnEntrypoint/mcp-glootie/archive/main.tar.gz | tar xz 2>/dev/null; then
-    break
+      # Cleanup temp file if extraction failed
+      [ -f "$TEMP_TAR" ] && rm -f "$TEMP_TAR"
+
+      RETRY=$((RETRY + 1))
+      if [ $RETRY -lt $MAX_RETRIES ]; then
+        echo -e "${YELLOW}Retry $RETRY/$MAX_RETRIES...${NC}" >&2
+        sleep 2
+      fi
+    done
+
+    if [ $RETRY -eq $MAX_RETRIES ]; then
+      echo -e "${RED}✗ Failed to download from GitHub${NC}" >&2
+      exit 1
+    fi
+  else
+    echo -e "${GREEN}Found existing installation${NC}"
   fi
-  RETRY=$((RETRY + 1))
-  if [ $RETRY -lt $MAX_RETRIES ]; then
-    echo "Retry $RETRY/$MAX_RETRIES..." >&2
-    sleep 2
-  fi
-done
-
-if [ $RETRY -eq $MAX_RETRIES ]; then
-  echo -e "${RED}✗ Failed to download from GitHub${NC}" >&2
-  exit 1
 fi
-
-# Enter extracted directory
-cd mcp-glootie-main
 
 # Install dependencies
 echo -e "${GREEN}Installing dependencies...${NC}"
@@ -70,4 +83,4 @@ bun install --frozen-lockfile || {
 
 # Run server
 echo -e "${GREEN}✓ Starting MCP Glootie${NC}"
-exec bun run src/index.js
+bun run src/index.js
