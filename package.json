@@ -11,14 +11,14 @@
     "access": "public"
   },
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node src/index.js ./test"
+    "start": "bun run src/index.js",
+    "dev": "bun run src/index.js ./test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.2"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "bun": ">=1.0.0"
   },
   "repository": {
     "type": "git",

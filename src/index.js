@@ -5,13 +5,14 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, SubscribeRequestSchema, UnsubscribeRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { getProcessStatus } from './tools/executor-tool.js';
 import { allTools } from './tools-registry.js';
+import { recoveryState } from './recovery-state.js';
 
 const subscriptions = new Set();
 
 const server = new Server(
   {
     name: 'glootie',
-    version: '3.4.67',
+    version: '3.4.68',
     description: 'Code execution for programming agents'
   },
   {
@@ -171,10 +172,25 @@ process.on('exit', (code) => {
   } catch (e) {}
 });
 
-try {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-} catch (error) {
-  console.error('[STARTUP] Failed to connect:', error?.message || String(error));
-  process.exit(1);
+async function startupWithRecovery() {
+  while (recoveryState.canRetry()) {
+    try {
+      const transport = new StdioServerTransport();
+      await server.connect(transport);
+      recoveryState.recordSuccess();
+      console.error('[STARTUP] Connected successfully');
+      return;
+    } catch (error) {
+      recoveryState.recordStartupAttempt(error);
+      const delay = recoveryState.getBackoffDelay();
+      console.error(`[STARTUP] Attempt ${recoveryState.startupAttempts} failed: ${error?.message || String(error)}. Retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  console.error(`[STARTUP] Failed after ${recoveryState.maxStartupAttempts} attempts. Last error: ${recoveryState.lastError}`);
+  console.error('[STARTUP] Last error:', recoveryState.lastError);
 }
+
+startupWithRecovery().catch(error => {
+  console.error('[STARTUP] Unhandled error during recovery:', error);
+});
