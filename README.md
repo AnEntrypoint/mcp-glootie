@@ -4,26 +4,34 @@ MCP server for executing code in JavaScript/TypeScript, Python, Go, Rust, C, C++
 
 ## Quick Start
 
-### Option 1: Via npm (Recommended)
+### One Command - Always Latest
 
 ```bash
 npx mcp-glootie
 ```
 
-### Option 2: Install globally
+This runs directly from GitHub/npm registry, always gets the latest version, requires no installation, works everywhere.
 
+### With Bun (recommended if Bun is installed)
+
+```bash
+bunx mcp-glootie
+```
+
+### Alternative Options
+
+**Direct from GitHub with Node.js:**
+```bash
+node <(curl -fsSL https://raw.githubusercontent.com/AnEntrypoint/mcp-glootie/main/src/index.js)
+```
+
+**Install globally:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/AnEntrypoint/mcp-glootie/main/install.sh | bash
 glootie
 ```
 
-### Option 3: Direct execution with Node.js
-
-```bash
-node <(curl -fsSL https://raw.githubusercontent.com/AnEntrypoint/mcp-glootie/main/src/index.js)
-```
-
-All options connect to Claude Code or any MCP client automatically.
+All options connect to Claude Code or any MCP client automatically and always run the latest version from the main branch.
 
 ## Add to Claude Code
 
