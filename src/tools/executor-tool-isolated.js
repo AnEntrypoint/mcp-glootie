@@ -1,16 +1,8 @@
-import { executeCode, validate } from './execute-code.js';
-import { getProcessStatus, closeProcess, activeProcesses } from './process-manager.js';
+import { executeCode, validate } from './execute-code-isolated.js';
 
 const BACKGROUND_THRESHOLD = 30000;
 
 const formatters = {
-  processList() {
-    if (activeProcesses.size === 0) return '';
-    const list = Array.from(activeProcesses.entries())
-      .map(([pid, proc]) => `  - ${pid} (${Date.now() - proc.startTime}ms elapsed)`)
-      .join('\n');
-    return `\nRunning processes:\n${list}`;
-  },
   output(result) {
     const parts = result.stdout ? [`[STDOUT]\n${result.stdout}`] : [];
     if (result.stderr) parts.push(`[STDERR]\n${result.stderr}`);
@@ -25,15 +17,15 @@ const formatters = {
 };
 
 const response = {
-  success(text, withProcesses = false) {
+  success(text) {
     return {
-      content: [{ type: 'text', text: text + (withProcesses ? formatters.processList() : '') }],
+      content: [{ type: 'text', text }],
       isError: false
     };
   },
-  error(text, withProcesses = false) {
+  error(text) {
     return {
-      content: [{ type: 'text', text: text + (withProcesses ? formatters.processList() : '') }],
+      content: [{ type: 'text', text }],
       isError: true
     };
   }
@@ -41,41 +33,42 @@ const response = {
 
 const createExecutionHandler = (validateFn, isBash = false) => async (args) => {
   const { code, commands, workingDirectory, language = isBash ? 'bash' : 'auto' } = args;
-  const processId = `proc_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
   try {
     const params = isBash ? { commands, workingDirectory } : { code, workingDirectory };
     const err = validate[isBash ? 'bash' : 'execute'](params);
-    if (err) return response.error(err, true);
+    if (err) return response.error(err);
 
     const cmd = isBash ? (Array.isArray(commands) ? commands.join(' && ') : String(commands)) : code;
-    const runtime = !isBash && language === 'typescript' ? 'nodejs' : (language || 'nodejs');
+    let runtime = language || 'nodejs';
+    if (!isBash && (runtime === 'typescript' || runtime === 'auto')) {
+      runtime = 'nodejs';
+    }
 
     const result = await Promise.race([
-      executeCode(cmd, runtime, workingDirectory, processId),
+      executeCode(cmd, runtime, workingDirectory, BACKGROUND_THRESHOLD),
       new Promise(resolve => setTimeout(() => resolve(null), BACKGROUND_THRESHOLD))
     ]);
 
     if (!result) {
-      const proc = activeProcesses.get(processId);
-      const resourceUri = `glootie://process/${processId}`;
-      const output = (proc?.stdout || '') + (proc?.stderr ? `\n[STDERR]\n${proc.stderr}` : '');
       return response.success(
-        `Process backgrounded. ID: ${processId}\nResource: ${resourceUri}\nElapsed: ${BACKGROUND_THRESHOLD}ms\n\nCurrent output:\n${output || '(no output yet)'}`,
-        true
+        `Process backgrounded after ${BACKGROUND_THRESHOLD}ms. Execution continues in worker pool.`
       );
     }
 
-    if (!result.success) {
+    if (!result.success && !result.error) {
       const msg = `${formatters.context(result)}\n\n${formatters.output(result)}`;
-      return response.error(`Command failed\n${msg}`, true);
+      return response.error(`Command failed\n${msg}`);
+    }
+
+    if (result.error) {
+      return response.error(`Error: ${result.error}`);
     }
 
     const msg = `${formatters.context(result)}\n\n${formatters.output(result)}`;
-    return response.success(msg, true);
+    return response.success(msg);
   } catch (error) {
-    activeProcesses.delete(processId);
-    return response.error(`Error: ${error?.message || String(error)}`, true);
+    return response.error(`Error: ${error?.message || String(error)}`);
   }
 };
 
@@ -121,5 +114,3 @@ export const executionTools = process.platform === 'win32'
       },
       handler: createExecutionHandler(validate.bash, true)
     }];
-
-export { getProcessStatus, closeProcess };

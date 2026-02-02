@@ -12,9 +12,9 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchem
     : new URL('./', import.meta.url).pathname;
 
   // Dynamic imports to support both local and remote execution
-  const { getProcessStatus } = await import(baseUrl + 'tools/executor-tool.js');
   const { allTools } = await import(baseUrl + 'tools-registry.js');
   const { recoveryState } = await import(baseUrl + 'recovery-state.js');
+  const { globalPool } = await import(baseUrl + 'workers/worker-pool.js');
 
   const subscriptions = new Set();
 
@@ -88,29 +88,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchem
         return { contents: [{ uri: 'unknown', mimeType: 'text/plain', text: 'Invalid URI' }] };
       }
 
-      if (!uri.startsWith('glootie://process/')) {
-        return { contents: [{ uri, mimeType: 'text/plain', text: 'Unknown resource type' }] };
-      }
-
-      try {
-        const processId = uri.replace('glootie://process/', '');
-        const status = getProcessStatus(processId);
-        return {
-          contents: [{
-            uri,
-            mimeType: 'application/json',
-            text: JSON.stringify(status, null, 2)
-          }]
-        };
-      } catch (e) {
-        return {
-          contents: [{
-            uri,
-            mimeType: 'text/plain',
-            text: `Failed to read resource: ${e?.message || String(e)}`
-          }]
-        };
-      }
+      return { contents: [{ uri, mimeType: 'text/plain', text: 'Resource tracking moved to worker pool' }] };
     } catch (error) {
       console.error('[ReadResource] Error:', error);
       return { contents: [{ uri: 'unknown', mimeType: 'text/plain', text: 'Resource read failed' }] };
@@ -177,8 +155,29 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchem
 
   process.on('exit', (code) => {
     try {
+      globalPool.shutdown().catch(() => {});
       console.error(`[EXIT] Process exiting with code ${code}`);
     } catch (e) {}
+  });
+
+  process.on('SIGTERM', async () => {
+    try {
+      console.error('[SIGTERM] Received SIGTERM, shutting down gracefully');
+      await globalPool.shutdown();
+      process.exit(0);
+    } catch (e) {
+      process.exit(1);
+    }
+  });
+
+  process.on('SIGINT', async () => {
+    try {
+      console.error('[SIGINT] Received SIGINT, shutting down gracefully');
+      await globalPool.shutdown();
+      process.exit(0);
+    } catch (e) {
+      process.exit(1);
+    }
   });
 
   async function startupWithRecovery() {
