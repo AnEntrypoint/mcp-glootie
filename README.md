@@ -7,26 +7,29 @@ MCP server for executing code in JavaScript/TypeScript, Python, Go, Rust, C, C++
 Just one command. That's it.
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/AnEntrypoint/mcp-glootie/main/bun-run.sh)
+curl -fsSL https://raw.githubusercontent.com/AnEntrypoint/mcp-glootie/main/bun-run.sh | bash
 ```
 
 ### What It Does
 
-1. Downloads the latest code from GitHub
+1. Downloads the latest code from GitHub (or uses existing installation)
 2. Extracts and installs dependencies with Bun
 3. Starts the MCP server immediately
 4. Connects to Claude Code or your MCP client
 
-Zero setup, works everywhere Bash and Bun are available.
+Zero setup, works everywhere Bash and Bun are available. **MCP-compatible** - works reliably over MCP connections.
 
 ### Add to Claude Code
 
+Copy this into your terminal to download and start the server:
+
 ```bash
-# Copy and paste this into your terminal:
-bash <(curl -fsSL https://raw.githubusercontent.com/AnEntrypoint/mcp-glootie/main/bun-run.sh)
+curl -fsSL https://raw.githubusercontent.com/AnEntrypoint/mcp-glootie/main/bun-run.sh | bash
 ```
 
 The script prints your MCP connection string automatically. Just add it to your Claude Code config.
+
+**Note:** This method is now MCP-compatible and works reliably in all environments, including over MCP connections.
 
 ### Alternative Installation Methods
 
