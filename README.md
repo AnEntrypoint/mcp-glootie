@@ -4,43 +4,17 @@ MCP server for executing code in JavaScript/TypeScript, Python, Go, Rust, C, C++
 
 ## Quick Start
 
-Just one command. That's it.
+Just one command with Bun:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AnEntrypoint/mcp-glootie/main/bun-run.sh | bash
+bunx mcp-glootie
 ```
 
-### What It Does
+That's it. Starts the MCP server immediately and connects to Claude Code or your MCP client.
 
-1. Downloads the latest code from GitHub (or uses existing installation)
-2. Extracts and installs dependencies with Bun
-3. Starts the MCP server immediately
-4. Connects to Claude Code or your MCP client
+### For Development
 
-Zero setup, works everywhere Bash and Bun are available. **MCP-compatible** - works reliably over MCP connections.
-
-### Add to Claude Code
-
-Copy this into your terminal to download and start the server:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/AnEntrypoint/mcp-glootie/main/bun-run.sh | bash
-```
-
-The script prints your MCP connection string automatically. Just add it to your Claude Code config.
-
-**Note:** This method is now MCP-compatible and works reliably in all environments, including over MCP connections.
-
-### Alternative Installation Methods
-
-If you don't have Bun installed:
-
-```bash
-# Using npm (requires Node.js)
-npx mcp-glootie
-```
-
-For local development:
+Clone and run locally:
 
 ```bash
 git clone https://github.com/AnEntrypoint/mcp-glootie.git
@@ -76,17 +50,7 @@ If you see `Bun is required but not installed`, install Bun:
 curl -fsSL https://bun.sh | bash
 ```
 
-Then run the mcp-glootie setup again.
-
-### Using Node.js instead
-
-If you prefer not to install Bun, use the npm version:
-
-```bash
-npx mcp-glootie
-```
-
-This requires Node.js 18+ but doesn't need Bun.
+Then run mcp-glootie again.
 
 ### Port conflicts
 
