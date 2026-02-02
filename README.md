@@ -63,3 +63,4 @@ lsof -i :3001
 # Kill it if needed
 kill -9 <PID>
 ```
+# Triggered npm publishing
