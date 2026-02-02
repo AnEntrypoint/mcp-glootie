@@ -1,4 +1,4 @@
-import { executionTools, getProcessStatus, closeProcess } from './tools/executor-tool.js';
+import { executionTools } from './tools/executor-tool-isolated.js';
 
 const response = {
   success(text) {
@@ -25,52 +25,6 @@ const createSimpleTool = (name, description, inputSchema, handler) => ({
   handler
 });
 
-export const processStatusTool = createSimpleTool(
-  'process_status',
-  'Get status of a backgrounded process',
-  {
-    type: 'object',
-    properties: {
-      processId: { type: 'string', description: 'Process ID returned from execute/cmd/bash' }
-    },
-    required: ['processId']
-  },
-  async ({ processId }) => {
-    try {
-      if (!processId || typeof processId !== 'string') {
-        return response.error('Invalid processId');
-      }
-      const status = getProcessStatus(processId);
-      return response.json(status, status.error ? true : false);
-    } catch (e) {
-      return response.error(`Status query failed: ${e.message}`);
-    }
-  }
-);
-
-export const processCloseTool = createSimpleTool(
-  'process_close',
-  'Close and terminate a backgrounded process',
-  {
-    type: 'object',
-    properties: {
-      processId: { type: 'string', description: 'Process ID returned from execute/cmd/bash' }
-    },
-    required: ['processId']
-  },
-  async ({ processId }) => {
-    try {
-      if (!processId || typeof processId !== 'string') {
-        return response.error('Invalid processId');
-      }
-      const result = closeProcess(processId);
-      return response.json(result, result.error ? true : false);
-    } catch (e) {
-      return response.error(`Process close failed: ${e.message}`);
-    }
-  }
-);
-
 export const sleepTool = createSimpleTool(
   'sleep',
   'Sleep for a specified number of milliseconds',
@@ -95,4 +49,4 @@ export const sleepTool = createSimpleTool(
   }
 );
 
-export const allTools = [...(executionTools || []), processStatusTool, processCloseTool, sleepTool];
+export const allTools = [...(executionTools || []), sleepTool];
