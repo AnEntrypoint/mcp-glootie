@@ -18,18 +18,8 @@ const formatters = {
 };
 
 const response = {
-  success(text) {
-    return {
-      content: [{ type: 'text', text }],
-      isError: false
-    };
-  },
-  error(text) {
-    return {
-      content: [{ type: 'text', text }],
-      isError: true
-    };
-  }
+  success(text) { return { content: [{ type: 'text', text }], isError: false }; },
+  error(text) { return { content: [{ type: 'text', text }], isError: true }; }
 };
 
 const createExecutionHandler = (validateFn, isBash = false) => async (args) => {
@@ -42,24 +32,27 @@ const createExecutionHandler = (validateFn, isBash = false) => async (args) => {
 
     const cmd = isBash ? (Array.isArray(commands) ? commands.join(' && ') : String(commands)) : code;
     let runtime = language || 'nodejs';
-    if (!isBash && (runtime === 'typescript' || runtime === 'auto')) {
-      runtime = 'nodejs';
-    }
+    if (!isBash && (runtime === 'typescript' || runtime === 'auto')) runtime = 'nodejs';
 
     let backgroundTaskId = null;
     if (run_in_background) {
       backgroundTaskId = backgroundStore.createTask(cmd, runtime, workingDirectory);
     }
 
+    const executionPromise = executeCode(cmd, runtime, workingDirectory, BACKGROUND_THRESHOLD, backgroundTaskId);
     const result = await Promise.race([
-      executeCode(cmd, runtime, workingDirectory, BACKGROUND_THRESHOLD, backgroundTaskId),
+      executionPromise,
       new Promise(resolve => setTimeout(() => resolve(null), BACKGROUND_THRESHOLD))
     ]);
 
     if (!result) {
-      return response.success(
-        `Process persisted (ID: task_${backgroundTaskId || '?'}). Set run_in_background=true if task will run longer than 10 seconds. Check status with process_status tool.`
-      );
+      executionPromise.catch(() => {});
+      if (backgroundTaskId) {
+        return response.success(
+          `Process persisted (ID: task_${backgroundTaskId}). Check status with process_status tool.`
+        );
+      }
+      return response.success('Execution exceeded time limit. Set run_in_background=true for long-running tasks.');
     }
 
     if (result.backgroundTaskId && result.completed) {
@@ -70,21 +63,17 @@ const createExecutionHandler = (validateFn, isBash = false) => async (args) => {
 
     if (result.persisted) {
       return response.success(
-        `Process persisted (ID: task_${result.backgroundTaskId}). Set run_in_background=true if task will run longer than 10 seconds. Check status with process_status tool.`
+        `Process persisted (ID: task_${result.backgroundTaskId}). Check status with process_status tool.`
       );
     }
 
     if (!result.success && !result.error) {
-      const msg = `${formatters.context(result)}\n\n${formatters.output(result)}`;
-      return response.error(`Command failed\n${msg}`);
+      return response.error(`Command failed\n${formatters.context(result)}\n\n${formatters.output(result)}`);
     }
 
-    if (result.error) {
-      return response.error(`Error: ${result.error}`);
-    }
+    if (result.error) return response.error(`Error: ${result.error}`);
 
-    const msg = `${formatters.context(result)}\n\n${formatters.output(result)}`;
-    return response.success(msg);
+    return response.success(`${formatters.context(result)}\n\n${formatters.output(result)}`);
   } catch (error) {
     return response.error(`Error: ${error?.message || String(error)}`);
   }
