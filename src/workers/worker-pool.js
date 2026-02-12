@@ -87,16 +87,40 @@ export class WorkerPool extends EventEmitter {
     if (type === 'complete') {
       if (job.isBackground && job.backgroundTaskId) {
         backgroundStore.completeTask(job.backgroundTaskId, result);
-        job.resolve({ backgroundTaskId: job.backgroundTaskId, completed: true, result });
+        if (job.resolve) {
+          try {
+            job.resolve({ backgroundTaskId: job.backgroundTaskId, completed: true, result });
+          } catch (e) {
+            process.stderr.write(`[WorkerPool] Failed to resolve background job ${jobId}: ${e.message}\n`);
+          }
+        }
       } else {
-        job.resolve(result);
+        if (job.resolve) {
+          try {
+            job.resolve(result);
+          } catch (e) {
+            process.stderr.write(`[WorkerPool] Failed to resolve job ${jobId}: ${e.message}\n`);
+          }
+        }
       }
     } else {
       if (job.isBackground && job.backgroundTaskId) {
         backgroundStore.failTask(job.backgroundTaskId, new Error(error || 'Worker error'));
-        job.resolve({ backgroundTaskId: job.backgroundTaskId, completed: true, result });
+        if (job.resolve) {
+          try {
+            job.resolve({ backgroundTaskId: job.backgroundTaskId, completed: true, result });
+          } catch (e) {
+            process.stderr.write(`[WorkerPool] Failed to resolve failed background job ${jobId}: ${e.message}\n`);
+          }
+        }
       } else {
-        job.reject(new Error(error || 'Worker error'));
+        if (job.reject) {
+          try {
+            job.reject(new Error(error || 'Worker error'));
+          } catch (e) {
+            process.stderr.write(`[WorkerPool] Failed to reject job ${jobId}: ${e.message}\n`);
+          }
+        }
       }
     }
     this.processQueue();
@@ -105,9 +129,10 @@ export class WorkerPool extends EventEmitter {
   async execute(code, runtime, workingDirectory, timeout = 30000, backgroundTaskId = null) {
     return new Promise((resolve, reject) => {
       const jobId = ++this.jobCounter;
+      const isBackground = !!backgroundTaskId;
       const job = {
         jobId, resolve, reject, startTime: Date.now(),
-        backgroundTaskId, isBackground: !!backgroundTaskId,
+        backgroundTaskId, isBackground,
         code, runtime, workingDirectory, timeout
       };
       this.activeJobs.set(jobId, job);
@@ -133,7 +158,8 @@ export class WorkerPool extends EventEmitter {
       job.worker = worker.worker;
 
       try {
-        worker.worker.postMessage({ jobId, code, runtime, workingDirectory, timeout });
+        const workerTimeout = isBackground ? 24 * 60 * 60 * 1000 : timeout;
+        worker.worker.postMessage({ jobId, code, runtime, workingDirectory, timeout: workerTimeout });
       } catch (err) {
         clearTimeout(timer);
         this.activeJobs.delete(jobId);
@@ -151,25 +177,34 @@ export class WorkerPool extends EventEmitter {
       const job = this.queue.shift();
       worker.isAvailable = false;
 
+      const timeoutDuration = job.timeout || 30000;
       const timer = setTimeout(() => {
-        this.activeJobs.delete(job.jobId);
-        this.removeWorker(worker.worker);
-        job.reject(new Error(`Execution timeout after ${job.timeout || 30000}ms`));
-      }, job.timeout || 30000);
+        if (job.isBackground) {
+          this.activeJobs.delete(job.jobId);
+          this.backgroundJobs.set(job.jobId, job);
+          if (job.backgroundTaskId) backgroundStore.startTask(job.backgroundTaskId);
+          if (job.resolve) job.resolve({ backgroundTaskId: job.backgroundTaskId, persisted: true });
+        } else {
+          this.activeJobs.delete(job.jobId);
+          this.removeWorker(worker.worker);
+          if (job.reject) job.reject(new Error(`Execution timeout after ${timeoutDuration}ms`));
+        }
+      }, timeoutDuration);
 
       job.timer = timer;
       job.worker = worker.worker;
       try {
+        const workerTimeout = job.isBackground ? 24 * 60 * 60 * 1000 : timeoutDuration;
         worker.worker.postMessage({
           jobId: job.jobId, code: job.code,
           runtime: job.runtime, workingDirectory: job.workingDirectory,
-          timeout: job.timeout
+          timeout: workerTimeout
         });
       } catch (err) {
         clearTimeout(timer);
         this.activeJobs.delete(job.jobId);
         worker.isAvailable = true;
-        job.reject(err);
+        if (job.reject) job.reject(err);
       }
     }
   }

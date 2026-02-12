@@ -1,7 +1,7 @@
 import { executeCode, validate } from './execute-code-isolated.js';
 import { backgroundStore } from '../background-tasks.js';
 
-const BACKGROUND_THRESHOLD = 10000;
+const BACKGROUND_THRESHOLD = 15000;
 
 const formatters = {
   output(result) {
@@ -89,7 +89,7 @@ export const executionTools = process.platform === 'win32'
           workingDirectory: { type: 'string', description: 'Working directory' },
           code: { type: 'string', description: 'Code to execute' },
           language: { type: 'string', enum: ['nodejs', 'typescript', 'deno', 'go', 'rust', 'python', 'c', 'cpp', 'auto'], description: 'Language (default: auto)' },
-          run_in_background: { type: 'boolean', description: 'Set to true if task will run longer than 10 seconds' }
+          run_in_background: { type: 'boolean', description: 'Set to true if task will run longer than 15 seconds' }
         },
         required: ['workingDirectory', 'code']
       },
@@ -104,7 +104,7 @@ export const executionTools = process.platform === 'win32'
           workingDirectory: { type: 'string', description: 'Working directory' },
           code: { type: 'string', description: 'Code to execute' },
           language: { type: 'string', enum: ['nodejs', 'typescript', 'deno', 'go', 'rust', 'python', 'c', 'cpp', 'auto'], description: 'Language (default: auto)' },
-          run_in_background: { type: 'boolean', description: 'Set to true if task will run longer than 10 seconds' }
+          run_in_background: { type: 'boolean', description: 'Set to true if task will run longer than 15 seconds' }
         },
         required: ['workingDirectory', 'code']
       },
@@ -118,7 +118,7 @@ export const executionTools = process.platform === 'win32'
           workingDirectory: { type: 'string', description: 'Working directory' },
           commands: { type: ['string', 'array'], description: 'Commands to execute' },
           language: { type: 'string', enum: ['bash', 'sh', 'zsh'], description: 'Language (default: bash)' },
-          run_in_background: { type: 'boolean', description: 'Set to true if task will run longer than 10 seconds' }
+          run_in_background: { type: 'boolean', description: 'Set to true if task will run longer than 15 seconds' }
         },
         required: ['workingDirectory', 'commands']
       },
