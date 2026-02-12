@@ -34,38 +34,31 @@ const createExecutionHandler = (validateFn, isBash = false) => async (args) => {
     let runtime = language || 'nodejs';
     if (!isBash && (runtime === 'typescript' || runtime === 'auto')) runtime = 'nodejs';
 
-    let backgroundTaskId = null;
+    const backgroundTaskId = backgroundStore.createTask(cmd, runtime, workingDirectory);
+
     if (run_in_background) {
-      backgroundTaskId = backgroundStore.createTask(cmd, runtime, workingDirectory);
+      backgroundStore.startTask(backgroundTaskId);
+      executeCode(cmd, runtime, workingDirectory, 24 * 60 * 60 * 1000, backgroundTaskId).catch(() => {});
+      return response.success(
+        `Process backgrounded (ID: task_${backgroundTaskId}). Check status with process_status tool or resource task://${backgroundTaskId}`
+      );
     }
 
-    const executionPromise = executeCode(cmd, runtime, workingDirectory, BACKGROUND_THRESHOLD, backgroundTaskId);
-    const result = await Promise.race([
-      executionPromise,
-      new Promise(resolve => setTimeout(() => resolve(null), BACKGROUND_THRESHOLD))
-    ]);
+    const result = await executeCode(cmd, runtime, workingDirectory, BACKGROUND_THRESHOLD, backgroundTaskId);
 
-    if (!result) {
-      executionPromise.catch(() => {});
-      if (backgroundTaskId) {
-        return response.success(
-          `Process persisted (ID: task_${backgroundTaskId}). Check status with process_status tool.`
-        );
-      }
-      return response.success('Execution exceeded time limit. Set run_in_background=true for long-running tasks.');
+    if (result.persisted) {
+      return response.success(
+        `Process backgrounded (ID: task_${result.backgroundTaskId}). Check status with process_status tool or resource task://${result.backgroundTaskId}`
+      );
     }
 
     if (result.backgroundTaskId && result.completed) {
       return response.success(
-        `Process completed (ID: task_${result.backgroundTaskId}). Output available as resource task://${result.backgroundTaskId}`
+        `Process completed in background (ID: task_${result.backgroundTaskId}). Output available as resource task://${result.backgroundTaskId}`
       );
     }
 
-    if (result.persisted) {
-      return response.success(
-        `Process persisted (ID: task_${result.backgroundTaskId}). Check status with process_status tool.`
-      );
-    }
+    backgroundStore.deleteTask(backgroundTaskId);
 
     if (!result.success && !result.error) {
       return response.error(`Command failed\n${formatters.context(result)}\n\n${formatters.output(result)}`);
@@ -89,7 +82,7 @@ export const executionTools = process.platform === 'win32'
           workingDirectory: { type: 'string', description: 'Working directory' },
           code: { type: 'string', description: 'Code to execute' },
           language: { type: 'string', enum: ['nodejs', 'typescript', 'deno', 'go', 'rust', 'python', 'c', 'cpp', 'auto'], description: 'Language (default: auto)' },
-          run_in_background: { type: 'boolean', description: 'Set to true if task will run longer than 15 seconds' }
+          run_in_background: { type: 'boolean', description: 'Return immediately with task reference. Without this flag, tasks auto-background at 15s.' }
         },
         required: ['workingDirectory', 'code']
       },
@@ -104,7 +97,7 @@ export const executionTools = process.platform === 'win32'
           workingDirectory: { type: 'string', description: 'Working directory' },
           code: { type: 'string', description: 'Code to execute' },
           language: { type: 'string', enum: ['nodejs', 'typescript', 'deno', 'go', 'rust', 'python', 'c', 'cpp', 'auto'], description: 'Language (default: auto)' },
-          run_in_background: { type: 'boolean', description: 'Set to true if task will run longer than 15 seconds' }
+          run_in_background: { type: 'boolean', description: 'Return immediately with task reference. Without this flag, tasks auto-background at 15s.' }
         },
         required: ['workingDirectory', 'code']
       },
@@ -118,7 +111,7 @@ export const executionTools = process.platform === 'win32'
           workingDirectory: { type: 'string', description: 'Working directory' },
           commands: { type: ['string', 'array'], description: 'Commands to execute' },
           language: { type: 'string', enum: ['bash', 'sh', 'zsh'], description: 'Language (default: bash)' },
-          run_in_background: { type: 'boolean', description: 'Set to true if task will run longer than 15 seconds' }
+          run_in_background: { type: 'boolean', description: 'Return immediately with task reference. Without this flag, tasks auto-background at 15s.' }
         },
         required: ['workingDirectory', 'commands']
       },
