@@ -17,6 +17,32 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchem
 
   const subscriptions = new Set();
 
+  const notifyResourceUpdate = (uri) => {
+    if (subscriptions.has(uri)) {
+      server.notification({
+        method: 'notifications/resource/updated',
+        params: { uri }
+      }).catch(err => console.error(`[Notification] Failed to send resource update for ${uri}:`, err));
+    }
+  };
+
+  const interceptBackgroundStore = () => {
+    const originalComplete = backgroundStore.completeTask.bind(backgroundStore);
+    const originalFail = backgroundStore.failTask.bind(backgroundStore);
+
+    backgroundStore.completeTask = function(taskId, result) {
+      originalComplete(taskId, result);
+      notifyResourceUpdate(`task://${taskId}`);
+    };
+
+    backgroundStore.failTask = function(taskId, error) {
+      originalFail(taskId, error);
+      notifyResourceUpdate(`task://${taskId}`);
+    };
+  };
+
+  interceptBackgroundStore();
+
   const server = new Server(
     { name: 'glootie', version: '3.4.72', description: 'Code execution for programming agents' },
     { capabilities: { tools: {}, resources: {} } }
@@ -65,15 +91,29 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchem
           return { contents: [{ uri, mimeType: 'text/plain', text: 'Task not found' }] };
         }
         const result = task.result || {};
-        let text = '';
-        if (result.error) {
-          text = `Error: ${result.error}`;
-        } else {
-          if (result.stdout) text += `[STDOUT]\n${result.stdout}`;
-          if (result.stderr) text += text ? `\n\n[STDERR]\n${result.stderr}` : `[STDERR]\n${result.stderr}`;
-          if (!text) text = '(no output)';
+        const parts = [`[TASK STATUS: ${task.status.toUpperCase()}]`];
+
+        if (task.startedAt) {
+          parts.push(`Started: ${new Date(task.startedAt).toISOString()}`);
         }
-        backgroundStore.deleteTask(taskId);
+        if (task.completedAt) {
+          parts.push(`Completed: ${new Date(task.completedAt).toISOString()}`);
+        }
+        if (result.executionTimeMs) {
+          parts.push(`Duration: ${result.executionTimeMs}ms`);
+        }
+
+        parts.push('');
+
+        if (result.error) {
+          parts.push(`[ERROR] ${result.error}`);
+        } else {
+          if (result.stdout) parts.push(`[STDOUT]\n${result.stdout}`);
+          if (result.stderr) parts.push(`[STDERR]\n${result.stderr}`);
+          if (!result.stdout && !result.stderr) parts.push('(no output)');
+        }
+
+        const text = parts.join('\n');
         return { contents: [{ uri, mimeType: 'text/plain', text }] };
       }
       return { contents: [{ uri, mimeType: 'text/plain', text: 'Unknown resource type' }] };

@@ -158,14 +158,28 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
 
 parentPort.on('message', async (msg) => {
   const { jobId, code, runtime, workingDirectory, timeout = 30000 } = msg;
+  process.stderr.write(`[Worker] Received job ${jobId}, runtime=${runtime}, timeout=${timeout}\n`);
   try {
+    const execStart = Date.now();
     const result = await executeInProcess(code, runtime, workingDirectory, timeout);
-    parentPort.postMessage({
-      jobId, type: 'complete', stdout: result.stdout,
-      stderr: result.stderr, exitCode: result.exitCode, error: result.error
-    });
+    const execTime = Date.now() - execStart;
+    process.stderr.write(`[Worker] Job ${jobId} completed in ${execTime}ms, sending message...\n`);
+    try {
+      parentPort.postMessage({
+        jobId, type: 'complete', stdout: result.stdout,
+        stderr: result.stderr, exitCode: result.exitCode, error: result.error
+      });
+      process.stderr.write(`[Worker] Message sent for job ${jobId}\n`);
+    } catch (postErr) {
+      process.stderr.write(`[Worker] Failed to send completion message for job ${jobId}: ${postErr.message}\n`);
+    }
   } catch (err) {
-    parentPort.postMessage({ jobId, type: 'error', error: err.message });
+    process.stderr.write(`[Worker] Job ${jobId} error: ${err.message}\n`);
+    try {
+      parentPort.postMessage({ jobId, type: 'error', error: err.message });
+    } catch (postErr) {
+      process.stderr.write(`[Worker] Failed to send error message for job ${jobId}: ${postErr.message}\n`);
+    }
   }
 });
 
