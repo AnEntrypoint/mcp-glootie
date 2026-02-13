@@ -36,15 +36,8 @@ const createExecutionHandler = (validateFn, isBash = false) => async (args) => {
 
     const backgroundTaskId = backgroundStore.createTask(cmd, runtime, workingDirectory);
 
-    if (run_in_background) {
-      backgroundStore.startTask(backgroundTaskId);
-      executeCode(cmd, runtime, workingDirectory, 24 * 60 * 60 * 1000, backgroundTaskId).catch(() => {});
-      return response.success(
-        `Process backgrounded (ID: task_${backgroundTaskId}). Check status with process_status tool or resource task://${backgroundTaskId}`
-      );
-    }
-
-    const result = await executeCode(cmd, runtime, workingDirectory, BACKGROUND_THRESHOLD, backgroundTaskId);
+    const timeout = run_in_background ? 1000 : BACKGROUND_THRESHOLD;
+    const result = await executeCode(cmd, runtime, workingDirectory, timeout, backgroundTaskId);
 
     if (result.persisted) {
       return response.success(
