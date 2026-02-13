@@ -108,10 +108,25 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
         }
       }, processTimeout);
 
+      let outputDirty = false;
+      let outputTimer = null;
+      const flushOutput = () => {
+        if (outputDirty && parentPort && currentJobId) {
+          try { parentPort.postMessage({ jobId: currentJobId, type: 'output', stdout, stderr }); } catch (e) {}
+          outputDirty = false;
+        }
+        outputTimer = null;
+      };
+      const scheduleFlush = () => {
+        outputDirty = true;
+        if (!outputTimer) outputTimer = setTimeout(flushOutput, 500);
+      };
+
       child.stdout?.on('data', (data) => {
         try {
           stdout += data.toString('utf8');
           if (stdout.length > MAX_BUFFER) stdout = stdout.slice(-Math.ceil(MAX_BUFFER * 0.5));
+          scheduleFlush();
         } catch (e) {}
       });
 
@@ -119,6 +134,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
         try {
           stderr += data.toString('utf8');
           if (stderr.length > MAX_BUFFER) stderr = stderr.slice(-Math.ceil(MAX_BUFFER * 0.5));
+          scheduleFlush();
         } catch (e) {}
       });
 
@@ -156,33 +172,29 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
   });
 }
 
+let currentJobId = null;
+
 parentPort.on('message', async (msg) => {
   const { jobId, code, runtime, workingDirectory, timeout = 30000 } = msg;
-  process.stderr.write(`[Worker] Received job ${jobId}, runtime=${runtime}, timeout=${timeout}\n`);
+  currentJobId = jobId;
   try {
-    const execStart = Date.now();
     const result = await executeInProcess(code, runtime, workingDirectory, timeout);
-    const execTime = Date.now() - execStart;
-    process.stderr.write(`[Worker] Job ${jobId} completed in ${execTime}ms, sending message...\n`);
     try {
       parentPort.postMessage({
         jobId, type: 'complete', stdout: result.stdout,
         stderr: result.stderr, exitCode: result.exitCode, error: result.error
       });
-      process.stderr.write(`[Worker] Message sent for job ${jobId}\n`);
     } catch (postErr) {
-      process.stderr.write(`[Worker] Failed to send completion message for job ${jobId}: ${postErr.message}\n`);
+      process.stderr.write(`[Worker] Failed to send completion for job ${jobId}: ${postErr.message}\n`);
     }
   } catch (err) {
-    process.stderr.write(`[Worker] Job ${jobId} error: ${err.message}\n`);
     try {
       parentPort.postMessage({ jobId, type: 'error', error: err.message });
     } catch (postErr) {
-      process.stderr.write(`[Worker] Failed to send error message for job ${jobId}: ${postErr.message}\n`);
+      process.stderr.write(`[Worker] Failed to send error for job ${jobId}: ${postErr.message}\n`);
     }
   }
+  currentJobId = null;
 });
 
-parentPort.on('error', (err) => {
-  process.stderr.write(`Worker error: ${err.message}\n`);
-});
+parentPort.on('error', () => {});

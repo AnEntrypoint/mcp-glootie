@@ -37,7 +37,14 @@ const createExecutionHandler = (validateFn, isBash = false) => async (args) => {
     const backgroundTaskId = backgroundStore.createTask(cmd, runtime, workingDirectory);
 
     const timeout = run_in_background ? 1000 : BACKGROUND_THRESHOLD;
-    const result = await executeCode(cmd, runtime, workingDirectory, timeout, backgroundTaskId);
+    const safetyTimeout = new Promise(resolve => setTimeout(() => {
+      backgroundStore.startTask(backgroundTaskId);
+      resolve({ backgroundTaskId, persisted: true });
+    }, timeout + 1000));
+    const result = await Promise.race([
+      executeCode(cmd, runtime, workingDirectory, timeout, backgroundTaskId),
+      safetyTimeout
+    ]);
 
     if (result.persisted) {
       return response.success(

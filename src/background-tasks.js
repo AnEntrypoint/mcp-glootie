@@ -66,6 +66,15 @@ export class BackgroundTaskStore {
     if (task) { task.completedAt = Date.now(); task.result = { error: error.message }; task.status = 'failed'; }
   }
 
+  updateOutput(taskId, stdout, stderr) {
+    const task = this.tasks.get(taskId);
+    if (task && (task.status === 'running' || task.status === 'pending')) {
+      if (!task.result) task.result = {};
+      task.result.stdout = stdout;
+      task.result.stderr = stderr;
+    }
+  }
+
   getTask(taskId) { return this.tasks.get(taskId); }
   deleteTask(taskId) { this.tasks.delete(taskId); }
   getAllTasks() { return Array.from(this.tasks.values()); }
