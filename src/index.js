@@ -29,6 +29,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchem
   const interceptBackgroundStore = () => {
     const originalComplete = backgroundStore.completeTask.bind(backgroundStore);
     const originalFail = backgroundStore.failTask.bind(backgroundStore);
+    const originalUpdateOutput = backgroundStore.updateOutput.bind(backgroundStore);
 
     backgroundStore.completeTask = function(taskId, result) {
       originalComplete(taskId, result);
@@ -37,6 +38,11 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchem
 
     backgroundStore.failTask = function(taskId, error) {
       originalFail(taskId, error);
+      notifyResourceUpdate(`task://${taskId}`);
+    };
+
+    backgroundStore.updateOutput = function(taskId, stdout, stderr) {
+      originalUpdateOutput(taskId, stdout, stderr);
       notifyResourceUpdate(`task://${taskId}`);
     };
   };

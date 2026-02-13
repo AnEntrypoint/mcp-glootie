@@ -69,6 +69,14 @@ export class WorkerPool extends EventEmitter {
     const { jobId, type, error, stdout, stderr, exitCode } = msg;
     const job = this.activeJobs.get(jobId) || this.backgroundJobs.get(jobId);
     if (!jobId || !job) return;
+
+    if (type === 'output') {
+      if (job.backgroundTaskId) {
+        backgroundStore.updateOutput(job.backgroundTaskId, stdout || '', stderr || '');
+      }
+      return;
+    }
+
     if (job.timer) clearTimeout(job.timer);
 
     const workerItem = this.workers.find(w => w.worker === worker);
