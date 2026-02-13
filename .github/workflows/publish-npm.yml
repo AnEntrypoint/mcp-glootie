@@ -16,7 +16,10 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: oven-sh/setup-bun@v1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Bump version
         run: |
@@ -25,7 +28,6 @@ jobs:
           NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
           jq --arg v "$NEW_VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          echo "VERSION_BUMPED=true" >> $GITHUB_ENV
 
       - name: Configure git
         run: |
@@ -38,9 +40,7 @@ jobs:
           git commit -m "chore: bump version to ${{ env.NEW_VERSION }}"
           git push
 
-      - name: Setup npm credentials
-        run: |
-          npm config set //registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}
-
       - name: Publish to npm
-        run: npm publish
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
