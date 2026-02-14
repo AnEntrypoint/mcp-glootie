@@ -1,6 +1,6 @@
 {
   "name": "mcp-glootie",
-  "version": "3.4.85",
+  "version": "3.4.86",
   "description": "MCP Glootie - Code execution tool for MCP clients. Multi-language support (JS/TS, Go, Rust, Python, C/C++, bash). Works with Claude Code, Cursor, Copilot, VSCode.",
   "main": "src/index.js",
   "type": "module",
