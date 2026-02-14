@@ -6,13 +6,12 @@
     "url": "https://github.com/AnEntrypoint/mcp-glootie",
     "source": "github"
   },
-  "version": "3.4.82",
+  "version": "3.4.84",
   "packages": [
     {
       "registryType": "npm",
-      "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "mcp-glootie",
-      "version": "3.4.82",
+      "version": "3.4.84",
       "transport": {
         "type": "stdio"
       }
