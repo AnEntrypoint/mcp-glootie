@@ -1,0 +1,35 @@
+name: Publish to MCP Registry
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install mcp-publisher
+        run: npm install -g mcp-publisher
+
+      - name: Authenticate with MCP Registry using OIDC
+        run: |
+          mcp-publisher login github-oidc
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+
+      - name: Publish to MCP Registry
+        run: mcp-publisher publish
