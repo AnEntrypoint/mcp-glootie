@@ -75,13 +75,13 @@ const createExecutionHandler = (validateFn, isBash = false) => async (args) => {
 export const executionTools = process.platform === 'win32'
   ? [{
       name: 'execute',
-      description: 'Execute code (JS/TS, Deno, Go, Rust, Python, C, C++)',
+      description: 'Execute code (JS/TS, Deno, Go, Rust, Python, C, C++, Java)',
       inputSchema: {
         type: 'object',
         properties: {
           workingDirectory: { type: 'string', description: 'Working directory' },
           code: { type: 'string', description: 'Code to execute' },
-          language: { type: 'string', enum: ['nodejs', 'typescript', 'deno', 'go', 'rust', 'python', 'c', 'cpp', 'auto'], description: 'Language (default: auto)' },
+          language: { type: 'string', enum: ['nodejs', 'typescript', 'deno', 'go', 'rust', 'python', 'c', 'cpp', 'java', 'auto'], description: 'Language (default: auto)' },
           run_in_background: { type: 'boolean', description: 'Return immediately with task reference. Without this flag, tasks auto-background at 15s.' }
         },
         required: ['workingDirectory', 'code']
@@ -90,13 +90,13 @@ export const executionTools = process.platform === 'win32'
     }]
   : [{
       name: 'execute',
-      description: 'Execute code (JS/TS, Deno, Go, Rust, Python, C, C++)',
+      description: 'Execute code (JS/TS, Deno, Go, Rust, Python, C, C++, Java)',
       inputSchema: {
         type: 'object',
         properties: {
           workingDirectory: { type: 'string', description: 'Working directory' },
           code: { type: 'string', description: 'Code to execute' },
-          language: { type: 'string', enum: ['nodejs', 'typescript', 'deno', 'go', 'rust', 'python', 'c', 'cpp', 'auto'], description: 'Language (default: auto)' },
+          language: { type: 'string', enum: ['nodejs', 'typescript', 'deno', 'go', 'rust', 'python', 'c', 'cpp', 'java', 'auto'], description: 'Language (default: auto)' },
           run_in_background: { type: 'boolean', description: 'Return immediately with task reference. Without this flag, tasks auto-background at 15s.' }
         },
         required: ['workingDirectory', 'code']

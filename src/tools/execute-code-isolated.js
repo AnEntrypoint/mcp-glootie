@@ -25,7 +25,7 @@ export async function executeCode(code, runtime, workingDirectory, timeout = 300
       throw new Error('Invalid workingDirectory specified');
     }
 
-    const supportedRuntimes = ['nodejs', 'typescript', 'deno', 'bash', 'cmd', 'go', 'rust', 'python', 'c', 'cpp'];
+    const supportedRuntimes = ['nodejs', 'typescript', 'deno', 'bash', 'cmd', 'go', 'rust', 'python', 'c', 'cpp', 'java'];
     if (!supportedRuntimes.includes(runtime)) {
       throw new Error(`Unsupported runtime: ${runtime}. Supported: ${supportedRuntimes.join(', ')}`);
     }
