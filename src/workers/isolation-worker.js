@@ -401,23 +401,32 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
         }
       }, processTimeout);
 
-      let outputDirty = false;
+      let stdoutBuffer = '';
+      let stderrBuffer = '';
       let outputTimer = null;
+      
       const flushOutput = () => {
-        if (outputDirty && parentPort && currentJobId) {
-          try { parentPort.postMessage({ jobId: currentJobId, type: 'output', stdout, stderr }); } catch (e) {}
-          outputDirty = false;
+        if (parentPort && currentJobId) {
+          if (stdoutBuffer.length > 0) {
+            try { parentPort.postMessage({ jobId: currentJobId, type: 'output', streamType: 'stdout', data: stdoutBuffer }); } catch (e) {}
+            stdoutBuffer = '';
+          }
+          if (stderrBuffer.length > 0) {
+            try { parentPort.postMessage({ jobId: currentJobId, type: 'output', streamType: 'stderr', data: stderrBuffer }); } catch (e) {}
+            stderrBuffer = '';
+          }
         }
         outputTimer = null;
       };
+      
       const scheduleFlush = () => {
-        outputDirty = true;
-        if (!outputTimer) outputTimer = setTimeout(flushOutput, 500);
+        if (!outputTimer) outputTimer = setTimeout(flushOutput, 200);
       };
 
       child.stdout?.on('data', (data) => {
         try {
           stdout += data.toString('utf8');
+          stdoutBuffer += data.toString('utf8');
           if (stdout.length > MAX_BUFFER) stdout = stdout.slice(-Math.ceil(MAX_BUFFER * 0.5));
           scheduleFlush();
         } catch (e) {}
@@ -426,6 +435,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
       child.stderr?.on('data', (data) => {
         try {
           stderr += data.toString('utf8');
+          stderrBuffer += data.toString('utf8');
           if (stderr.length > MAX_BUFFER) stderr = stderr.slice(-Math.ceil(MAX_BUFFER * 0.5));
           scheduleFlush();
         } catch (e) {}

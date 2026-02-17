@@ -1,7 +1,7 @@
 import { executeCode, validate } from './execute-code-isolated.js';
 import { backgroundStore } from '../background-tasks.js';
 
-const BACKGROUND_THRESHOLD = 15000;
+const HARD_CEILING_MS = 15000;
 
 const formatters = {
   output(result) {
@@ -36,11 +36,17 @@ const createExecutionHandler = (validateFn, isBash = false) => async (args) => {
 
     const backgroundTaskId = backgroundStore.createTask(cmd, runtime, workingDirectory);
 
-    const timeout = run_in_background ? 1000 : BACKGROUND_THRESHOLD;
-    const safetyTimeout = new Promise(resolve => setTimeout(() => {
-      backgroundStore.startTask(backgroundTaskId);
-      resolve({ backgroundTaskId, persisted: true });
-    }, timeout + 1000));
+    const timeout = HARD_CEILING_MS;
+    const deadline = Date.now() + timeout;
+    
+    const safetyTimeout = new Promise(resolve => {
+      const remaining = Math.max(100, deadline - Date.now());
+      setTimeout(() => {
+        backgroundStore.startTask(backgroundTaskId);
+        resolve({ backgroundTaskId, persisted: true });
+      }, remaining);
+    });
+    
     const result = await Promise.race([
       executeCode(cmd, runtime, workingDirectory, timeout, backgroundTaskId),
       safetyTimeout
@@ -82,7 +88,7 @@ export const executionTools = process.platform === 'win32'
           workingDirectory: { type: 'string', description: 'Working directory' },
           code: { type: 'string', description: 'Code to execute' },
           language: { type: 'string', enum: ['nodejs', 'typescript', 'deno', 'go', 'rust', 'python', 'c', 'cpp', 'java', 'auto'], description: 'Language (default: auto)' },
-          run_in_background: { type: 'boolean', description: 'Return immediately with task reference. Without this flag, tasks auto-background at 15s.' }
+          run_in_background: { type: 'boolean', description: 'Return immediately with task reference. Commands have a hard 15s ceiling then auto-background.' }
         },
         required: ['workingDirectory', 'code']
       },
@@ -97,7 +103,7 @@ export const executionTools = process.platform === 'win32'
           workingDirectory: { type: 'string', description: 'Working directory' },
           code: { type: 'string', description: 'Code to execute' },
           language: { type: 'string', enum: ['nodejs', 'typescript', 'deno', 'go', 'rust', 'python', 'c', 'cpp', 'java', 'auto'], description: 'Language (default: auto)' },
-          run_in_background: { type: 'boolean', description: 'Return immediately with task reference. Without this flag, tasks auto-background at 15s.' }
+          run_in_background: { type: 'boolean', description: 'Return immediately with task reference. Commands have a hard 15s ceiling then auto-background.' }
         },
         required: ['workingDirectory', 'code']
       },
@@ -111,7 +117,7 @@ export const executionTools = process.platform === 'win32'
           workingDirectory: { type: 'string', description: 'Working directory' },
           commands: { type: ['string', 'array'], description: 'Commands to execute' },
           language: { type: 'string', enum: ['bash', 'sh', 'zsh'], description: 'Language (default: bash)' },
-          run_in_background: { type: 'boolean', description: 'Return immediately with task reference. Without this flag, tasks auto-background at 15s.' }
+          run_in_background: { type: 'boolean', description: 'Return immediately with task reference. Commands have a hard 15s ceiling then auto-background.' }
         },
         required: ['workingDirectory', 'commands']
       },
