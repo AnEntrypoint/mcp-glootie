@@ -26,9 +26,33 @@ export class WorkerPool extends EventEmitter {
     this.jobCounter = 0;
     this.shuttingDown = false;
     this.backgroundJobs = new Map();
+    this.maxWorkerAge = 60 * 60 * 1000;
+    this.healthCheckInterval = setInterval(() => this.healthCheck(), 30000);
+    if (this.healthCheckInterval.unref) this.healthCheckInterval.unref();
     for (let i = 0; i < poolSize; i++) {
       try { this.addWorker(); } catch (e) {
         this.emit('poolError', new Error(`Failed initial worker: ${e.message}`));
+      }
+    }
+  }
+
+  healthCheck() {
+    const now = Date.now();
+    for (const [jobId, job] of this.activeJobs) {
+      const age = now - job.startTime;
+      if (age > this.maxWorkerAge) {
+        const workerItem = this.workers.find(w => w.worker === job.worker);
+        if (workerItem) {
+          try { workerItem.worker.terminate().catch(() => {}); } catch (e) {}
+          this.removeWorker(workerItem.worker);
+        }
+        this.activeJobs.delete(jobId);
+        if (job.backgroundTaskId) {
+          backgroundStore.failTask(job.backgroundTaskId, new Error('Worker timeout - killed by health check'));
+        }
+        if (job.reject) {
+          try { job.reject(new Error('Worker timeout')); } catch (e) {}
+        }
       }
     }
   }
@@ -136,6 +160,19 @@ export class WorkerPool extends EventEmitter {
         backgroundTaskId,
         code, runtime, workingDirectory, timeout
       };
+
+      if (this.shuttingDown) {
+        return reject(new Error('Pool is shutting down'));
+      }
+
+      if (this.workers.length === 0) {
+        return reject(new Error('No workers available'));
+      }
+
+      if (this.queue.length > 100) {
+        return reject(new Error('Queue overflow - too many pending jobs'));
+      }
+
       this.activeJobs.set(jobId, job);
 
       const worker = this.workers.find(w => w.isAvailable);
@@ -199,6 +236,10 @@ export class WorkerPool extends EventEmitter {
 
   async shutdown() {
     this.shuttingDown = true;
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
     for (const job of this.activeJobs.values()) {
       if (job.timer) clearTimeout(job.timer);
       try { job.reject(new Error('Pool shutting down')); } catch (e) {}
