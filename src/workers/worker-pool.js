@@ -66,13 +66,13 @@ export class WorkerPool extends EventEmitter {
   }
 
   handleWorkerMessage(worker, msg) {
-    const { jobId, type, error, stdout, stderr, exitCode } = msg;
+    const { jobId, type, error, stdout, stderr, exitCode, streamType, data } = msg;
     const job = this.activeJobs.get(jobId) || this.backgroundJobs.get(jobId);
     if (!jobId || !job) return;
 
     if (type === 'output') {
-      if (job.backgroundTaskId) {
-        backgroundStore.updateOutput(job.backgroundTaskId, stdout || '', stderr || '');
+      if (job.backgroundTaskId && streamType && data) {
+        backgroundStore.appendOutput(job.backgroundTaskId, streamType, data);
       }
       return;
     }

@@ -29,7 +29,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchem
   const interceptBackgroundStore = () => {
     const originalComplete = backgroundStore.completeTask.bind(backgroundStore);
     const originalFail = backgroundStore.failTask.bind(backgroundStore);
-    const originalUpdateOutput = backgroundStore.updateOutput.bind(backgroundStore);
+    const originalAppendOutput = backgroundStore.appendOutput.bind(backgroundStore);
 
     backgroundStore.completeTask = function(taskId, result) {
       originalComplete(taskId, result);
@@ -41,8 +41,8 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchem
       notifyResourceUpdate(`task://${taskId}`);
     };
 
-    backgroundStore.updateOutput = function(taskId, stdout, stderr) {
-      originalUpdateOutput(taskId, stdout, stderr);
+    backgroundStore.appendOutput = function(taskId, type, data) {
+      originalAppendOutput(taskId, type, data);
       notifyResourceUpdate(`task://${taskId}`);
     };
   };
@@ -96,31 +96,39 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchem
         if (!task) {
           return { contents: [{ uri, mimeType: 'text/plain', text: 'Task not found' }] };
         }
-        const result = task.result || {};
-        const parts = [`[TASK STATUS: ${task.status.toUpperCase()}]`];
-
+        
+        const parts = [`[STATUS: ${task.status.toUpperCase()}]`];
+        
         if (task.startedAt) {
           parts.push(`Started: ${new Date(task.startedAt).toISOString()}`);
         }
         if (task.completedAt) {
           parts.push(`Completed: ${new Date(task.completedAt).toISOString()}`);
+          if (task.result?.executionTimeMs) {
+            parts.push(`Duration: ${task.result.executionTimeMs}ms`);
+          }
         }
-        if (result.executionTimeMs) {
-          parts.push(`Duration: ${result.executionTimeMs}ms`);
-        }
-
         parts.push('');
 
-        if (result.error) {
-          parts.push(`[ERROR] ${result.error}`);
-        } else {
-          if (result.stdout) parts.push(`[STDOUT]\n${result.stdout}`);
-          if (result.stderr) parts.push(`[STDERR]\n${result.stderr}`);
-          if (!result.stdout && !result.stderr) parts.push('(no output)');
+        if (task.result?.error) {
+          parts.push(`[ERROR] ${task.result.error}`);
         }
 
-        const text = parts.join('\n');
-        return { contents: [{ uri, mimeType: 'text/plain', text }] };
+        const outputLog = backgroundStore.getAndClearOutput(taskId);
+        if (outputLog.length > 0) {
+          for (const entry of outputLog) {
+            const prefix = entry.s === 'stdout' ? '' : '[STDERR] ';
+            parts.push(prefix + entry.d);
+          }
+        } else if (task.result) {
+          if (task.result.stdout) parts.push(task.result.stdout);
+          if (task.result.stderr) parts.push('[STDERR] ' + task.result.stderr);
+          if (!task.result.stdout && !task.result.stderr && !task.result.error) parts.push('(no output)');
+        } else {
+          parts.push('(waiting for output...)');
+        }
+
+        return { contents: [{ uri, mimeType: 'text/plain', text: parts.join('\n') }] };
       }
       return { contents: [{ uri, mimeType: 'text/plain', text: 'Unknown resource type' }] };
     } catch (error) {

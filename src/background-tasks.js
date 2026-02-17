@@ -4,6 +4,7 @@ export class BackgroundTaskStore {
     this.taskCounter = 0;
     this.maxAge = 30 * 60 * 1000;
     this.maxTasks = 1000;
+    this.maxOutputSize = 100 * 1024;
     this.cleanupTimer = setInterval(() => this.cleanup(), 5 * 60 * 1000);
     if (this.cleanupTimer.unref) this.cleanupTimer.unref();
   }
@@ -46,7 +47,8 @@ export class BackgroundTaskStore {
     this.tasks.set(taskId, {
       id: taskId, code, runtime, workingDirectory,
       createdAt: Date.now(), startedAt: null,
-      completedAt: null, result: null, status: 'pending'
+      completedAt: null, result: null, status: 'pending',
+      outputLog: []
     });
     return taskId;
   }
@@ -66,13 +68,26 @@ export class BackgroundTaskStore {
     if (task) { task.completedAt = Date.now(); task.result = { error: error.message }; task.status = 'failed'; }
   }
 
-  updateOutput(taskId, stdout, stderr) {
+  appendOutput(taskId, type, data) {
     const task = this.tasks.get(taskId);
-    if (task && (task.status === 'running' || task.status === 'pending')) {
-      if (!task.result) task.result = {};
-      task.result.stdout = stdout;
-      task.result.stderr = stderr;
+    if (!task || (task.status !== 'running' && task.status !== 'pending')) return;
+    const timestamp = Date.now();
+    task.outputLog.push({ t: timestamp, s: type, d: data });
+    const totalLen = task.outputLog.reduce((sum, e) => sum + e.d.length, 0);
+    if (totalLen > this.maxOutputSize) {
+      while (task.outputLog.length > 1 && 
+             task.outputLog.reduce((sum, e) => sum + e.d.length, 0) > this.maxOutputSize * 0.5) {
+        task.outputLog.shift();
+      }
     }
+  }
+
+  getAndClearOutput(taskId) {
+    const task = this.tasks.get(taskId);
+    if (!task) return [];
+    const log = task.outputLog;
+    task.outputLog = [];
+    return log;
   }
 
   getTask(taskId) { return this.tasks.get(taskId); }
