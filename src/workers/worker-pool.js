@@ -109,7 +109,8 @@ export class WorkerPool extends EventEmitter {
       stdout: stdout || '', stderr: stderr || '',
       exitCode: exitCode ?? 1,
       executionTimeMs: Date.now() - job.startTime,
-      error: error ? new Error(error) : null
+      error: error ? new Error(error) : null,
+      logFile: msg.logFile
     };
 
     const wasBackgrounded = this.backgroundJobs.has(jobId);
@@ -176,7 +177,19 @@ export class WorkerPool extends EventEmitter {
       this.activeJobs.set(jobId, job);
 
       const worker = this.workers.find(w => w.isAvailable);
-      if (!worker) { this.queue.push(job); return; }
+      if (!worker) {
+        const queueTimer = setTimeout(() => {
+          const idx = this.queue.indexOf(job);
+          if (idx !== -1) this.queue.splice(idx, 1);
+          this.activeJobs.delete(jobId);
+          this.backgroundJobs.set(jobId, job);
+          if (backgroundTaskId) backgroundStore.startTask(backgroundTaskId);
+          resolve({ backgroundTaskId, persisted: true });
+        }, timeout);
+        job.timer = queueTimer;
+        this.queue.push(job);
+        return;
+      }
       worker.isAvailable = false;
 
       const timer = setTimeout(() => {
@@ -206,6 +219,7 @@ export class WorkerPool extends EventEmitter {
       const worker = this.workers.find(w => w.isAvailable);
       if (!worker) break;
       const job = this.queue.shift();
+      if (job.timer) { clearTimeout(job.timer); job.timer = null; }
       worker.isAvailable = false;
 
       const timeoutDuration = job.timeout || 30000;
