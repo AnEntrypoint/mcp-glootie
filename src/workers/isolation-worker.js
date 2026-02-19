@@ -1,6 +1,6 @@
 import { parentPort } from 'worker_threads';
 import { spawn } from 'child_process';
-import { writeFileSync, mkdtempSync, rmSync } from 'fs';
+import { writeFileSync, mkdtempSync, rmSync, appendFileSync } from 'fs';
 import path from 'path';
 import os from 'os';
 
@@ -48,6 +48,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
     let stdout = '';
     let stderr = '';
     let sigkillTimer = null;
+    const logFile = path.join(os.tmpdir(), `glootie_log_${Date.now()}_${Math.random().toString(36).slice(2)}.txt`);
 
     const cleanup = () => {
       activeChild = null;
@@ -60,7 +61,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
       if (!config) {
         return resolve({
           success: false, exitCode: 1, stdout: '',
-          stderr: `Unsupported runtime: ${runtime}`, error: `Unsupported runtime: ${runtime}`
+          stderr: `Unsupported runtime: ${runtime}`, error: `Unsupported runtime: ${runtime}`, logFile
         });
       }
 
@@ -82,7 +83,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
           cleanupTemp();
           return resolve({
             success: false, exitCode: 1, stdout: '',
-            stderr: `Failed to create temp file: ${e.message}`, error: `Failed to create temp file: ${e.message}`
+            stderr: `Failed to create temp file: ${e.message}`, error: `Failed to create temp file: ${e.message}`, logFile
           });
         }
       } else if (['go', 'rust', 'c', 'cpp'].includes(runtime)) {
@@ -152,7 +153,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
               cleanup();
               resolve({
                 success: false, exitCode: 1, stdout: execStdout,
-                stderr: execStderr || err.message, error: `Process error: ${err.message}`
+                stderr: execStderr || err.message, error: `Process error: ${err.message}`, logFile
               });
             } else {
               cleanup();
@@ -165,6 +166,8 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
               clearTimeout(timeoutHandle);
               cleanup();
               if (execCode === 0 && ['rust', 'c', 'cpp'].includes(runtime)) {
+                writeLog('stdout', execStdout);
+                writeLog('stderr', execStderr);
                 const exePath = path.join(tempDir, 'code');
                 const runChild = spawn(exePath, [], { cwd: workingDirectory, stdio: ['ignore', 'pipe', 'pipe'], timeout: processTimeout, detached: false });
                 let runStdout = '';
@@ -207,7 +210,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
                     runKilled = true;
                     clearTimeout(runTimeoutHandle);
                     cleanup();
-                    resolve({ success: runCode === 0, exitCode: runCode ?? 1, stdout: runStdout, stderr: runStderr, error: null });
+                    resolve({ success: runCode === 0, exitCode: runCode ?? 1, stdout: runStdout, stderr: runStderr, error: null, logFile });
                   } else {
                     cleanup();
                   }
@@ -218,13 +221,13 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
                     runKilled = true;
                     clearTimeout(runTimeoutHandle);
                     cleanup();
-                    resolve({ success: false, exitCode: 1, stdout: runStdout, stderr: runStderr || err.message, error: `Execution error: ${err.message}` });
+                    resolve({ success: false, exitCode: 1, stdout: runStdout, stderr: runStderr || err.message, error: `Execution error: ${err.message}`, logFile });
                   } else {
                     cleanup();
                   }
                 });
               } else {
-                resolve({ success: execCode === 0, exitCode: execCode ?? 1, stdout: execStdout, stderr: execStderr, error: null });
+                resolve({ success: execCode === 0, exitCode: execCode ?? 1, stdout: execStdout, stderr: execStderr, error: null, logFile });
               }
             } else {
               cleanup();
@@ -234,7 +237,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
           cleanupTemp();
           return resolve({
             success: false, exitCode: 1, stdout: '',
-            stderr: `Failed to create source file: ${e.message}`, error: `Failed to create source file: ${e.message}`
+            stderr: `Failed to create source file: ${e.message}`, error: `Failed to create source file: ${e.message}`, logFile
           });
         }
       } else if (runtime === 'java') {
@@ -250,7 +253,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
           let compileStderr = '';
           let compileStdout = '';
 
-          return new Promise((compileResolve) => {
+          (() => {
             const cpSeparator = process.platform === 'win32' ? ';' : ':';
             const compileClasspath = [tempDir, workingDirectory].join(cpSeparator);
 
@@ -269,10 +272,10 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
             compileChild.on('close', (compileCode) => {
               if (compileCode !== 0) {
                 cleanupTemp();
-                return compileResolve({
+                return resolve({
                   success: false, exitCode: 1, stdout: compileStdout,
                   stderr: compileStderr || `Compilation failed with exit code ${compileCode}`,
-                  error: 'Java compilation failed'
+                  error: 'Java compilation failed', logFile
                 });
               }
 
@@ -325,9 +328,9 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
                   execKilled = true;
                   clearTimeout(execTimeoutHandle);
                   cleanup();
-                  compileResolve({
+                  resolve({
                     success: false, exitCode: 1, stdout: execStdout,
-                    stderr: execStderr || err.message, error: `Runtime error: ${err.message}`
+                    stderr: execStderr || err.message, error: `Runtime error: ${err.message}`, logFile
                   });
                 } else {
                   cleanup();
@@ -339,7 +342,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
                   execKilled = true;
                   clearTimeout(execTimeoutHandle);
                   cleanup();
-                  compileResolve({ success: execCode === 0, exitCode: execCode ?? 1, stdout: execStdout, stderr: execStderr, error: null });
+                  resolve({ success: execCode === 0, exitCode: execCode ?? 1, stdout: execStdout, stderr: execStderr, error: null, logFile });
                 } else {
                   cleanup();
                 }
@@ -348,17 +351,17 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
 
             compileChild.on('error', (err) => {
               cleanupTemp();
-              return compileResolve({
+              return resolve({
                 success: false, exitCode: 1, stdout: '',
-                stderr: err.message, error: `Compilation error: ${err.message}`
+                stderr: err.message, error: `Compilation error: ${err.message}`, logFile
               });
             });
-          });
+          })();
         } catch (e) {
           cleanupTemp();
           return resolve({
             success: false, exitCode: 1, stdout: '',
-            stderr: `Failed to create Java file: ${e.message}`, error: `Failed to create Java file: ${e.message}`
+            stderr: `Failed to create Java file: ${e.message}`, error: `Failed to create Java file: ${e.message}`, logFile
           });
         }
       } else if (runtime === 'deno') {
@@ -374,7 +377,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
           cleanupTemp();
           return resolve({
             success: false, exitCode: 1, stdout: '',
-            stderr: `Failed to create Deno file: ${e.message}`, error: `Failed to create Deno file: ${e.message}`
+            stderr: `Failed to create Deno file: ${e.message}`, error: `Failed to create Deno file: ${e.message}`, logFile
           });
         }
       } else {
@@ -401,43 +404,34 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
         }
       }, processTimeout);
 
-      let stdoutBuffer = '';
-      let stderrBuffer = '';
-      let outputTimer = null;
-      
-      const flushOutput = () => {
-        if (parentPort && currentJobId) {
-          if (stdoutBuffer.length > 0) {
-            try { parentPort.postMessage({ jobId: currentJobId, type: 'output', streamType: 'stdout', data: stdoutBuffer }); } catch (e) {}
-            stdoutBuffer = '';
+      const writeLog = (stream, data) => {
+        try {
+          const timestamp = new Date().toISOString();
+          const prefix = stream === 'stdout' ? '[OUT]' : '[ERR]';
+          const lines = data.toString('utf8').split('\n');
+          for (const line of lines) {
+            if (line.length > 0 || lines.indexOf(line) < lines.length - 1) {
+              appendFileSync(logFile, `${timestamp} ${prefix} ${line}\n`);
+            }
           }
-          if (stderrBuffer.length > 0) {
-            try { parentPort.postMessage({ jobId: currentJobId, type: 'output', streamType: 'stderr', data: stderrBuffer }); } catch (e) {}
-            stderrBuffer = '';
-          }
-        }
-        outputTimer = null;
-      };
-      
-      const scheduleFlush = () => {
-        if (!outputTimer) outputTimer = setTimeout(flushOutput, 200);
+        } catch (e) {}
       };
 
       child.stdout?.on('data', (data) => {
         try {
-          stdout += data.toString('utf8');
-          stdoutBuffer += data.toString('utf8');
+          const str = data.toString('utf8');
+          stdout += str;
+          writeLog('stdout', str);
           if (stdout.length > MAX_BUFFER) stdout = stdout.slice(-Math.ceil(MAX_BUFFER * 0.5));
-          scheduleFlush();
         } catch (e) {}
       });
 
       child.stderr?.on('data', (data) => {
         try {
-          stderr += data.toString('utf8');
-          stderrBuffer += data.toString('utf8');
+          const str = data.toString('utf8');
+          stderr += str;
+          writeLog('stderr', str);
           if (stderr.length > MAX_BUFFER) stderr = stderr.slice(-Math.ceil(MAX_BUFFER * 0.5));
-          scheduleFlush();
         } catch (e) {}
       });
 
@@ -448,7 +442,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
           cleanup();
           resolve({
             success: false, exitCode: 1, stdout,
-            stderr: stderr || err.message, error: `Process error: ${err.message}`
+            stderr: stderr || err.message, error: `Process error: ${err.message}`, logFile
           });
         } else {
           cleanup();
@@ -460,7 +454,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
           killed = true;
           clearTimeout(timeoutHandle);
           cleanup();
-          resolve({ success: exitCode === 0, exitCode: exitCode ?? 1, stdout, stderr, error: null });
+          resolve({ success: exitCode === 0, exitCode: exitCode ?? 1, stdout, stderr, error: null, logFile });
         } else {
           cleanup();
         }
@@ -469,7 +463,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
       cleanup();
       return resolve({
         success: false, exitCode: 1, stdout: '',
-        stderr: error.message, error: error.message
+        stderr: error.message, error: error.message, logFile
       });
     }
   });
