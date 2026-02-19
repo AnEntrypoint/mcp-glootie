@@ -19,3 +19,6 @@ Thumbs.db
 .prd
 .mcpregistry_github_token
 .mcpregistry_registry_token
+
+test-*.mjs
+test-*.js
