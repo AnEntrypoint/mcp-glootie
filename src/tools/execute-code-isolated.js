@@ -42,7 +42,8 @@ export async function executeCode(code, runtime, workingDirectory, timeout = 300
       stderr: result.stderr || '',
       code: result.exitCode,
       executionTimeMs: result.executionTimeMs,
-      error: result.error ? result.error.message : null
+      error: result.error ? result.error.message : null,
+      logFile: result.logFile
     };
   } catch (error) {
     throw new Error(`Code execution failed: ${error?.message || String(error)}`);
