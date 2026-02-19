@@ -2,7 +2,7 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, SubscribeRequestSchema, UnsubscribeRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 (async () => {
   const isRemoteUrl = import.meta.url.includes('raw.githubusercontent.com');
@@ -15,43 +15,9 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchem
   const { globalPool } = await import(baseUrl + 'workers/worker-pool.js');
   const { backgroundStore } = await import(baseUrl + 'background-tasks.js');
 
-  const subscriptions = new Set();
-
-  const notifyResourceUpdate = (uri) => {
-    if (subscriptions.has(uri)) {
-      server.notification({
-        method: 'notifications/resource/updated',
-        params: { uri }
-      }).catch(err => console.error(`[Notification] Failed to send resource update for ${uri}:`, err));
-    }
-  };
-
-  const interceptBackgroundStore = () => {
-    const originalComplete = backgroundStore.completeTask.bind(backgroundStore);
-    const originalFail = backgroundStore.failTask.bind(backgroundStore);
-    const originalAppendOutput = backgroundStore.appendOutput.bind(backgroundStore);
-
-    backgroundStore.completeTask = function(taskId, result) {
-      originalComplete(taskId, result);
-      notifyResourceUpdate(`task://${taskId}`);
-    };
-
-    backgroundStore.failTask = function(taskId, error) {
-      originalFail(taskId, error);
-      notifyResourceUpdate(`task://${taskId}`);
-    };
-
-    backgroundStore.appendOutput = function(taskId, type, data) {
-      originalAppendOutput(taskId, type, data);
-      notifyResourceUpdate(`task://${taskId}`);
-    };
-  };
-
-  interceptBackgroundStore();
-
   const server = new Server(
     { name: 'glootie', version: '3.4.72', description: 'Code execution for programming agents' },
-    { capabilities: { tools: {}, resources: {} } }
+    { capabilities: { tools: {} } }
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -81,81 +47,6 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchem
     } catch (error) {
       console.error('[CallTool] Error:', error);
       return { content: [{ type: 'text', text: `Server error: ${error?.message || 'Unknown error'}` }], isError: true };
-    }
-  });
-
-  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-    try {
-      const uri = request?.params?.uri;
-      if (!uri || typeof uri !== 'string') {
-        return { contents: [{ uri: 'unknown', mimeType: 'text/plain', text: 'Invalid URI' }] };
-      }
-      if (uri.startsWith('task://')) {
-        const taskId = parseInt(uri.slice(7), 10);
-        const task = backgroundStore.getTask(taskId);
-        if (!task) {
-          return { contents: [{ uri, mimeType: 'text/plain', text: 'Task not found' }] };
-        }
-        
-        const parts = [`[STATUS: ${task.status.toUpperCase()}]`];
-        
-        if (task.startedAt) {
-          parts.push(`Started: ${new Date(task.startedAt).toISOString()}`);
-        }
-        if (task.completedAt) {
-          parts.push(`Completed: ${new Date(task.completedAt).toISOString()}`);
-          if (task.result?.executionTimeMs) {
-            parts.push(`Duration: ${task.result.executionTimeMs}ms`);
-          }
-        }
-        parts.push('');
-
-        if (task.result?.error) {
-          parts.push(`[ERROR] ${task.result.error}`);
-        }
-
-        const outputLog = backgroundStore.getAndClearOutput(taskId);
-        if (outputLog.length > 0) {
-          for (const entry of outputLog) {
-            const prefix = entry.s === 'stdout' ? '' : '[STDERR] ';
-            parts.push(prefix + entry.d);
-          }
-        } else if (task.result) {
-          if (task.result.stdout) parts.push(task.result.stdout);
-          if (task.result.stderr) parts.push('[STDERR] ' + task.result.stderr);
-          if (!task.result.stdout && !task.result.stderr && !task.result.error) parts.push('(no output)');
-        } else {
-          parts.push('(waiting for output...)');
-        }
-
-        return { contents: [{ uri, mimeType: 'text/plain', text: parts.join('\n') }] };
-      }
-      return { contents: [{ uri, mimeType: 'text/plain', text: 'Unknown resource type' }] };
-    } catch (error) {
-      console.error('[ReadResource] Error:', error);
-      return { contents: [{ uri: 'unknown', mimeType: 'text/plain', text: 'Resource read failed' }] };
-    }
-  });
-
-  server.setRequestHandler(SubscribeRequestSchema, async (request) => {
-    try {
-      const uri = request?.params?.uri;
-      if (uri && typeof uri === 'string') subscriptions.add(uri);
-      return {};
-    } catch (error) {
-      console.error('[Subscribe] Error:', error);
-      return {};
-    }
-  });
-
-  server.setRequestHandler(UnsubscribeRequestSchema, async (request) => {
-    try {
-      const uri = request?.params?.uri;
-      if (uri && typeof uri === 'string') subscriptions.delete(uri);
-      return {};
-    } catch (error) {
-      console.error('[Unsubscribe] Error:', error);
-      return {};
     }
   });
 
@@ -193,7 +84,6 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchem
       console.error(`[${signal}] Shutting down gracefully`);
       if (backoffTimer) { clearTimeout(backoffTimer); backoffTimer = null; }
       backgroundStore.shutdown();
-      subscriptions.clear();
       await globalPool.shutdown();
       process.exit(0);
     } catch (e) {

@@ -1,5 +1,6 @@
 import { executeCode, validate } from './execute-code-isolated.js';
 import { backgroundStore } from '../background-tasks.js';
+import { readFileSync, unlinkSync } from 'fs';
 
 const HARD_CEILING_MS = 15000;
 
@@ -14,6 +15,16 @@ const formatters = {
     if (result.stdout) ctx.push(`Stdout size: ${result.stdout.length} bytes`);
     if (result.stderr) ctx.push(`Stderr size: ${result.stderr.length} bytes`);
     return ctx.join(' | ');
+  },
+  logContent(logFile) {
+    if (!logFile) return '';
+    try {
+      const content = readFileSync(logFile, 'utf8');
+      try { unlinkSync(logFile); } catch (e) {}
+      return content;
+    } catch (e) {
+      return '';
+    }
   }
 };
 
@@ -54,25 +65,28 @@ const createExecutionHandler = (validateFn, isBash = false) => async (args) => {
 
     if (result.persisted) {
       return response.success(
-        `Process backgrounded (ID: task_${result.backgroundTaskId}). Check status with process_status tool or resource task://${result.backgroundTaskId}`
+        `Process backgrounded (ID: task_${result.backgroundTaskId})`
       );
     }
 
     if (result.backgroundTaskId && result.completed) {
       return response.success(
-        `Process completed in background (ID: task_${result.backgroundTaskId}). Output available as resource task://${result.backgroundTaskId}`
+        `Process completed in background (ID: task_${result.backgroundTaskId})`
       );
     }
 
     backgroundStore.deleteTask(backgroundTaskId);
 
+    const logContent = formatters.logContent(result.logFile);
+    const logSection = logContent ? `\n\n[LOG]\n${logContent}` : '';
+
     if (!result.success && !result.error) {
-      return response.error(`Command failed\n${formatters.context(result)}\n\n${formatters.output(result)}`);
+      return response.error(`Command failed\n${formatters.context(result)}\n\n${formatters.output(result)}${logSection}`);
     }
 
-    if (result.error) return response.error(`Error: ${result.error}`);
+    if (result.error) return response.error(`Error: ${result.error}${logSection}`);
 
-    return response.success(`${formatters.context(result)}\n\n${formatters.output(result)}`);
+    return response.success(`${formatters.context(result)}\n\n${formatters.output(result)}${logSection}`);
   } catch (error) {
     return response.error(`Error: ${error?.message || String(error)}`);
   }
