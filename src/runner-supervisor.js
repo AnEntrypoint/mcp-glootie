@@ -2,6 +2,10 @@ import { spawn } from 'child_process';
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const RUNNER_PATH = path.join(__dirname, 'task-runner.js');
 
 const PORT_FILE = '/tmp/glootie-runner.port';
 const MAX_RESTARTS = 10;
@@ -42,7 +46,7 @@ function withinWindow() {
 async function startRunner() {
   try { fs.unlinkSync(PORT_FILE); } catch {}
 
-  runnerProcess = spawn('node', ['src/task-runner.js'], {
+  runnerProcess = spawn('node', [RUNNER_PATH], {
     env: process.env,
     stdio: ['ignore', 'inherit', 'inherit']
   });
