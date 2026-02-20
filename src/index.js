@@ -12,8 +12,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 
   const { allTools } = await import(baseUrl + 'tools-registry.js');
   const { recoveryState } = await import(baseUrl + 'recovery-state.js');
-  const { globalPool } = await import(baseUrl + 'workers/worker-pool.js');
-  const { backgroundStore } = await import(baseUrl + 'background-tasks.js');
+  const { startRunner, stopRunner } = await import(baseUrl + 'runner-supervisor.js');
 
   const server = new Server(
     { name: 'glootie', version: '3.4.72', description: 'Code execution for programming agents' },
@@ -83,11 +82,10 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
     try {
       console.error(`[${signal}] Shutting down gracefully`);
       if (backoffTimer) { clearTimeout(backoffTimer); backoffTimer = null; }
-      backgroundStore.shutdown();
-      await globalPool.shutdown();
+      await stopRunner();
       process.exit(0);
     } catch (e) {
-      try { await globalPool.shutdown(); } catch (_) {}
+      try { await stopRunner(); } catch (_) {}
       process.exit(1);
     }
   }
@@ -97,6 +95,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
   process.on('SIGHUP', () => gracefulShutdown('SIGHUP'));
 
   async function startupWithRecovery() {
+    await startRunner();
     while (recoveryState.canRetry()) {
       try {
         const transport = new StdioServerTransport();
