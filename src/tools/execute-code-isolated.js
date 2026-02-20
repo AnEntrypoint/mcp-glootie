@@ -1,4 +1,4 @@
-import { globalPool } from '../workers/worker-pool.js';
+import { executeCode as rpcExecuteCode } from '../rpc-client.js';
 
 const validate = {
   execute({ code, workingDirectory }) {
@@ -14,40 +14,7 @@ const validate = {
 };
 
 export async function executeCode(code, runtime, workingDirectory, timeout = 30000, backgroundTaskId = null) {
-  try {
-    if (!code || typeof code !== 'string') {
-      throw new Error('Invalid code: must be non-empty string');
-    }
-    if (!runtime || typeof runtime !== 'string') {
-      throw new Error('Invalid runtime specified');
-    }
-    if (!workingDirectory || typeof workingDirectory !== 'string') {
-      throw new Error('Invalid workingDirectory specified');
-    }
-
-    const supportedRuntimes = ['nodejs', 'typescript', 'deno', 'bash', 'cmd', 'go', 'rust', 'python', 'c', 'cpp', 'java'];
-    if (!supportedRuntimes.includes(runtime)) {
-      throw new Error(`Unsupported runtime: ${runtime}. Supported: ${supportedRuntimes.join(', ')}`);
-    }
-
-    const result = await globalPool.execute(code, runtime, workingDirectory, timeout, backgroundTaskId);
-
-    if (result.persisted) {
-      return result;
-    }
-
-    return {
-      success: result.success,
-      stdout: result.stdout || '',
-      stderr: result.stderr || '',
-      code: result.exitCode,
-      executionTimeMs: result.executionTimeMs,
-      error: result.error ? result.error.message : null,
-      logFile: result.logFile
-    };
-  } catch (error) {
-    throw new Error(`Code execution failed: ${error?.message || String(error)}`);
-  }
+  return rpcExecuteCode(code, runtime, workingDirectory, timeout, backgroundTaskId);
 }
 
 export { validate };

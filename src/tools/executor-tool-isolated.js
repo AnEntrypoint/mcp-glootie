@@ -1,5 +1,5 @@
 import { executeCode, validate } from './execute-code-isolated.js';
-import { backgroundStore } from '../background-tasks.js';
+import { backgroundStore } from '../rpc-client.js';
 import { readFileSync, unlinkSync } from 'fs';
 
 const HARD_CEILING_MS = 15000;
@@ -11,7 +11,7 @@ const formatters = {
     return parts.length ? parts.join('\n\n') : '(no output)';
   },
   context(result) {
-    const ctx = [`Exit code: ${result.code}`, `Time: ${result.executionTimeMs}ms`];
+    const ctx = [`Exit code: ${result.exitCode ?? result.code}`, `Time: ${result.executionTimeMs}ms`];
     if (result.stdout) ctx.push(`Stdout size: ${result.stdout.length} bytes`);
     if (result.stderr) ctx.push(`Stderr size: ${result.stderr.length} bytes`);
     return ctx.join(' | ');
@@ -45,7 +45,7 @@ const createExecutionHandler = (validateFn, isBash = false) => async (args) => {
     let runtime = language || 'nodejs';
     if (!isBash && (runtime === 'typescript' || runtime === 'auto')) runtime = 'nodejs';
 
-    const backgroundTaskId = backgroundStore.createTask(cmd, runtime, workingDirectory);
+    const backgroundTaskId = await backgroundStore.createTask(cmd, runtime, workingDirectory);
 
     const timeout = HARD_CEILING_MS;
     const deadline = Date.now() + timeout;
