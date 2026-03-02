@@ -94,7 +94,7 @@ const createExecutionHandler = (validateFn, isBash = false) => async (args) => {
 
 export const executionTools = process.platform === 'win32'
   ? [{
-      name: 'execute',
+      name: 'code_execution',
       description: 'Execute code (JS/TS, Deno, Go, Rust, Python, C, C++, Java)',
       inputSchema: {
         type: 'object',
@@ -109,7 +109,7 @@ export const executionTools = process.platform === 'win32'
       handler: createExecutionHandler(validate.execute)
     }]
   : [{
-      name: 'execute',
+      name: 'code_execution',
       description: 'Execute code (JS/TS, Deno, Go, Rust, Python, C, C++, Java)',
       inputSchema: {
         type: 'object',
