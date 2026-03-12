@@ -1,4 +1,9 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+
+if (!process.argv.includes('--mcp')) {
+  process.stderr.write('Use --mcp flag to start MCP server mode.\nFor CLI usage run: mcp-gm-cli help\n');
+  process.exit(1);
+}
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
