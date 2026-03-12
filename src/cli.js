@@ -1,11 +1,9 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import http from 'http';
-import { createRequire } from 'module';
 import { existsSync, readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
-const require = createRequire(import.meta.url);
 const pm2lib = require('pm2');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -85,7 +83,8 @@ async function ensureRunner() {
   await withPm2(async () => {
     await pm2delete(PM2_NAME).catch(() => {});
     await pm2start({
-      script: RUNNER_SCRIPT,
+      script: 'bun',
+      args: RUNNER_SCRIPT,
       name: PM2_NAME,
       autorestart: false,
       watch: false,
@@ -161,7 +160,7 @@ async function runCode(code, runtime, workingDirectory) {
     console.log(`Watch output:`);
     console.log(`  mcp-gm-cli status ${id}    # drain buffered output + status`);
     console.log(`  mcp-gm-cli close ${id}     # clean up when done`);
-    console.log(`  npx pm2 logs ${PM2_NAME}   # stream runner process logs`);
+    console.log(`  node node_modules/.bin/pm2 logs ${PM2_NAME}   # stream runner logs`);
     await printRunningTools();
     process.exit(0);
   }
@@ -196,7 +195,8 @@ async function cmdRunnerStart() {
   await withPm2(async () => {
     await pm2delete(PM2_NAME).catch(() => {});
     await pm2start({
-      script: RUNNER_SCRIPT,
+      script: 'bun',
+      args: RUNNER_SCRIPT,
       name: PM2_NAME,
       autorestart: false,
       watch: false,
