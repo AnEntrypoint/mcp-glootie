@@ -1,66 +1,90 @@
-# mcp-glootie
+# gm-exec
 
-MCP server for executing code in JavaScript/TypeScript, Python, Go, Rust, C, C++, and Deno. Includes process management, recovery mechanisms, and automatic cleanup.
+Code execution tool for MCP clients and CLI. Multi-language support (JS/TS, Python, Go, Rust, C, C++, Deno, Java, bash). Built on Bun with PM2-managed process isolation.
 
-## Quick Start
+## MCP Server
 
-Just one command with Bun:
+Add to your MCP client config:
 
-```bash
-bunx mcp-glootie
+```json
+{
+  "mcpServers": {
+    "gm-exec": {
+      "command": "bunx",
+      "args": ["gm-exec", "--mcp"]
+    }
+  }
+}
 ```
 
-That's it. Starts the MCP server immediately and connects to Claude Code or your MCP client.
-
-### For Development
-
-Clone and run locally:
+Or install globally:
 
 ```bash
-git clone https://github.com/AnEntrypoint/mcp-glootie.git
-cd mcp-glootie
-bun install
-bun run src/index.js
+bun install -g gm-exec
+gm-exec --mcp
 ```
 
-## Features
-
-- Multi-language code execution (JS/TS, Python, Go, Rust, C, C++, Deno)
-- Process management with backgrounding support
-- Automatic error recovery
-- Built-in cleanup and resource limits
-- Stdin write capability for interactive processes
-- Status checking for background processes
-
-## Tools Available
-
-- `execute` - Run code in any supported language
-- `bash` - Execute shell commands
-- `process_status` - Check background process status
-- `process_close` - Terminate a process
-- `sleep` - Pause execution
-
-## Troubleshooting
-
-### Bun not installed
-
-If you see `Bun is required but not installed`, install Bun:
+## CLI
 
 ```bash
-curl -fsSL https://bun.sh | bash
+bunx gm-exec-cli exec --cwd=/app "console.log('hello')"
+bunx gm-exec-cli bash --cwd=/app "npm install && npm test"
+bunx gm-exec-cli exec --lang=python --cwd=/app "print('hello')"
+bunx gm-exec-cli exec --file=script.js
 ```
 
-Then run mcp-glootie again.
+### Commands
 
-### Port conflicts
+```
+gm-exec-cli exec [options] <code>     Execute code (waits up to 15s, then backgrounds)
+  --lang=<lang>                        nodejs (default), python, go, rust, c, cpp, java, deno
+  --cwd=<dir>                          Working directory
+  --file=<path>                        Read code from file
 
-If the server fails to start with a port error:
+gm-exec-cli bash [--cwd=<dir>] <cmd>  Execute bash commands, same 15s ceiling
+
+gm-exec-cli status <task_id>           Poll status + drain output of a background task
+gm-exec-cli close <task_id>            Delete a background task
+
+gm-exec-cli runner start               Start the runner manually (PM2, no autorestart)
+gm-exec-cli runner stop                Stop the runner
+gm-exec-cli runner status              Show runner PM2 status
+```
+
+### Background execution
+
+Commands have a hard 15-second ceiling. If still running after that, the process is backgrounded and you get a task ID with monitoring instructions:
+
+```
+Backgrounded after 15s — task still running.
+Task ID: task_3
+
+Watch output:
+  gm-exec-cli status task_3
+  gm-exec-cli close task_3
+  gm-exec-cli runner stop
+```
+
+The runner auto-starts before each command and auto-stops after — unless a task was backgrounded, in which case the runner stays alive until you explicitly stop it.
+
+## Supported Languages
+
+| Language | Runtime |
+|----------|---------|
+| JavaScript / TypeScript | Node.js / Bun |
+| Python | python3 |
+| Go | go run |
+| Rust | rustc |
+| C | gcc |
+| C++ | g++ |
+| Java | javac + java |
+| Deno | deno run |
+| bash / sh / zsh | shell |
+
+## Requirements
+
+- [Bun](https://bun.sh) ≥ 1.0
 
 ```bash
-# Find what's using the port
-lsof -i :3001
-
-# Kill it if needed
-kill -9 <PID>
+curl -fsSL https://bun.sh/install | bash
 ```
-# Triggered npm publishing
