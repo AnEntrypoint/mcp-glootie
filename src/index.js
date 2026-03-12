@@ -360,11 +360,14 @@ if (args.includes('--mcp')) {
   }
 
   async function cmdClose(taskId) {
-    const autoStarted = await ensureRunner();
+    await ensureRunner();
     const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
     await rpcCall('deleteTask', { taskId: rawId });
     console.log(`Task ${taskId} closed`);
-    if (autoStarted) await stopRunner();
+    const res = await rpcCall('listTasks', {}).catch(() => ({ tasks: [] }));
+    const tasks = res?.tasks ?? [];
+    const remaining = tasks.filter(t => t.status === 'running' || t.status === 'pending');
+    if (remaining.length === 0) await stopRunner();
   }
 
   function parseArgs(argv) {

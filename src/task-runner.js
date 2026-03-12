@@ -79,6 +79,8 @@ async function handleRPC(body) {
     case 'deleteTask':
       if (backgroundStore.deleteTask) backgroundStore.deleteTask(params.taskId);
       return {};
+    case 'listTasks':
+      return { tasks: backgroundStore.getAllTasks().map(t => ({ id: t.id, status: t.status })) };
     case 'appendOutput':
       backgroundStore.appendOutput(params.taskId, params.type, params.data);
       return {};
