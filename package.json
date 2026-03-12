@@ -1,12 +1,12 @@
 {
-  "name": "mcp-gm",
+  "name": "gm-exec",
   "version": "3.4.100",
   "description": "MCP GM - Code execution tool for MCP clients. Multi-language support (JS/TS, Go, Rust, Python, C/C++, bash). Works with Claude Code, Cursor, Copilot, VSCode.",
   "main": "src/index.js",
   "type": "module",
   "bin": {
-    "mcp-gm": "src/index.js",
-    "mcp-gm-cli": "src/cli.js"
+    "gm-exec": "src/index.js",
+    "gm-exec-cli": "src/cli.js"
   },
   "publishConfig": {
     "access": "public"
@@ -24,7 +24,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AnEntrypoint/mcp-gm.git"
+    "url": "git+https://github.com/AnEntrypoint/gm-exec.git"
   },
   "keywords": [
     "mcp",
@@ -40,5 +40,5 @@
   ],
   "author": "",
   "license": "MIT",
-  "mcpName": "io.github.AnEntrypoint/gm"
+  "mcpName": "io.github.AnEntrypoint/gm-exec"
 }

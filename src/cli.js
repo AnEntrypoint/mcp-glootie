@@ -9,7 +9,7 @@ const pm2lib = require('pm2');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUNNER_SCRIPT = resolve(__dirname, 'task-runner.js');
 const PORT_FILE = '/tmp/glootie-runner.port';
-const PM2_NAME = 'mcp-gm-runner';
+const PM2_NAME = 'gm-exec-runner';
 const HARD_CEILING_MS = 15000;
 
 // --- PM2 lib wrappers ---
@@ -77,9 +77,10 @@ async function healthCheck() {
   } catch { return false; }
 }
 
+// Returns true if runner was auto-started (so caller can stop it after)
 async function ensureRunner() {
-  if (await healthCheck()) return;
-  process.stderr.write('Starting task runner via PM2...\n');
+  if (await healthCheck()) return false;
+  process.stderr.write('Auto-starting runner...\n');
   await withPm2(async () => {
     await pm2delete(PM2_NAME).catch(() => {});
     await pm2start({
@@ -92,10 +93,14 @@ async function ensureRunner() {
   });
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 500));
-    if (await healthCheck()) return;
+    if (await healthCheck()) return true;
   }
   process.stderr.write('Runner did not become healthy in time\n');
   process.exit(1);
+}
+
+async function stopRunner() {
+  await withPm2(() => pm2delete(PM2_NAME).catch(() => {}));
 }
 
 // --- RPC ---
@@ -133,6 +138,8 @@ function rpcCall(method, params, timeoutMs = 10000) {
 // --- Execution (shared by exec and bash) ---
 
 async function runCode(code, runtime, workingDirectory) {
+  const autoStarted = await ensureRunner();
+
   const taskId = await rpcCall('createTask', { code, runtime, workingDirectory })
     .then(r => r?.taskId ?? r);
 
@@ -158,9 +165,9 @@ async function runCode(code, runtime, workingDirectory) {
     console.log(`Task ID: ${id}`);
     console.log(``);
     console.log(`Watch output:`);
-    console.log(`  mcp-gm-cli status ${id}    # drain buffered output + status`);
-    console.log(`  mcp-gm-cli close ${id}     # clean up when done`);
-    console.log(`  node node_modules/.bin/pm2 logs ${PM2_NAME}   # stream runner logs`);
+    console.log(`  gm-exec-cli status ${id}    # drain buffered output + status`);
+    console.log(`  gm-exec-cli close ${id}     # clean up when done`);
+    console.log(`  gm-exec-cli runner stop     # stop the runner when finished`);
     await printRunningTools();
     process.exit(0);
   }
@@ -170,6 +177,8 @@ async function runCode(code, runtime, workingDirectory) {
   } else {
     await rpcCall('deleteTask', { taskId }).catch(() => {});
   }
+
+  if (autoStarted) await stopRunner();
 
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
@@ -214,7 +223,7 @@ async function cmdRunnerStart() {
 }
 
 async function cmdRunnerStop() {
-  await withPm2(() => pm2delete(PM2_NAME).catch(() => {}));
+  await stopRunner();
   console.log('Runner stopped');
 }
 
@@ -227,18 +236,17 @@ async function cmdRunnerStatus() {
   const p = desc[0];
   const env = p.pm2_env || {};
   const uptime = env.pm_uptime ? Math.floor((Date.now() - env.pm_uptime) / 1000) + 's' : 'n/a';
-  console.log(`name:    ${p.name}`);
-  console.log(`status:  ${env.status}`);
-  console.log(`pid:     ${p.pid}`);
-  console.log(`uptime:  ${uptime}`);
+  console.log(`name:     ${p.name}`);
+  console.log(`status:   ${env.status}`);
+  console.log(`pid:      ${p.pid}`);
+  console.log(`uptime:   ${uptime}`);
   console.log(`restarts: ${env.restart_time ?? 0}`);
   if (existsSync(PORT_FILE)) {
-    console.log(`port:    ${readFileSync(PORT_FILE, 'utf8').trim()}`);
+    console.log(`port:     ${readFileSync(PORT_FILE, 'utf8').trim()}`);
   }
 }
 
 async function cmdExec(args, positional) {
-  await ensureRunner();
   let code = positional.join(' ');
   if (args.file) code = readFileSync(resolve(args.file), 'utf8');
   if (!code.trim()) { process.stderr.write('No code provided\n'); usage(); process.exit(1); }
@@ -249,7 +257,6 @@ async function cmdExec(args, positional) {
 }
 
 async function cmdBash(args, positional) {
-  await ensureRunner();
   const commands = positional.join(' ');
   if (!commands.trim()) { process.stderr.write('No commands provided\n'); usage(); process.exit(1); }
   const cwd = resolve(args.cwd || process.cwd());
@@ -257,10 +264,10 @@ async function cmdBash(args, positional) {
 }
 
 async function cmdStatus(taskId) {
-  await ensureRunner();
+  const autoStarted = await ensureRunner();
   const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
   const task = await rpcCall('getTask', { taskId: rawId }).then(r => r?.task ?? r);
-  if (!task) { console.log('Task not found'); process.exit(1); }
+  if (!task) { console.log('Task not found'); if (autoStarted) await stopRunner(); process.exit(1); }
 
   console.log(`Status: ${task.status}`);
   if (task.result) {
@@ -277,13 +284,16 @@ async function cmdStatus(taskId) {
       else process.stderr.write(entry.data);
     }
   }
+
+  if (autoStarted) await stopRunner();
 }
 
 async function cmdClose(taskId) {
-  await ensureRunner();
+  const autoStarted = await ensureRunner();
   const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
   await rpcCall('deleteTask', { taskId: rawId });
   console.log(`Task ${taskId} closed`);
+  if (autoStarted) await stopRunner();
 }
 
 // --- Arg parsing ---
@@ -311,10 +321,10 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  console.log(`mcp-gm-cli — CLI for mcp-gm code execution
+  console.log(`gm-exec-cli — CLI for gm-exec code execution
 
 Usage:
-  mcp-gm-cli <command> [options]
+  gm-exec-cli <command> [options]
 
 Commands:
   runner start                  Start the task runner via PM2 (no autorestart)
@@ -334,9 +344,11 @@ Commands:
   help                          Show this help
 
 Notes:
-  - Execution has a hard 15s ceiling. If the process is still running after
-    that, it is backgrounded and you get a task ID with monitoring instructions.
-  - Runner is managed by PM2 (lib) with autorestart=false, watch=false.
+  - The runner auto-starts before exec/bash/status/close and auto-stops after,
+    unless a background task is still running (you get a task ID + instructions).
+  - Execution has a hard 15s ceiling then backgrounds. Runner stays alive until
+    you explicitly stop it or run 'close' on the last task.
+  - PM2 manages the runner with autorestart=false, watch=false.
 `);
 }
 
