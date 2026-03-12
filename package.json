@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "type": "module",
   "bin": {
-    "mcp-gm": "src/index.js"
+    "mcp-gm": "src/index.js",
+    "mcp-gm-cli": "src/cli.js"
   },
   "publishConfig": {
     "access": "public"
