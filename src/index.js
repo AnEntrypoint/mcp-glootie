@@ -1,8 +1,23 @@
 #!/usr/bin/env bun
 
 if (!process.argv.includes('--mcp')) {
-  process.stderr.write('Use --mcp flag to start MCP server mode.\nFor CLI usage run: mcp-gm-cli help\n');
-  process.exit(1);
+  process.stdout.write(`gm-exec — code execution for MCP clients and CLI
+
+Usage:
+  gm-exec --mcp              Start MCP server (connect via stdio)
+  gm-exec-cli <command>      CLI interface
+
+CLI commands:
+  gm-exec-cli exec [--lang=<lang>] [--cwd=<dir>] <code>
+  gm-exec-cli bash [--cwd=<dir>] <cmd...>
+  gm-exec-cli status <task_id>
+  gm-exec-cli close <task_id>
+  gm-exec-cli runner start|stop|status
+  gm-exec-cli help
+
+Languages: nodejs (default), python, go, rust, c, cpp, java, deno, bash
+`);
+  process.exit(0);
 }
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
