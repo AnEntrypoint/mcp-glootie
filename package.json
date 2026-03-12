@@ -5,8 +5,7 @@
   "main": "src/index.js",
   "type": "module",
   "bin": {
-    "gm-exec": "src/index.js",
-    "gm-exec-cli": "src/cli.js"
+    "gm-exec": "src/index.js"
   },
   "publishConfig": {
     "access": "public"
