@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 import http from 'http';
-import { spawnSync } from 'child_process';
+import { createRequire } from 'module';
 import { existsSync, readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+
+const require = createRequire(import.meta.url);
+const pm2lib = require('pm2');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUNNER_SCRIPT = resolve(__dirname, 'task-runner.js');
@@ -11,18 +14,54 @@ const PORT_FILE = '/tmp/glootie-runner.port';
 const PM2_NAME = 'mcp-gm-runner';
 const HARD_CEILING_MS = 15000;
 
-// --- PM2 ---
+// --- PM2 lib wrappers ---
 
-function pm2(...args) {
-  const r = spawnSync('pm2', args, { stdio: 'inherit', encoding: 'utf8' });
-  return r.status === 0;
+function pm2connect() {
+  return new Promise((res, rej) => pm2lib.connect(err => err ? rej(err) : res()));
+}
+function pm2disconnect() {
+  return new Promise(res => pm2lib.disconnect(res));
+}
+function pm2start(opts) {
+  return new Promise((res, rej) => pm2lib.start(opts, (err, apps) => err ? rej(err) : res(apps)));
+}
+function pm2delete(name) {
+  return new Promise((res, rej) => pm2lib.delete(name, (err) => err ? rej(err) : res()));
+}
+function pm2list() {
+  return new Promise((res, rej) => pm2lib.list((err, list) => err ? rej(err) : res(list)));
+}
+function pm2describe(name) {
+  return new Promise((res, rej) => pm2lib.describe(name, (err, list) => err ? rej(err) : res(list)));
 }
 
-function pm2Silent(...args) {
-  return spawnSync('pm2', args, { encoding: 'utf8' });
+async function withPm2(fn) {
+  await pm2connect();
+  try { return await fn(); }
+  finally { await pm2disconnect(); }
 }
 
-// --- Health ---
+// --- Running tools footer ---
+
+async function printRunningTools() {
+  try {
+    await pm2connect();
+    const list = await pm2list();
+    await pm2disconnect();
+    const online = list.filter(p => p.pm2_env?.status === 'online');
+    if (online.length === 0) {
+      process.stderr.write('\n[Running tools: none]\n');
+    } else {
+      process.stderr.write('\n[Running tools]\n');
+      for (const p of online) {
+        const uptime = Math.floor((Date.now() - (p.pm2_env.pm_uptime || Date.now())) / 1000);
+        process.stderr.write(`  ${p.name}  pid=${p.pid}  uptime=${uptime}s\n`);
+      }
+    }
+  } catch { /* pm2 not available */ }
+}
+
+// --- Health check ---
 
 async function healthCheck() {
   if (!existsSync(PORT_FILE)) return false;
@@ -43,15 +82,15 @@ async function healthCheck() {
 async function ensureRunner() {
   if (await healthCheck()) return;
   process.stderr.write('Starting task runner via PM2...\n');
-  // delete stale instance if any
-  pm2Silent('delete', PM2_NAME);
-  const ok = pm2(
-    'start', RUNNER_SCRIPT,
-    '--name', PM2_NAME,
-    '--no-autorestart',
-    '--interpreter', 'bun'
-  );
-  if (!ok) { process.stderr.write('pm2 start failed\n'); process.exit(1); }
+  await withPm2(async () => {
+    await pm2delete(PM2_NAME).catch(() => {});
+    await pm2start({
+      script: RUNNER_SCRIPT,
+      name: PM2_NAME,
+      autorestart: false,
+      watch: false,
+    });
+  });
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 500));
     if (await healthCheck()) return;
@@ -98,10 +137,8 @@ async function runCode(code, runtime, workingDirectory) {
   const taskId = await rpcCall('createTask', { code, runtime, workingDirectory })
     .then(r => r?.taskId ?? r);
 
-  let timedOut = false;
   const safetyTimeout = new Promise(r => {
     setTimeout(async () => {
-      timedOut = true;
       await rpcCall('startTask', { taskId }).catch(() => {});
       r({ persisted: true, backgroundTaskId: taskId });
     }, HARD_CEILING_MS);
@@ -118,17 +155,17 @@ async function runCode(code, runtime, workingDirectory) {
 
   if (result.persisted || (result.backgroundTaskId && !result.completed)) {
     const id = `task_${result.backgroundTaskId ?? taskId}`;
-    console.log(`Backgrounded after 15s.`);
+    console.log(`Backgrounded after 15s — task still running.`);
     console.log(`Task ID: ${id}`);
     console.log(``);
-    console.log(`Monitor:`);
-    console.log(`  mcp-gm-cli status ${id}    # poll task status + output`);
+    console.log(`Watch output:`);
+    console.log(`  mcp-gm-cli status ${id}    # drain buffered output + status`);
     console.log(`  mcp-gm-cli close ${id}     # clean up when done`);
-    console.log(`  pm2 logs ${PM2_NAME}        # stream runner logs`);
+    console.log(`  npx pm2 logs ${PM2_NAME}   # stream runner process logs`);
+    await printRunningTools();
     process.exit(0);
   }
 
-  // completed in time
   if (result.backgroundTaskId && result.completed) {
     await rpcCall('deleteTask', { taskId: result.backgroundTaskId }).catch(() => {});
   } else {
@@ -137,9 +174,14 @@ async function runCode(code, runtime, workingDirectory) {
 
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
-  if (result.error) { process.stderr.write(`Error: ${result.error}\n`); process.exit(1); }
+  if (result.error) {
+    process.stderr.write(`Error: ${result.error}\n`);
+    await printRunningTools();
+    process.exit(1);
+  }
 
   const exitCode = result.exitCode ?? result.code ?? 0;
+  await printRunningTools();
   process.exit(result.success === false ? (exitCode || 1) : 0);
 }
 
@@ -151,9 +193,15 @@ async function cmdRunnerStart() {
     console.log(`Runner already healthy on port ${port}`);
     return;
   }
-  pm2Silent('delete', PM2_NAME);
-  const ok = pm2('start', RUNNER_SCRIPT, '--name', PM2_NAME, '--no-autorestart', '--interpreter', 'bun');
-  if (!ok) { process.stderr.write('pm2 start failed\n'); process.exit(1); }
+  await withPm2(async () => {
+    await pm2delete(PM2_NAME).catch(() => {});
+    await pm2start({
+      script: RUNNER_SCRIPT,
+      name: PM2_NAME,
+      autorestart: false,
+      watch: false,
+    });
+  });
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 500));
     if (await healthCheck()) {
@@ -165,12 +213,28 @@ async function cmdRunnerStart() {
   process.exit(1);
 }
 
-function cmdRunnerStop() {
-  pm2('delete', PM2_NAME);
+async function cmdRunnerStop() {
+  await withPm2(() => pm2delete(PM2_NAME).catch(() => {}));
+  console.log('Runner stopped');
 }
 
-function cmdRunnerStatus() {
-  pm2('describe', PM2_NAME);
+async function cmdRunnerStatus() {
+  const desc = await withPm2(() => pm2describe(PM2_NAME).catch(() => []));
+  if (!desc || desc.length === 0) {
+    console.log(`${PM2_NAME}: not found`);
+    return;
+  }
+  const p = desc[0];
+  const env = p.pm2_env || {};
+  const uptime = env.pm_uptime ? Math.floor((Date.now() - env.pm_uptime) / 1000) + 's' : 'n/a';
+  console.log(`name:    ${p.name}`);
+  console.log(`status:  ${env.status}`);
+  console.log(`pid:     ${p.pid}`);
+  console.log(`uptime:  ${uptime}`);
+  console.log(`restarts: ${env.restart_time ?? 0}`);
+  if (existsSync(PORT_FILE)) {
+    console.log(`port:    ${readFileSync(PORT_FILE, 'utf8').trim()}`);
+  }
 }
 
 async function cmdExec(args, positional) {
@@ -194,7 +258,7 @@ async function cmdBash(args, positional) {
 
 async function cmdStatus(taskId) {
   await ensureRunner();
-  const rawId = taskId.replace(/^task_/, '');
+  const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
   const task = await rpcCall('getTask', { taskId: rawId }).then(r => r?.task ?? r);
   if (!task) { console.log('Task not found'); process.exit(1); }
 
@@ -217,7 +281,7 @@ async function cmdStatus(taskId) {
 
 async function cmdClose(taskId) {
   await ensureRunner();
-  const rawId = taskId.replace(/^task_/, '');
+  const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
   await rpcCall('deleteTask', { taskId: rawId });
   console.log(`Task ${taskId} closed`);
 }
@@ -254,8 +318,8 @@ Usage:
 
 Commands:
   runner start                  Start the task runner via PM2 (no autorestart)
-  runner stop                   Stop and remove the task runner from PM2
-  runner status                 Show PM2 status of the runner
+  runner stop                   Stop and remove the task runner
+  runner status                 Show runner status
 
   exec [options] <code>         Execute code, wait up to 15s then background
     --lang=<lang>               nodejs (default), python, go, rust, c, cpp, java, deno
@@ -270,9 +334,9 @@ Commands:
   help                          Show this help
 
 Notes:
-  - Execution has a hard 15-second ceiling. If the process is still running
-    after that, it is backgrounded. You will get a task ID and monitoring
-    instructions. The runner process is managed by PM2 with no autorestart.
+  - Execution has a hard 15s ceiling. If the process is still running after
+    that, it is backgrounded and you get a task ID with monitoring instructions.
+  - Runner is managed by PM2 (lib) with autorestart=false, watch=false.
 `);
 }
 
@@ -288,9 +352,10 @@ try {
   if (cmd === 'runner') {
     const sub = rest[0];
     if (sub === 'start') await cmdRunnerStart();
-    else if (sub === 'stop') cmdRunnerStop();
-    else if (sub === 'status') cmdRunnerStatus();
+    else if (sub === 'stop') await cmdRunnerStop();
+    else if (sub === 'status') await cmdRunnerStatus();
     else { process.stderr.write(`Unknown runner subcommand: ${sub}\n`); process.exit(1); }
+    await printRunningTools();
     process.exit(0);
   }
 
@@ -309,12 +374,14 @@ try {
   if (cmd === 'status') {
     if (!rest[0]) { process.stderr.write('Task ID required\n'); process.exit(1); }
     await cmdStatus(rest[0]);
+    await printRunningTools();
     process.exit(0);
   }
 
   if (cmd === 'close') {
     if (!rest[0]) { process.stderr.write('Task ID required\n'); process.exit(1); }
     await cmdClose(rest[0]);
+    await printRunningTools();
     process.exit(0);
   }
 
