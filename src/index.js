@@ -195,7 +195,7 @@ if (args.includes('--mcp')) {
       if (await healthCheck()) return true;
     }
     process.stderr.write('Runner did not become healthy in time\n');
-    process.exit(1);
+    throw new Error('Runner did not become healthy in time');
   }
 
   async function stopRunner() {
@@ -250,15 +250,23 @@ if (args.includes('--mcp')) {
 
     if (result.persisted || (result.backgroundTaskId && !result.completed)) {
       const id = `task_${result.backgroundTaskId ?? taskId}`;
-      console.log(`Backgrounded after 15s — task still running.`);
+      const partial = await rpcCall('getAndClearOutput', { taskId: result.backgroundTaskId ?? taskId }).then(r => r?.output ?? r).catch(() => []);
+      if (Array.isArray(partial) && partial.length) {
+        for (const entry of partial) {
+          if (entry.type === 'stdout') process.stdout.write(entry.data);
+          else process.stderr.write(entry.data);
+        }
+      }
+      console.log(``);
+      console.log(`Still running after 15s — backgrounded.`);
       console.log(`Task ID: ${id}`);
       console.log(``);
-      console.log(`Watch output:`);
-      console.log(`  gm-exec status ${id}       # drain buffered output + status`);
-      console.log(`  gm-exec close ${id}        # clean up when done`);
-      console.log(`  gm-exec runner stop        # stop the runner when finished`);
-      await printRunningTools();
-      process.exit(0);
+      console.log(`Progress so far / check logs:`);
+      console.log(`  gm-exec status ${id}     # drain output buffer`);
+      console.log(`  gm-exec runner stop       # stop runner when done`);
+      console.log(``);
+      console.log(`Runner kept alive: ${PM2_NAME} (PM2)`);
+      return 0;
     }
 
     if (result.backgroundTaskId && result.completed) {
@@ -273,13 +281,11 @@ if (args.includes('--mcp')) {
     if (result.stderr) process.stderr.write(result.stderr);
     if (result.error) {
       process.stderr.write(`Error: ${result.error}\n`);
-      await printRunningTools();
-      process.exit(1);
+      return 1;
     }
 
-    const exitCode = result.exitCode ?? result.code ?? 0;
-    await printRunningTools();
-    process.exit(result.success === false ? (exitCode || 1) : 0);
+    const code2 = result.exitCode ?? result.code ?? 0;
+    return result.success === false ? (code2 || 1) : 0;
   }
 
   async function cmdRunnerStart() {
@@ -299,7 +305,7 @@ if (args.includes('--mcp')) {
       }
     }
     process.stderr.write('Runner did not become healthy\n');
-    process.exit(1);
+    throw new Error('Runner did not become healthy');
   }
 
   async function cmdRunnerStop() {
@@ -324,24 +330,24 @@ if (args.includes('--mcp')) {
   async function cmdExec(cmdArgs, positional) {
     let code = positional.join(' ');
     if (cmdArgs.file) code = readFileSync(resolve(cmdArgs.file), 'utf8');
-    if (!code.trim()) { process.stderr.write('No code provided\n'); usage(); process.exit(1); }
+    if (!code.trim()) { process.stderr.write('No code provided\n'); usage(); return 1; }
     const cwd = resolve(cmdArgs.cwd || process.cwd());
     let runtime = cmdArgs.lang || 'nodejs';
     if (runtime === 'typescript' || runtime === 'auto') runtime = 'nodejs';
-    await runCode(code, runtime, cwd);
+    return await runCode(code, runtime, cwd);
   }
 
   async function cmdBash(cmdArgs, positional) {
     const commands = positional.join(' ');
-    if (!commands.trim()) { process.stderr.write('No commands provided\n'); usage(); process.exit(1); }
-    await runCode(commands, 'bash', resolve(cmdArgs.cwd || process.cwd()));
+    if (!commands.trim()) { process.stderr.write('No commands provided\n'); usage(); return 1; }
+    return await runCode(commands, 'bash', resolve(cmdArgs.cwd || process.cwd()));
   }
 
   async function cmdStatus(taskId) {
     const autoStarted = await ensureRunner();
     const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
     const task = await rpcCall('getTask', { taskId: rawId }).then(r => r?.task ?? r);
-    if (!task) { console.log('Task not found'); if (autoStarted) await stopRunner(); process.exit(1); }
+    if (!task) { console.log('Task not found'); if (autoStarted) await stopRunner(); throw Object.assign(new Error('Task not found'), { exitCode: 1, silent: true }); }
     console.log(`Status: ${task.status}`);
     if (task.result) {
       const r = task.result;
@@ -360,14 +366,16 @@ if (args.includes('--mcp')) {
   }
 
   async function cmdClose(taskId) {
-    await ensureRunner();
+    const autoStarted = await ensureRunner();
     const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
     await rpcCall('deleteTask', { taskId: rawId });
     console.log(`Task ${taskId} closed`);
-    const res = await rpcCall('listTasks', {}).catch(() => ({ tasks: [] }));
-    const tasks = res?.tasks ?? [];
-    const remaining = tasks.filter(t => t.status === 'running' || t.status === 'pending');
-    if (remaining.length === 0) await stopRunner();
+    if (autoStarted) {
+      const res = await rpcCall('listTasks', {}).catch(() => ({ tasks: [] }));
+      const tasks = res?.tasks ?? [];
+      const remaining = tasks.filter(t => t.status === 'running' || t.status === 'pending');
+      if (remaining.length === 0) await stopRunner();
+    }
   }
 
   function parseArgs(argv) {
@@ -413,52 +421,38 @@ Languages: nodejs (default), python, go, rust, c, cpp, java, deno, bash
 
   const [cmd, ...rest] = args;
 
+  let exitCode = 0;
   try {
     if (!cmd || cmd === 'help' || cmd === '--help' || cmd === '-h') {
-      usage(); process.exit(0);
-    }
-
-    if (cmd === 'runner') {
+      usage();
+    } else if (cmd === 'runner') {
       const sub = rest[0];
       if (sub === 'start') await cmdRunnerStart();
       else if (sub === 'stop') await cmdRunnerStop();
       else if (sub === 'status') await cmdRunnerStatus();
-      else { process.stderr.write(`Unknown runner subcommand: ${sub}\n`); process.exit(1); }
-      await printRunningTools();
-      process.exit(0);
-    }
-
-    if (cmd === 'exec') {
+      else { process.stderr.write(`Unknown runner subcommand: ${sub}\n`); exitCode = 1; }
+    } else if (cmd === 'exec') {
       const { args: a, positional } = parseArgs(rest);
-      await cmdExec(a, positional);
-      process.exit(0);
-    }
-
-    if (cmd === 'bash') {
+      exitCode = (await cmdExec(a, positional)) ?? 0;
+    } else if (cmd === 'bash') {
       const { args: a, positional } = parseArgs(rest);
-      await cmdBash(a, positional);
-      process.exit(0);
+      exitCode = (await cmdBash(a, positional)) ?? 0;
+    } else if (cmd === 'status') {
+      if (!rest[0]) { process.stderr.write('Task ID required\n'); exitCode = 1; }
+      else await cmdStatus(rest[0]);
+    } else if (cmd === 'close') {
+      if (!rest[0]) { process.stderr.write('Task ID required\n'); exitCode = 1; }
+      else await cmdClose(rest[0]);
+    } else {
+      process.stderr.write(`Unknown command: ${cmd}\n`);
+      usage();
+      exitCode = 1;
     }
-
-    if (cmd === 'status') {
-      if (!rest[0]) { process.stderr.write('Task ID required\n'); process.exit(1); }
-      await cmdStatus(rest[0]);
-      await printRunningTools();
-      process.exit(0);
-    }
-
-    if (cmd === 'close') {
-      if (!rest[0]) { process.stderr.write('Task ID required\n'); process.exit(1); }
-      await cmdClose(rest[0]);
-      await printRunningTools();
-      process.exit(0);
-    }
-
-    process.stderr.write(`Unknown command: ${cmd}\n`);
-    usage();
-    process.exit(1);
   } catch (e) {
-    process.stderr.write(`Error: ${e?.message || String(e)}\n`);
-    process.exit(1);
+    if (!e?.silent) process.stderr.write(`Error: ${e?.message || String(e)}\n`);
+    exitCode = e?.exitCode ?? 1;
+  } finally {
+    await printRunningTools();
+    process.exit(exitCode);
   }
 }
