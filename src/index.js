@@ -51,6 +51,8 @@ async function printRunningTools() {
         const uptime = Math.floor((Date.now() - (p.pm2_env.pm_uptime || Date.now())) / 1000);
         process.stderr.write(`  ${p.name}  pid=${p.pid}  uptime=${uptime}s\n`);
       }
+      process.stderr.write(`  Tip: gm-exec sleep <task_id>   # wait for a task (default 30s timeout)\n`);
+      process.stderr.write(`       gm-exec status <task_id>  # check task status\n`);
     }
   } catch { /* pm2 not available */ }
 }
@@ -146,8 +148,10 @@ async function runCode(code, runtime, workingDirectory) {
     }
     console.log(`\nStill running after 15s — backgrounded.`);
     console.log(`Task ID: ${id}\n`);
-    console.log(`  gm-exec status ${id}     # drain output buffer`);
-    console.log(`  gm-exec runner stop       # stop runner when done`);
+    console.log(`  gm-exec sleep ${id}       # wait for completion (up to 30s) — recommended`);
+    console.log(`  gm-exec status ${id}      # drain output buffer (snapshot)`);
+    console.log(`  gm-exec close ${id}       # delete task when done`);
+    console.log(`  gm-exec runner stop       # stop runner when all tasks done`);
     console.log(`\nRunner kept alive: ${PM2_NAME} (PM2)`);
     return 0;
   }
@@ -201,6 +205,12 @@ async function cmdRunnerStatus() {
   console.log(`uptime:   ${uptime}`);
   console.log(`restarts: ${env.restart_time ?? 0}`);
   if (existsSync(PORT_FILE)) console.log(`port:     ${readFileSync(PORT_FILE, 'utf8').trim()}`);
+  if (env.status === 'online') {
+    console.log(`\nRunner is active. If you have background tasks:`);
+    console.log(`  gm-exec sleep <task_id>      # wait for task completion (up to 30s)`);
+    console.log(`  gm-exec status <task_id>     # check task status`);
+    console.log(`  gm-exec runner stop          # stop runner when all tasks done`);
+  }
 }
 
 async function cmdExec(cmdArgs, positional) {
@@ -242,8 +252,13 @@ async function cmdStatus(taskId) {
     }
   }
   if (task.status === 'running') {
-    console.log(`\nTask still running. Wait a few seconds then:`);
-    console.log(`  gm-exec status ${taskId}`);
+    console.log(`\nTask still running. Options:`);
+    console.log(`  gm-exec sleep ${taskId}      # wait for completion (up to 30s) — recommended`);
+    console.log(`  gm-exec status ${taskId}     # check status again (snapshot)`);
+  } else if (task.status === 'completed' || task.status === 'failed') {
+    console.log(`\nTask finished. Clean up:`);
+    console.log(`  gm-exec close ${taskId}      # delete task`);
+    console.log(`  gm-exec runner stop          # stop runner if no more tasks`);
   }
   if (autoStarted) await stopRunner();
 }
@@ -252,12 +267,58 @@ async function cmdClose(taskId) {
   const autoStarted = await ensureRunner();
   const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
   await rpcCall('deleteTask', { taskId: rawId });
+  const res = await rpcCall('listTasks', {}).catch(() => ({ tasks: [] }));
+  const remaining = (res?.tasks ?? []).filter(t => t.status === 'running' || t.status === 'pending');
   console.log(`Task ${taskId} closed`);
-  if (autoStarted) {
-    const res = await rpcCall('listTasks', {}).catch(() => ({ tasks: [] }));
-    const remaining = (res?.tasks ?? []).filter(t => t.status === 'running' || t.status === 'pending');
-    if (remaining.length === 0) await stopRunner();
+  if (remaining.length > 0) {
+    console.log(`\n${remaining.length} task(s) still running:`);
+    for (const t of remaining) {
+      console.log(`  gm-exec sleep task_${t.id}       # wait for completion (up to 30s)`);
+    }
+  } else {
+    console.log(`  gm-exec runner stop          # no more tasks — stop runner`);
+    if (autoStarted) await stopRunner();
   }
+}
+
+async function cmdSleep(taskId, timeoutSeconds) {
+  const autoStarted = await ensureRunner();
+  const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
+  const timeout = (parseInt(timeoutSeconds, 10) || 30) * 1000;
+  const startTime = Date.now();
+
+  async function drainOutput() {
+    const output = await rpcCall('getAndClearOutput', { taskId: rawId }).then(r => r?.output ?? r).catch(() => []);
+    if (Array.isArray(output)) {
+      for (const entry of output) {
+        if (entry.type === 'stdout') process.stdout.write(entry.data);
+        else process.stderr.write(entry.data);
+      }
+    }
+  }
+
+  while (Date.now() - startTime < timeout) {
+    const task = await rpcCall('getTask', { taskId: rawId }).catch(() => null);
+    if (!task) break;
+    await drainOutput();
+    if (task.status !== 'running' && task.status !== 'pending') {
+      if (task.result) {
+        const r = task.result;
+        if (r.error) process.stderr.write(`Error: ${r.error}\n`);
+      }
+      console.log(`\nTask finished (${task.status}). Clean up:`);
+      console.log(`  gm-exec close ${taskId}      # delete task`);
+      console.log(`  gm-exec runner stop          # stop runner if no more tasks`);
+      if (autoStarted) await stopRunner();
+      return;
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  await drainOutput();
+  console.log(`\nTimeout after ${timeout / 1000}s. Task still running.`);
+  console.log(`  gm-exec sleep ${taskId}       # wait again (up to 30s) — recommended`);
+  console.log(`  gm-exec status ${taskId}      # check current status (snapshot)`);
+  if (autoStarted) await stopRunner();
 }
 
 function parseArgs(argv) {
@@ -294,6 +355,8 @@ Commands:
   bash [--cwd=<dir>] <cmd...>
                           Execute bash commands
   status <task_id>        Poll status + drain output of a background task
+  sleep <task_id> [seconds]
+                          Wait for task completion (default 30s timeout)
   close <task_id>         Delete a background task
   runner start|stop|status
                           Manage the task runner process (PM2)
@@ -323,6 +386,9 @@ try {
   } else if (cmd === 'status') {
     if (!rest[0]) { process.stderr.write('Task ID required\n'); exitCode = 1; }
     else await cmdStatus(rest[0]);
+  } else if (cmd === 'sleep') {
+    if (!rest[0]) { process.stderr.write('Task ID required\n'); exitCode = 1; }
+    else await cmdSleep(rest[0], rest[1]);
   } else if (cmd === 'close') {
     if (!rest[0]) { process.stderr.write('Task ID required\n'); exitCode = 1; }
     else await cmdClose(rest[0]);
