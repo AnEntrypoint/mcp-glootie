@@ -17,21 +17,21 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: oven-sh/setup-bun@v2
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Install dependencies
-        run: bun install
-
-      - name: Bump patch version
+      - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          npm version patch -m "chore: bump version to %s"
+
+      - name: Bump patch version
+        run: npm version patch -m "chore: bump version to %s"
+
+      - name: Install dependencies
+        run: npm install
 
       - name: Push version bump
         run: git push --follow-tags
