@@ -298,7 +298,7 @@ async function cmdSleep(taskId, timeoutSeconds) {
   }
 
   while (Date.now() - startTime < timeout) {
-    const task = await rpcCall('getTask', { taskId: rawId }).catch(() => null);
+    const task = await rpcCall('getTask', { taskId: rawId }).then(r => r?.task ?? r).catch(() => null);
     if (!task) break;
     await drainOutput();
     if (task.status !== 'running' && task.status !== 'pending') {
