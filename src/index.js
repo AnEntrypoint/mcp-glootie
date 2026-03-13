@@ -142,8 +142,8 @@ async function runCode(code, runtime, workingDirectory) {
     const partial = await rpcCall('getAndClearOutput', { taskId: result.backgroundTaskId ?? taskId }).then(r => r?.output ?? r).catch(() => []);
     if (Array.isArray(partial) && partial.length) {
       for (const entry of partial) {
-        if (entry.type === 'stdout') process.stdout.write(entry.data);
-        else process.stderr.write(entry.data);
+        if (entry.s === 'stdout') process.stdout.write(entry.d);
+        else process.stderr.write(entry.d);
       }
     }
     console.log(`\nStill running after 15s — backgrounded.`);
@@ -247,8 +247,8 @@ async function cmdStatus(taskId) {
   const output = await rpcCall('getAndClearOutput', { taskId: rawId }).then(r => r?.output ?? r);
   if (Array.isArray(output) && output.length) {
     for (const entry of output) {
-      if (entry.type === 'stdout') process.stdout.write(entry.data);
-      else process.stderr.write(entry.data);
+      if (entry.s === 'stdout') process.stdout.write(entry.d);
+      else process.stderr.write(entry.d);
     }
   }
   if (task.status === 'running') {
@@ -291,8 +291,8 @@ async function cmdSleep(taskId, timeoutSeconds) {
     const output = await rpcCall('getAndClearOutput', { taskId: rawId }).then(r => r?.output ?? r).catch(() => []);
     if (Array.isArray(output)) {
       for (const entry of output) {
-        if (entry.type === 'stdout') process.stdout.write(entry.data);
-        else process.stderr.write(entry.data);
+        if (entry.s === 'stdout') process.stdout.write(entry.d);
+        else process.stderr.write(entry.d);
       }
     }
   }
