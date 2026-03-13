@@ -1,10 +1,9 @@
 import http from 'http';
 import { writeFileSync } from 'fs';
 import { WorkerPool } from './workers/worker-pool.js';
-import { BackgroundTaskStore } from './background-tasks.js';
+import { backgroundStore } from './background-tasks.js';
 
 const pool = new WorkerPool(4);
-const backgroundStore = new BackgroundTaskStore();
 
 function randomPort() {
   return Math.floor(Math.random() * 10000) + 30000;
