@@ -423,6 +423,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
           stdout += str;
           writeLog('stdout', str);
           if (stdout.length > MAX_BUFFER) stdout = stdout.slice(-Math.ceil(MAX_BUFFER * 0.5));
+          try { parentPort.postMessage({ jobId: currentJobId, type: 'output', streamType: 'stdout', data: str }); } catch (e) {}
         } catch (e) {}
       });
 
@@ -432,6 +433,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
           stderr += str;
           writeLog('stderr', str);
           if (stderr.length > MAX_BUFFER) stderr = stderr.slice(-Math.ceil(MAX_BUFFER * 0.5));
+          try { parentPort.postMessage({ jobId: currentJobId, type: 'output', streamType: 'stderr', data: str }); } catch (e) {}
         } catch (e) {}
       });
 
