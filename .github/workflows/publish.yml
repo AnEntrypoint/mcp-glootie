@@ -34,9 +34,9 @@ jobs:
           npm version patch -m "chore: bump version to %s"
 
       - name: Push version bump
-        run: git push
+        run: git push --follow-tags
 
       - name: Publish to npm
-        run: npm publish
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
