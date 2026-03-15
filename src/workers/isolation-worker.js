@@ -5,8 +5,8 @@ import path from 'path';
 import os from 'os';
 
 const CONFIGS = {
-  nodejs: { command: 'node', args: ['-e'], inline: true },
-  typescript: { command: 'node', args: ['-e'], inline: true },
+  nodejs: { command: 'bun', args: ['-e'], inline: true },
+  typescript: { command: 'bun', args: ['-e'], inline: true },
   deno: { command: 'deno', args: ['run', '--no-check'], inline: false },
   bash: { command: 'bash', args: ['-c'], inline: true },
   cmd: { command: 'cmd.exe', args: ['/c'], inline: true },
