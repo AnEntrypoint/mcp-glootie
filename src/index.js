@@ -1,14 +1,15 @@
 #!/usr/bin/env bun
 import http from 'http';
 import { existsSync, readFileSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { resolve, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { tmpdir } from 'os';
 
 const pm2lib = require('pm2');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUNNER_SCRIPT = resolve(__dirname, 'task-runner.js');
-const PORT_FILE = '/tmp/glootie-runner.port';
+const PORT_FILE = join(tmpdir(), 'glootie-runner.port');
 const PM2_NAME = 'gm-exec-runner';
 const HARD_CEILING_MS = 15000;
 
@@ -226,7 +227,8 @@ async function cmdExec(cmdArgs, positional) {
 async function cmdBash(cmdArgs, positional) {
   const commands = positional.join(' ');
   if (!commands.trim()) { process.stderr.write('No commands provided\n'); usage(); return 1; }
-  return await runCode(commands, 'bash', resolve(cmdArgs.cwd || process.cwd()));
+  const runtime = process.platform === 'win32' ? 'cmd' : 'bash';
+  return await runCode(commands, runtime, resolve(cmdArgs.cwd || process.cwd()));
 }
 
 async function cmdStatus(taskId) {
@@ -361,7 +363,7 @@ Commands:
   runner start|stop|status
                           Manage the task runner process (PM2)
 
-Languages: nodejs (default), python, go, rust, c, cpp, java, deno, bash
+Languages: nodejs (default), python, go, rust, c, cpp, java, deno, bash, cmd (Windows)
 `);
 }
 

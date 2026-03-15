@@ -1,5 +1,7 @@
 import http from 'http';
 import { writeFileSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 import { WorkerPool } from './workers/worker-pool.js';
 import { backgroundStore } from './background-tasks.js';
 
@@ -22,7 +24,7 @@ async function startServer() {
     const port = randomPort();
     try {
       await tryListen(server, port);
-      writeFileSync('/tmp/glootie-runner.port', String(port));
+      writeFileSync(join(tmpdir(), 'glootie-runner.port'), String(port));
       return server;
     } catch (e) {
       if (e.code !== 'EADDRINUSE') throw e;
