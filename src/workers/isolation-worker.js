@@ -4,15 +4,17 @@ import { writeFileSync, mkdtempSync, rmSync, appendFileSync } from 'fs';
 import path from 'path';
 import os from 'os';
 
+const IS_WIN = process.platform === 'win32';
+
 const CONFIGS = {
   nodejs: { command: 'bun', args: ['-e'], inline: true },
   typescript: { command: 'bun', args: ['-e'], inline: true },
   deno: { command: 'deno', args: ['run', '--no-check'], inline: false },
-  bash: { command: 'bash', args: ['-c'], inline: true },
+  bash: IS_WIN ? { command: 'cmd.exe', args: ['/c'], inline: true } : { command: 'bash', args: ['-c'], inline: true },
   cmd: { command: 'cmd.exe', args: ['/c'], inline: true },
   go: { command: 'go', args: ['run'], inline: false },
   rust: { command: 'rustc', args: [], inline: false },
-  python: { command: 'python3', args: ['-c'], inline: true },
+  python: IS_WIN ? { command: 'python', args: ['-c'], inline: true } : { command: 'python3', args: ['-c'], inline: true },
   c: { command: 'gcc', args: [], inline: false },
   cpp: { command: 'g++', args: [], inline: false },
   java: { command: 'javac', args: [], inline: false }
@@ -42,6 +44,10 @@ function killActiveChild() {
 parentPort.on('close', killActiveChild);
 
 async function executeInProcess(code, runtime, workingDirectory, processTimeout) {
+  const normalizedCwd = workingDirectory
+    ? (IS_WIN ? workingDirectory.replace(/\//g, '\\') : workingDirectory)
+    : process.cwd();
+  workingDirectory = normalizedCwd;
   return new Promise((resolve) => {
     let child;
     let killed = false;
