@@ -1,23 +1,46 @@
 import { parentPort } from 'worker_threads';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { writeFileSync, mkdtempSync, rmSync, appendFileSync } from 'fs';
 import path from 'path';
 import os from 'os';
+
+function findBin(...candidates) {
+  const probe = process.platform === 'win32' ? (b) => `where ${b}` : (b) => `which ${b}`;
+  for (const bin of candidates) {
+    try {
+      execSync(probe(bin), { stdio: 'ignore', timeout: 3000 });
+      return bin;
+    } catch {}
+  }
+  return candidates[0];
+}
+
+const PYTHON = findBin('python3', 'python');
+const SHELL = process.platform === 'win32' ? 'cmd.exe' : findBin('bash', 'sh');
+const DENO = findBin('deno');
+const GO = findBin('go');
+const RUSTC = findBin('rustc');
+const GCC = findBin('gcc');
+const GPP = findBin('g++');
+const JAVA = findBin('java');
+const JAVAC = findBin('javac');
 
 const IS_WIN = process.platform === 'win32';
 
 const CONFIGS = {
   nodejs: { command: 'bun', args: ['-e'], inline: true },
   typescript: { command: 'bun', args: ['-e'], inline: true },
-  deno: { command: 'deno', args: ['run', '--no-check'], inline: false },
-  bash: IS_WIN ? { command: 'cmd.exe', args: ['/c'], inline: true } : { command: 'bash', args: ['-c'], inline: true },
+  deno: { command: DENO, args: ['run', '--no-check'], inline: false },
+  bash: IS_WIN
+    ? { command: SHELL, args: ['/c'], inline: true }
+    : { command: SHELL, args: ['-c'], inline: true },
   cmd: { command: 'cmd.exe', args: ['/c'], inline: true },
-  go: { command: 'go', args: ['run'], inline: false },
-  rust: { command: 'rustc', args: [], inline: false },
-  python: IS_WIN ? { command: 'python', args: ['-c'], inline: true } : { command: 'python3', args: ['-c'], inline: true },
-  c: { command: 'gcc', args: [], inline: false },
-  cpp: { command: 'g++', args: [], inline: false },
-  java: { command: 'javac', args: [], inline: false }
+  go: { command: GO, args: ['run'], inline: false },
+  rust: { command: RUSTC, args: [], inline: false },
+  python: { command: PYTHON, args: ['-c'], inline: true },
+  c: { command: GCC, args: [], inline: false },
+  cpp: { command: GPP, args: [], inline: false },
+  java: { command: JAVAC, args: [], inline: false }
 };
 
 const MAX_BUFFER = 10 * 1024 * 1024;
@@ -60,6 +83,19 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
       activeChild = null;
       if (sigkillTimer) { clearTimeout(sigkillTimer); sigkillTimer = null; }
       cleanupTemp();
+    };
+
+    const writeLog = (stream, data) => {
+      try {
+        const timestamp = new Date().toISOString();
+        const prefix = stream === 'stdout' ? '[OUT]' : '[ERR]';
+        const lines = data.toString('utf8').split('\n');
+        for (const line of lines) {
+          if (line.length > 0 || lines.indexOf(line) < lines.length - 1) {
+            appendFileSync(logFile, `${timestamp} ${prefix} ${line}\n`);
+          }
+        }
+      } catch (e) {}
     };
 
     try {
@@ -114,7 +150,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
             ? [filePath, '-o', path.join(tempDir, 'code'), '-I', workingDirectory]
             : [];
 
-          const command = runtime === 'go' ? 'go' : runtime === 'rust' ? 'rustc' : runtime === 'c' ? 'gcc' : 'g++';
+          const command = runtime === 'go' ? GO : runtime === 'rust' ? RUSTC : runtime === 'c' ? GCC : GPP;
 
           execChild = spawn(command, args, {
             cwd: workingDirectory, stdio: ['ignore', 'pipe', 'pipe'], timeout: processTimeout, detached: false
@@ -126,7 +162,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
             if (!execKilled) {
               execKilled = true;
               try {
-                if (process.platform === 'win32') {
+                if (IS_WIN) {
                   spawn('taskkill', ['/pid', String(execChild.pid), '/t', '/f'], { stdio: 'ignore' });
                 } else {
                   execChild.kill('SIGTERM');
@@ -185,7 +221,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
                   if (!runKilled) {
                     runKilled = true;
                     try {
-                      if (process.platform === 'win32') {
+                      if (IS_WIN) {
                         spawn('taskkill', ['/pid', String(runChild.pid), '/t', '/f'], { stdio: 'ignore' });
                       } else {
                         runChild.kill('SIGTERM');
@@ -260,10 +296,10 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
           let compileStdout = '';
 
           (() => {
-            const cpSeparator = process.platform === 'win32' ? ';' : ':';
+            const cpSeparator = IS_WIN ? ';' : ':';
             const compileClasspath = [tempDir, workingDirectory].join(cpSeparator);
 
-            compileChild = spawn('javac', ['-cp', compileClasspath, javaFile], {
+            compileChild = spawn(JAVAC, ['-cp', compileClasspath, javaFile], {
               cwd: workingDirectory, stdio: ['ignore', 'pipe', 'pipe'], timeout: processTimeout
             });
 
@@ -290,10 +326,9 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
               let execStdout = '';
               let execKilled = false;
 
-              const cpSeparator = process.platform === 'win32' ? ';' : ':';
               const classpath = [tempDir, workingDirectory].join(cpSeparator);
 
-              execChild = spawn('java', ['-cp', classpath, className], {
+              execChild = spawn(JAVA, ['-cp', classpath, className], {
                 cwd: workingDirectory, stdio: ['ignore', 'pipe', 'pipe'], timeout: processTimeout, detached: false
               });
 
@@ -303,7 +338,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
                 if (!execKilled) {
                   execKilled = true;
                   try {
-                    if (process.platform === 'win32') {
+                    if (IS_WIN) {
                       spawn('taskkill', ['/pid', String(execChild.pid), '/t', '/f'], { stdio: 'ignore' });
                     } else {
                       execChild.kill('SIGTERM');
@@ -398,7 +433,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
         if (!killed) {
           killed = true;
           try {
-            if (process.platform === 'win32') {
+            if (IS_WIN) {
               spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' });
             } else {
               child.kill('SIGTERM');
@@ -409,19 +444,6 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
           } catch (e) {}
         }
       }, processTimeout);
-
-      const writeLog = (stream, data) => {
-        try {
-          const timestamp = new Date().toISOString();
-          const prefix = stream === 'stdout' ? '[OUT]' : '[ERR]';
-          const lines = data.toString('utf8').split('\n');
-          for (const line of lines) {
-            if (line.length > 0 || lines.indexOf(line) < lines.length - 1) {
-              appendFileSync(logFile, `${timestamp} ${prefix} ${line}\n`);
-            }
-          }
-        } catch (e) {}
-      };
 
       child.stdout?.on('data', (data) => {
         try {
