@@ -227,7 +227,7 @@ async function cmdExec(cmdArgs, positional) {
 async function cmdBash(cmdArgs, positional) {
   const commands = positional.join(' ');
   if (!commands.trim()) { process.stderr.write('No commands provided\n'); usage(); return 1; }
-  const runtime = process.platform === 'win32' ? 'cmd' : 'bash';
+  const runtime = process.platform === 'win32' ? 'powershell' : 'bash';
   return await runCode(commands, runtime, resolve(cmdArgs.cwd || process.cwd()));
 }
 
@@ -363,7 +363,7 @@ Commands:
   runner start|stop|status
                           Manage the task runner process (PM2)
 
-Languages: nodejs (default), python, go, rust, c, cpp, java, deno, bash, cmd (Windows)
+Languages: nodejs (default), python, go, rust, c, cpp, java, deno, bash, cmd, powershell (Windows)
 `);
 }
 
