@@ -27,6 +27,8 @@ const JAVAC = findBin('javac');
 
 const IS_WIN = process.platform === 'win32';
 
+const POWERSHELL = findBin('pwsh', 'powershell');
+
 const CONFIGS = {
   nodejs: { command: 'bun', args: ['-e'], inline: true },
   typescript: { command: 'bun', args: ['-e'], inline: true },
@@ -35,6 +37,7 @@ const CONFIGS = {
     ? { command: SHELL, args: ['/c'], inline: true }
     : { command: SHELL, args: ['-c'], inline: true },
   cmd: { command: 'cmd.exe', args: ['/c'], inline: true },
+  powershell: { command: POWERSHELL, args: ['-NoProfile', '-NonInteractive', '-Command'], inline: true },
   go: { command: GO, args: ['run'], inline: false },
   rust: { command: RUSTC, args: [], inline: false },
   python: { command: PYTHON, args: ['-c'], inline: true },
