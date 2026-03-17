@@ -1,9 +1,13 @@
 import http from 'http';
 import { readFileSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+
+const PORT_FILE = join(tmpdir(), 'glootie-runner.port');
 
 function getPort() {
   try {
-    return parseInt(readFileSync('/tmp/glootie-runner.port', 'utf8').trim(), 10);
+    return parseInt(readFileSync(PORT_FILE, 'utf8').trim(), 10);
   } catch {
     throw new Error('task runner not available');
   }
