@@ -3,11 +3,12 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { tmpdir } from 'os';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RUNNER_PATH = path.join(__dirname, 'task-runner.js');
 
-const PORT_FILE = '/tmp/glootie-runner.port';
+const PORT_FILE = path.join(tmpdir(), 'glootie-runner.port');
 const MAX_RESTARTS = 10;
 const RESTART_WINDOW_MS = 5 * 60 * 1000;
 
