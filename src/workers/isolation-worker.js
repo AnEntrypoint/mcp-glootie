@@ -285,6 +285,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
             stderr: `Failed to create source file: ${e.message}`, error: `Failed to create source file: ${e.message}`, logFile
           });
         }
+        return;
       } else if (runtime === 'java') {
         try {
           const tempDir = mkdtempSync(path.join(os.tmpdir(), 'glootie_'));
@@ -408,6 +409,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
             stderr: `Failed to create Java file: ${e.message}`, error: `Failed to create Java file: ${e.message}`, logFile
           });
         }
+        return;
       } else if (runtime === 'deno') {
         try {
           const tempDir = mkdtempSync(path.join(os.tmpdir(), 'glootie_'));
