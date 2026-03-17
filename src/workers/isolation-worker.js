@@ -145,12 +145,14 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
           let execStdout = '';
           let execKilled = false;
 
+          const binExt = IS_WIN ? '.exe' : '';
+          const binName = `code${binExt}`;
           const args = runtime === 'go'
             ? ['run', filePath]
             : runtime === 'rust'
-            ? [filePath, '-o', path.join(tempDir, 'code')]
+            ? [filePath, '-o', path.join(tempDir, binName)]
             : ['c', 'cpp'].includes(runtime)
-            ? [filePath, '-o', path.join(tempDir, 'code'), '-I', workingDirectory]
+            ? [filePath, '-o', path.join(tempDir, binName), '-I', workingDirectory]
             : [];
 
           const command = runtime === 'go' ? GO : runtime === 'rust' ? RUSTC : runtime === 'c' ? GCC : GPP;
@@ -209,11 +211,10 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
             if (!execKilled) {
               execKilled = true;
               clearTimeout(timeoutHandle);
-              cleanup();
               if (execCode === 0 && ['rust', 'c', 'cpp'].includes(runtime)) {
                 writeLog('stdout', execStdout);
                 writeLog('stderr', execStderr);
-                const exePath = path.join(tempDir, 'code');
+                const exePath = path.join(tempDir, binName);
                 const runChild = spawn(exePath, [], { cwd: workingDirectory, stdio: ['ignore', 'pipe', 'pipe'], timeout: processTimeout, detached: false });
                 let runStdout = '';
                 let runStderr = '';
@@ -272,6 +273,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
                   }
                 });
               } else {
+                cleanup();
                 resolve({ success: execCode === 0, exitCode: execCode ?? 1, stdout: execStdout, stderr: execStderr, error: null, logFile });
               }
             } else {
