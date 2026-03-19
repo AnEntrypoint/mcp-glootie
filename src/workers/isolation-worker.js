@@ -114,14 +114,22 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
         try {
           const tempDir = mkdtempSync(path.join(os.tmpdir(), 'glootie_'));
           activeTempDir = tempDir;
-          const ext = runtime === 'bash' ? '.sh' : '.bat';
-          const script = runtime === 'bash'
-            ? `#!/bin/bash\nset -e\n${code}`
-            : `@echo off\nsetlocal enabledelayedexpansion\n${code}`;
+          const usePowerShell = IS_WIN && runtime === 'bash';
+          const ext = runtime === 'cmd' ? '.bat' : usePowerShell ? '.ps1' : '.sh';
+          const script = runtime === 'cmd'
+            ? `@echo off\nsetlocal enabledelayedexpansion\n${code}`
+            : usePowerShell
+            ? `$ErrorActionPreference = 'Continue'\n${code}`
+            : `#!/bin/bash\nset -e\n${code}`;
           const scriptFile = path.join(tempDir, `script${ext}`);
           writeFileSync(scriptFile, script);
-          child = spawn(config.command,
-            runtime === 'cmd' ? ['/c', scriptFile] : [scriptFile],
+          const spawnCmd = usePowerShell ? POWERSHELL : config.command;
+          const spawnArgs = runtime === 'cmd'
+            ? ['/c', scriptFile]
+            : usePowerShell
+            ? ['-NoProfile', '-NonInteractive', '-File', scriptFile]
+            : [scriptFile];
+          child = spawn(spawnCmd, spawnArgs,
             { cwd: workingDirectory, stdio: ['ignore', 'pipe', 'pipe'], timeout: processTimeout, detached: false }
           );
         } catch (e) {
