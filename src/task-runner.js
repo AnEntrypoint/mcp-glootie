@@ -89,6 +89,10 @@ async function handleRPC(body) {
       const output = backgroundStore.getAndClearOutput(params.taskId);
       return { output };
     }
+    case 'waitForOutput': {
+      const result = await backgroundStore.waitForOutput(params.taskId, params.timeoutMs);
+      return result;
+    }
     case 'shutdown':
       setImmediate(gracefulShutdown);
       return { ok: true };

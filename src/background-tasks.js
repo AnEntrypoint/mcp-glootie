@@ -1,5 +1,8 @@
-export class BackgroundTaskStore {
+import { EventEmitter } from 'events';
+
+export class BackgroundTaskStore extends EventEmitter {
   constructor() {
+    super();
     this.tasks = new Map();
     this.taskCounter = 0;
     this.maxAge = 30 * 60 * 1000;
@@ -60,12 +63,12 @@ export class BackgroundTaskStore {
 
   completeTask(taskId, result) {
     const task = this.tasks.get(taskId);
-    if (task) { task.completedAt = Date.now(); task.result = result; task.status = 'completed'; }
+    if (task) { task.completedAt = Date.now(); task.result = result; task.status = 'completed'; this.emit(`output:${taskId}`); }
   }
 
   failTask(taskId, error) {
     const task = this.tasks.get(taskId);
-    if (task) { task.completedAt = Date.now(); task.result = { error: error.message }; task.status = 'failed'; }
+    if (task) { task.completedAt = Date.now(); task.result = { error: error.message }; task.status = 'failed'; this.emit(`output:${taskId}`); }
   }
 
   appendOutput(taskId, type, data) {
@@ -73,6 +76,7 @@ export class BackgroundTaskStore {
     if (!task || (task.status !== 'running' && task.status !== 'pending')) return;
     const timestamp = Date.now();
     task.outputLog.push({ t: timestamp, s: type, d: data });
+    this.emit(`output:${taskId}`);
     const totalLen = task.outputLog.reduce((sum, e) => sum + e.d.length, 0);
     if (totalLen > this.maxOutputSize) {
       while (task.outputLog.length > 1 && 
@@ -80,6 +84,30 @@ export class BackgroundTaskStore {
         task.outputLog.shift();
       }
     }
+  }
+
+  waitForOutput(taskId, timeoutMs = 30000) {
+    return new Promise((resolve) => {
+      const task = this.tasks.get(taskId);
+      if (!task || (task.status !== 'running' && task.status !== 'pending')) {
+        return resolve({ timedOut: false, done: true });
+      }
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        this.removeListener(`output:${taskId}`, onOutput);
+        resolve({ timedOut: true });
+      }, timeoutMs);
+      const onOutput = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.removeListener(`output:${taskId}`, onOutput);
+        resolve({ timedOut: false });
+      };
+      this.on(`output:${taskId}`, onOutput);
+    });
   }
 
   getAndClearOutput(taskId) {

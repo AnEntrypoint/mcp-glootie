@@ -283,7 +283,7 @@ async function cmdClose(taskId) {
   }
 }
 
-async function cmdSleep(taskId, timeoutSeconds) {
+async function cmdSleep(taskId, timeoutSeconds, nextOutputMode) {
   const autoStarted = await ensureRunner();
   const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
   const timeout = (parseInt(timeoutSeconds, 10) || 30) * 1000;
@@ -314,7 +314,12 @@ async function cmdSleep(taskId, timeoutSeconds) {
       if (autoStarted) await stopRunner();
       return;
     }
-    await new Promise(r => setTimeout(r, 500));
+    if (nextOutputMode) {
+      const remaining = Math.min(30000, timeout - (Date.now() - startTime));
+      if (remaining > 0) await rpcCall('waitForOutput', { taskId: rawId, timeoutMs: remaining }, 35000).catch(() => {});
+    } else {
+      await new Promise(r => setTimeout(r, 500));
+    }
   }
   await drainOutput();
   console.log(`\nTimeout after ${timeout / 1000}s. Task still running.`);
@@ -390,7 +395,11 @@ try {
     else await cmdStatus(rest[0]);
   } else if (cmd === 'sleep') {
     if (!rest[0]) { process.stderr.write('Task ID required\n'); exitCode = 1; }
-    else await cmdSleep(rest[0], rest[1]);
+    else {
+      const nextOutput = rest.includes('--next-output');
+      const restArgs = rest.filter(a => a !== '--next-output');
+      await cmdSleep(restArgs[0], restArgs[1], nextOutput);
+    }
   } else if (cmd === 'close') {
     if (!rest[0]) { process.stderr.write('Task ID required\n'); exitCode = 1; }
     else await cmdClose(rest[0]);
