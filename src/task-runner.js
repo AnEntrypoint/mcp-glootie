@@ -104,7 +104,7 @@ async function handleRPC(body) {
         taskPm2Ids.delete(taskId);
         backgroundStore.deleteTask(taskId);
         await withPm2(() => new Promise(r => pm2lib.delete('gm-exec-task-' + taskId, () => r()))).catch(() => {});
-        return { result: { success: task.status === 'completed', stdout: task.result?.stdout || '', stderr: task.result?.stderr || '', exitCode: task.result?.exitCode ?? 0, backgroundTaskId: taskId, completed: true } };
+        return { result: { success: task.result?.success === true, stdout: task.result?.stdout || '', stderr: task.result?.stderr || '', error: task.result?.error || null, exitCode: task.result?.exitCode ?? (task.result?.success ? 0 : 1), backgroundTaskId: taskId, completed: true } };
       }
       return { result: { backgroundTaskId: taskId, persisted: true } };
     }

@@ -50,7 +50,7 @@ async function runChild(child, cleanup) {
   return new Promise((resolve) => {
     child.on('error', async (err) => {
       cleanup();
-      await rpc('failTask', { taskId, error: err.message });
+      await rpc('completeTask', { taskId, result: { success: false, exitCode: 1, stdout, stderr, error: err.message } });
       resolve({ ok: false, error: err.message });
     });
     child.on('close', (code) => {
@@ -65,7 +65,7 @@ async function runCompiled(spawnResult) {
   const compileResult = await runChild(child, () => {});
   if (!compileResult.ok) {
     cleanup();
-    await rpc('failTask', { taskId, error: compileResult.stderr || 'Compilation failed' });
+    await rpc('completeTask', { taskId, result: { success: false, exitCode: 1, stdout: compileResult.stdout, stderr: compileResult.stderr, error: compileResult.stderr || 'Compilation failed' } });
     return;
   }
   let runChild2, runCleanup;
@@ -80,9 +80,7 @@ async function runCompiled(spawnResult) {
     runCleanup = cleanup;
   }
   const result = await runChild(runChild2, runCleanup);
-  await rpc(result.ok ? 'completeTask' : 'failTask', result.ok
-    ? { taskId, result: { success: true, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr } }
-    : { taskId, error: result.stderr || 'Execution failed' });
+  await rpc('completeTask', { taskId, result: { success: result.ok, exitCode: result.exitCode ?? 1, stdout: result.stdout || '', stderr: result.stderr || '', error: result.error || null } });
 }
 
 process.stderr.write('[exec-process] task=' + taskId + ' runtime=' + RUNTIME + ' starting\n');
@@ -92,9 +90,7 @@ if (spawnResult.isCompile) {
 } else {
   const result = await runChild(spawnResult.child, spawnResult.cleanup);
   process.stderr.write('[exec-process] task=' + taskId + ' child exited code=' + result.exitCode + '\n');
-  await rpc(result.ok ? 'completeTask' : 'failTask', result.ok
-    ? { taskId, result: { success: true, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr } }
-    : { taskId, error: result.error || result.stderr || 'Execution failed' });
+  await rpc('completeTask', { taskId, result: { success: result.ok, exitCode: result.exitCode ?? 1, stdout: result.stdout || '', stderr: result.stderr || '', error: result.error || null } });
 }
 process.stderr.write('[exec-process] task=' + taskId + ' done\n');
 process.exit(0);
