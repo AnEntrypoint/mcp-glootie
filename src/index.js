@@ -234,7 +234,7 @@ async function cmdBash(cmdArgs, positional) {
 async function cmdStatus(taskId) {
   await ensureRunner();
   const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
-  const task = await rpcCall('getTask', { taskId: rawId }).then(r => r?.task ?? r);
+  const task = await rpcCall('getTask', { taskId: rawId }).then(r => r?.task || null);
   if (!task) {
     throw Object.assign(new Error('Task not found'), { exitCode: 1, silent: true });
   }
@@ -298,7 +298,7 @@ async function cmdSleep(taskId, timeoutSeconds, nextOutputMode) {
   }
 
   while (Date.now() - startTime < timeout) {
-    const task = await rpcCall('getTask', { taskId: rawId }).then(r => r?.task ?? r).catch(() => null);
+    const task = await rpcCall('getTask', { taskId: rawId }).then(r => r?.task || null).catch(() => null);
     if (!task) {
       console.log('Task not found or already completed.');
       return;
