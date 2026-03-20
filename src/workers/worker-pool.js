@@ -248,6 +248,15 @@ export class WorkerPool extends EventEmitter {
     }
   }
 
+  sendStdin(backgroundTaskId, data) {
+    for (const [, job] of [...this.activeJobs, ...this.backgroundJobs]) {
+      if (job.backgroundTaskId === backgroundTaskId && job.worker) {
+        try { job.worker.postMessage({ type: 'stdin', jobId: job.jobId, data }); return true; } catch { return false; }
+      }
+    }
+    return false;
+  }
+
   async shutdown() {
     this.shuttingDown = true;
     if (this.healthCheckInterval) {

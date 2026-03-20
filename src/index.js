@@ -5,7 +5,8 @@ import { resolve, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { tmpdir } from 'os';
 
-const pm2lib = require('pm2');
+let pm2lib = null;
+try { pm2lib = require('pm2'); } catch { /* pm2 not installed — fallback to direct spawn */ }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUNNER_SCRIPT = resolve(__dirname, 'task-runner.js');
@@ -33,12 +34,14 @@ function pm2describe(name) {
 }
 
 async function withPm2(fn) {
+  if (!pm2lib) throw new Error('pm2 unavailable');
   await pm2connect();
   try { return await fn(); }
   finally { await pm2disconnect(); }
 }
 
 async function printRunningTools() {
+  if (!pm2lib) return;
   try {
     await pm2connect();
     const list = await pm2list();
@@ -77,10 +80,16 @@ async function healthCheck() {
 async function ensureRunner() {
   if (await healthCheck()) return false;
   process.stderr.write('Auto-starting runner...\n');
-  await withPm2(async () => {
-    await pm2delete(PM2_NAME).catch(() => {});
-    await pm2start({ script: 'bun', args: RUNNER_SCRIPT, name: PM2_NAME, autorestart: false, watch: false });
-  });
+  if (pm2lib) {
+    await withPm2(async () => {
+      await pm2delete(PM2_NAME).catch(() => {});
+      await pm2start({ script: 'bun', args: RUNNER_SCRIPT, name: PM2_NAME, autorestart: false, watch: false });
+    });
+  } else {
+    const { spawn } = await import('child_process');
+    const child = spawn('bun', [RUNNER_SCRIPT], { detached: true, stdio: 'ignore' });
+    child.unref();
+  }
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 500));
     if (await healthCheck()) return true;
@@ -89,6 +98,7 @@ async function ensureRunner() {
 }
 
 async function stopRunner() {
+  if (!pm2lib) return;
   await withPm2(() => pm2delete(PM2_NAME).catch(() => {}));
 }
 
@@ -123,7 +133,7 @@ function rpcCall(method, params, timeoutMs = 10000) {
 }
 
 async function runCode(code, runtime, workingDirectory) {
-  const autoStarted = await ensureRunner();
+  await ensureRunner();
   const taskId = await rpcCall('createTask', { code, runtime, workingDirectory }).then(r => r?.taskId ?? r);
 
   const safetyTimeout = new Promise(r => {
@@ -151,6 +161,7 @@ async function runCode(code, runtime, workingDirectory) {
     console.log(`Task ID: ${id}\n`);
     console.log(`  gm-exec sleep ${id}       # wait for completion (up to 30s) — recommended`);
     console.log(`  gm-exec status ${id}      # drain output buffer (snapshot)`);
+    console.log(`  gm-exec type ${id} <input>  # send stdin to running task`);
     console.log(`  gm-exec close ${id}       # delete task when done`);
     console.log(`  gm-exec runner stop       # stop runner when all tasks done`);
     console.log(`\nRunner kept alive: ${PM2_NAME} (PM2)`);
@@ -176,10 +187,16 @@ async function cmdRunnerStart() {
     console.log(`Runner already healthy on port ${readFileSync(PORT_FILE, 'utf8').trim()}`);
     return;
   }
-  await withPm2(async () => {
-    await pm2delete(PM2_NAME).catch(() => {});
-    await pm2start({ script: 'bun', args: RUNNER_SCRIPT, name: PM2_NAME, autorestart: false, watch: false });
-  });
+  if (pm2lib) {
+    await withPm2(async () => {
+      await pm2delete(PM2_NAME).catch(() => {});
+      await pm2start({ script: 'bun', args: RUNNER_SCRIPT, name: PM2_NAME, autorestart: false, watch: false });
+    });
+  } else {
+    const { spawn } = await import('child_process');
+    const child = spawn('bun', [RUNNER_SCRIPT], { detached: true, stdio: 'ignore' });
+    child.unref();
+  }
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 500));
     if (await healthCheck()) { console.log(`Runner started on port ${readFileSync(PORT_FILE, 'utf8').trim()}`); return; }
@@ -193,6 +210,12 @@ async function cmdRunnerStop() {
 }
 
 async function cmdRunnerStatus() {
+  if (!pm2lib) {
+    const alive = await healthCheck();
+    console.log(`${PM2_NAME}: ${alive ? 'online (no pm2 — direct spawn)' : 'not running'}`);
+    if (alive && existsSync(PORT_FILE)) console.log(`port:     ${readFileSync(PORT_FILE, 'utf8').trim()}`);
+    return;
+  }
   const desc = await withPm2(() => pm2describe(PM2_NAME).catch(() => []));
   if (!desc || desc.length === 0) { console.log(`${PM2_NAME}: not found`); return; }
   const p = desc[0];
@@ -208,6 +231,7 @@ async function cmdRunnerStatus() {
     console.log(`\nRunner is active. If you have background tasks:`);
     console.log(`  gm-exec sleep <task_id>      # wait for task completion (up to 30s)`);
     console.log(`  gm-exec status <task_id>     # check task status`);
+    console.log(`  gm-exec type <task_id> <input>  # send stdin to running task`);
     console.log(`  gm-exec runner stop          # stop runner when all tasks done`);
   }
 }
@@ -230,11 +254,10 @@ async function cmdBash(cmdArgs, positional) {
 }
 
 async function cmdStatus(taskId) {
-  const autoStarted = await ensureRunner();
+  await ensureRunner();
   const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
   const task = await rpcCall('getTask', { taskId: rawId }).then(r => r?.task ?? r);
   if (!task) {
-    if (autoStarted) await stopRunner();
     throw Object.assign(new Error('Task not found'), { exitCode: 1, silent: true });
   }
   console.log(`Status: ${task.status}`);
@@ -254,17 +277,17 @@ async function cmdStatus(taskId) {
   if (task.status === 'running') {
     console.log(`\nTask still running. Options:`);
     console.log(`  gm-exec sleep ${taskId}      # wait for completion (up to 30s) — recommended`);
+    console.log(`  gm-exec type ${taskId} <input>  # send stdin to running task`);
     console.log(`  gm-exec status ${taskId}     # check status again (snapshot)`);
   } else if (task.status === 'completed' || task.status === 'failed') {
     console.log(`\nTask finished. Clean up:`);
     console.log(`  gm-exec close ${taskId}      # delete task`);
     console.log(`  gm-exec runner stop          # stop runner if no more tasks`);
   }
-  if (autoStarted) await stopRunner();
 }
 
 async function cmdClose(taskId) {
-  const autoStarted = await ensureRunner();
+  await ensureRunner();
   const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
   await rpcCall('deleteTask', { taskId: rawId });
   const res = await rpcCall('listTasks', {}).catch(() => ({ tasks: [] }));
@@ -277,12 +300,11 @@ async function cmdClose(taskId) {
     }
   } else {
     console.log(`  gm-exec runner stop          # no more tasks — stop runner`);
-    if (autoStarted) await stopRunner();
   }
 }
 
 async function cmdSleep(taskId, timeoutSeconds, nextOutputMode) {
-  const autoStarted = await ensureRunner();
+  await ensureRunner();
   const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
   const timeout = (parseInt(timeoutSeconds, 10) || 30) * 1000;
   const startTime = Date.now();
@@ -309,7 +331,6 @@ async function cmdSleep(taskId, timeoutSeconds, nextOutputMode) {
       console.log(`\nTask finished (${task.status}). Clean up:`);
       console.log(`  gm-exec close ${taskId}      # delete task`);
       console.log(`  gm-exec runner stop          # stop runner if no more tasks`);
-      if (autoStarted) await stopRunner();
       return;
     }
     if (nextOutputMode) {
@@ -323,7 +344,19 @@ async function cmdSleep(taskId, timeoutSeconds, nextOutputMode) {
   console.log(`\nTimeout after ${timeout / 1000}s. Task still running.`);
   console.log(`  gm-exec sleep ${taskId}       # wait again (up to 30s) — recommended`);
   console.log(`  gm-exec status ${taskId}      # check current status (snapshot)`);
-  if (autoStarted) await stopRunner();
+}
+
+async function cmdType(taskId, inputData) {
+  await ensureRunner();
+  const rawId = parseInt(taskId.replace(/^task_/, ''), 10);
+  const data = inputData + '\n';
+  const result = await rpcCall('sendStdin', { taskId: rawId, data }).then(r => r?.ok ?? r).catch(() => false);
+  if (result) {
+    console.log(`Sent to task ${taskId}`);
+  } else {
+    process.stderr.write(`Task ${taskId} not found or not running\n`);
+    return 1;
+  }
 }
 
 function parseArgs(argv) {
@@ -362,6 +395,7 @@ Commands:
   status <task_id>        Poll status + drain output of a background task
   sleep <task_id> [seconds]
                           Wait for task completion (default 30s timeout)
+  type <task_id> <input>  Send input to stdin of a running background task
   close <task_id>         Delete a background task
   runner start|stop|status
                           Manage the task runner process (PM2)
@@ -401,6 +435,10 @@ try {
   } else if (cmd === 'close') {
     if (!rest[0]) { process.stderr.write('Task ID required\n'); exitCode = 1; }
     else await cmdClose(rest[0]);
+  } else if (cmd === 'type') {
+    if (!rest[0]) { process.stderr.write('Task ID required\n'); exitCode = 1; }
+    else if (!rest[1]) { process.stderr.write('Input required\n'); exitCode = 1; }
+    else exitCode = (await cmdType(rest[0], rest.slice(1).join(' '))) ?? 0;
   } else {
     process.stderr.write(`Unknown command: ${cmd}\n`);
     usage();
