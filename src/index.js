@@ -163,8 +163,6 @@ async function runCode(code, runtime, workingDirectory) {
     await rpcCall('deleteTask', { taskId }).catch(() => {});
   }
 
-  if (autoStarted) await stopRunner();
-
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
   if (result.error) { process.stderr.write(`Error: ${result.error}\n`); return 1; }
