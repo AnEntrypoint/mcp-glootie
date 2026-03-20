@@ -1,24 +1,15 @@
 import http from 'http';
-import { writeFileSync, unlinkSync } from 'fs';
+import { writeFileSync, unlinkSync, mkdirSync, readFileSync } from 'fs';
 import { join, resolve, dirname } from 'path';
-import { tmpdir } from 'os';
+import { tmpdir, homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { backgroundStore } from './background-tasks.js';
 
-const pm2lib = require('pm2');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EXEC_PROCESS_SCRIPT = resolve(__dirname, 'exec-process.js');
 const PORT_FILE = join(tmpdir(), 'glootie-runner.port');
-const taskPm2Ids = new Map();
 
-function withPm2(fn) {
-  return new Promise((resolve, reject) => {
-    pm2lib.connect(err => {
-      if (err) return reject(err);
-      Promise.resolve().then(fn).then(r => { pm2lib.disconnect(); resolve(r); }).catch(e => { pm2lib.disconnect(); reject(e); });
-    });
-  });
-}
+const activeProcesses = new Map(); // taskId -> Subprocess
 
 function randomPort() { return Math.floor(Math.random() * 10000) + 30000; }
 
@@ -27,17 +18,19 @@ async function tryListen(server, port) {
 }
 
 async function cleanupStaleProcesses() {
-  await withPm2(() => new Promise(res => {
-    pm2lib.list((err, list) => {
-      if (err || !list) return res();
-      const stale = list.filter(p => p.name && p.name.startsWith('gm-exec-task-'));
-      let pending = stale.length;
-      if (pending === 0) return res();
-      for (const p of stale) {
-        pm2lib.delete(p.name, () => { if (--pending === 0) res(); });
+  // Kill any tracked active processes from a previous runner session
+  for (const [taskId, proc] of activeProcesses) {
+    try {
+      const IS_WIN = process.platform === 'win32';
+      if (IS_WIN) {
+        const { spawnSync } = require('child_process');
+        spawnSync('taskkill', ['/pid', String(proc.pid), '/t', '/f'], { stdio: 'ignore', windowsHide: true });
+      } else {
+        proc.kill('SIGTERM');
       }
-    });
-  })).catch(() => {});
+    } catch {}
+  }
+  activeProcesses.clear();
 }
 
 async function startServer() {
@@ -69,18 +62,55 @@ async function readBody(req) {
 async function startExecProcess(taskId, code, runtime, workingDirectory) {
   const codeFile = join(tmpdir(), 'gm-exec-code-' + taskId + '.mjs');
   writeFileSync(codeFile, code);
-  const currentPort = parseInt(require('fs').readFileSync(PORT_FILE, 'utf8').trim(), 10);
-  const name = 'gm-exec-task-' + taskId;
-  const apps = await withPm2(() => new Promise((res, rej) =>
-    pm2lib.start({
-      script: 'bun', args: [EXEC_PROCESS_SCRIPT], name,
-      exec_mode: 'fork', autorestart: false, watch: false,
-      env: { TASK_ID: String(taskId), PORT: String(currentPort), RUNTIME: runtime, CWD: workingDirectory, CODE_FILE: codeFile }
-    }, (err, apps) => err ? rej(err) : res(apps))
-  ));
-  const pm2Id = apps?.[0]?.pm2_env?.pm_id;
-  if (pm2Id != null) taskPm2Ids.set(taskId, pm2Id);
+  const currentPort = parseInt(readFileSync(PORT_FILE, 'utf8').trim(), 10);
+  const IS_WIN = process.platform === 'win32';
+  const logDir = join(homedir(), '.pm2', 'logs');
+  try { mkdirSync(logDir, { recursive: true }); } catch {}
+  const outLogPath = join(logDir, 'gm-exec-task-' + taskId + '-out.log');
+  const errLogPath = join(logDir, 'gm-exec-task-' + taskId + '-error.log');
+
+  const proc = Bun.spawn(['bun', EXEC_PROCESS_SCRIPT], {
+    env: {
+      ...process.env,
+      TASK_ID: String(taskId),
+      PORT: String(currentPort),
+      RUNTIME: runtime,
+      CWD: workingDirectory,
+      CODE_FILE: codeFile,
+    },
+    cwd: workingDirectory || process.cwd(),
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    windowsHide: true,
+  });
+
+  activeProcesses.set(taskId, proc);
   backgroundStore.startTask(taskId);
+
+  // Pipe stdout to log file + let exec-process handle RPC
+  (async () => {
+    const outStream = Bun.file(outLogPath).writer();
+    for await (const chunk of proc.stdout) {
+      const str = new TextDecoder().decode(chunk);
+      outStream.write(str);
+    }
+    outStream.flush();
+  })().catch(() => {});
+
+  (async () => {
+    const errStream = Bun.file(errLogPath).writer();
+    for await (const chunk of proc.stderr) {
+      const str = new TextDecoder().decode(chunk);
+      errStream.write(str);
+    }
+    errStream.flush();
+  })().catch(() => {});
+
+  // Handle process exit
+  proc.exited.then((code) => {
+    activeProcesses.delete(taskId);
+  }).catch(() => {});
 }
 
 async function pollForCompletion(taskId, timeoutMs) {
@@ -101,9 +131,9 @@ async function handleRPC(body) {
       await startExecProcess(taskId, code, runtime, workingDirectory);
       const task = await pollForCompletion(taskId, timeout || 15000);
       if (task) {
-        taskPm2Ids.delete(taskId);
+        process.stderr.write('[runner] execute-delete taskId=' + taskId + ' status=' + task.status + '\n');
+        activeProcesses.delete(taskId);
         backgroundStore.deleteTask(taskId);
-        await withPm2(() => new Promise(r => pm2lib.delete('gm-exec-task-' + taskId, () => r()))).catch(() => {});
         return { result: { success: task.result?.success === true, stdout: task.result?.stdout || '', stderr: task.result?.stderr || '', error: task.result?.error || null, exitCode: task.result?.exitCode ?? (task.result?.success ? 0 : 1), backgroundTaskId: taskId, completed: true } };
       }
       return { result: { backgroundTaskId: taskId, persisted: true } };
@@ -124,18 +154,36 @@ async function handleRPC(body) {
     case 'getTask':
       return { task: backgroundStore.getTask(params.taskId) };
     case 'deleteTask': {
-      const pm2Id = taskPm2Ids.get(params.taskId);
-      taskPm2Ids.delete(params.taskId);
+      const proc = activeProcesses.get(params.taskId);
+      process.stderr.write('[runner] deleteTask ' + params.taskId + ' pid=' + proc?.pid + '\n');
+      activeProcesses.delete(params.taskId);
       backgroundStore.deleteTask(params.taskId);
-      if (pm2Id != null) await withPm2(() => new Promise(r => pm2lib.delete('gm-exec-task-' + params.taskId, () => r()))).catch(() => {});
+      if (proc) {
+        try {
+          const IS_WIN = process.platform === 'win32';
+          if (IS_WIN) {
+            const { spawnSync } = require('child_process');
+            spawnSync('taskkill', ['/pid', String(proc.pid), '/t', '/f'], { stdio: 'ignore', windowsHide: true });
+          } else {
+            proc.kill('SIGTERM');
+          }
+        } catch {}
+      }
       return {};
     }
     case 'listTasks':
       return { tasks: backgroundStore.getAllTasks().map(t => ({ id: t.id, status: t.status })) };
     case 'pm2list': {
-      const list = await withPm2(() => new Promise((res, rej) => pm2lib.list((err, l) => err ? rej(err) : res(l))));
-      const filtered = list.filter(p => p.name && p.name.startsWith('gm-exec-'));
-      return { processes: filtered.map(p => ({ name: p.name, status: p.pm2_env?.status, pid: p.pid, uptime: p.pm2_env?.pm_uptime ? Math.floor((Date.now() - p.pm2_env.pm_uptime) / 1000) : null })) };
+      const processes = [];
+      for (const [taskId, proc] of activeProcesses) {
+        processes.push({
+          name: 'gm-exec-task-' + taskId,
+          status: 'online',
+          pid: proc.pid,
+          uptime: null
+        });
+      }
+      return { processes };
     }
     case 'appendOutput':
       backgroundStore.appendOutput(params.taskId, params.type, params.data);
@@ -147,12 +195,14 @@ async function handleRPC(body) {
       return result;
     }
     case 'sendStdin': {
-      const pm2Id = taskPm2Ids.get(params.taskId);
-      if (pm2Id == null) return { ok: false };
-      await withPm2(() => new Promise((res, rej) =>
-        pm2lib.sendDataToProcessId({ id: pm2Id, data: { type: 'stdin', data: params.data }, topic: 'stdin' }, err => err ? rej(err) : res())
-      )).catch(() => {});
-      return { ok: true };
+      const proc = activeProcesses.get(params.taskId);
+      if (!proc || !proc.stdin) return { ok: false };
+      try {
+        const writer = proc.stdin.getWriter();
+        await writer.write(new TextEncoder().encode(params.data));
+        writer.releaseLock();
+        return { ok: true };
+      } catch { return { ok: false }; }
     }
     case 'shutdown':
       setImmediate(gracefulShutdown);
@@ -167,6 +217,7 @@ async function handleRequest(req, res) {
     if (req.method === 'GET' && req.url === '/health') return sendJSON(res, 200, { ok: true });
     if (req.method === 'POST' && req.url === '/rpc') {
       const body = await readBody(req);
+      process.stderr.write('[rpc] ' + body.method + ' ' + JSON.stringify(body.params).slice(0,80) + '\n');
       try { return sendJSON(res, 200, { id: body.id, result: await handleRPC(body) }); }
       catch (e) { return sendJSON(res, 200, { id: body.id, error: { code: e.code || -32603, message: e.message } }); }
     }
