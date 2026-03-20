@@ -5,8 +5,7 @@ import { resolve, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { tmpdir } from 'os';
 
-let pm2lib = null;
-try { pm2lib = require('pm2'); } catch { /* pm2 not installed — fallback to direct spawn */ }
+const pm2lib = require('pm2');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUNNER_SCRIPT = resolve(__dirname, 'task-runner.js');
@@ -34,14 +33,12 @@ function pm2describe(name) {
 }
 
 async function withPm2(fn) {
-  if (!pm2lib) throw new Error('pm2 unavailable');
   await pm2connect();
   try { return await fn(); }
   finally { await pm2disconnect(); }
 }
 
 async function printRunningTools() {
-  if (!pm2lib) return;
   try {
     await pm2connect();
     const list = await pm2list();
@@ -80,16 +77,10 @@ async function healthCheck() {
 async function ensureRunner() {
   if (await healthCheck()) return false;
   process.stderr.write('Auto-starting runner...\n');
-  if (pm2lib) {
-    await withPm2(async () => {
-      await pm2delete(PM2_NAME).catch(() => {});
-      await pm2start({ script: 'bun', args: RUNNER_SCRIPT, name: PM2_NAME, autorestart: false, watch: false });
-    });
-  } else {
-    const { spawn } = await import('child_process');
-    const child = spawn('bun', [RUNNER_SCRIPT], { detached: true, stdio: 'ignore' });
-    child.unref();
-  }
+  await withPm2(async () => {
+    await pm2delete(PM2_NAME).catch(() => {});
+    await pm2start({ script: 'bun', args: RUNNER_SCRIPT, name: PM2_NAME, autorestart: false, watch: false });
+  });
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 500));
     if (await healthCheck()) return true;
@@ -98,7 +89,6 @@ async function ensureRunner() {
 }
 
 async function stopRunner() {
-  if (!pm2lib) return;
   await withPm2(() => pm2delete(PM2_NAME).catch(() => {}));
 }
 
@@ -187,16 +177,10 @@ async function cmdRunnerStart() {
     console.log(`Runner already healthy on port ${readFileSync(PORT_FILE, 'utf8').trim()}`);
     return;
   }
-  if (pm2lib) {
-    await withPm2(async () => {
-      await pm2delete(PM2_NAME).catch(() => {});
-      await pm2start({ script: 'bun', args: RUNNER_SCRIPT, name: PM2_NAME, autorestart: false, watch: false });
-    });
-  } else {
-    const { spawn } = await import('child_process');
-    const child = spawn('bun', [RUNNER_SCRIPT], { detached: true, stdio: 'ignore' });
-    child.unref();
-  }
+  await withPm2(async () => {
+    await pm2delete(PM2_NAME).catch(() => {});
+    await pm2start({ script: 'bun', args: RUNNER_SCRIPT, name: PM2_NAME, autorestart: false, watch: false });
+  });
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 500));
     if (await healthCheck()) { console.log(`Runner started on port ${readFileSync(PORT_FILE, 'utf8').trim()}`); return; }
@@ -210,12 +194,6 @@ async function cmdRunnerStop() {
 }
 
 async function cmdRunnerStatus() {
-  if (!pm2lib) {
-    const alive = await healthCheck();
-    console.log(`${PM2_NAME}: ${alive ? 'online (no pm2 — direct spawn)' : 'not running'}`);
-    if (alive && existsSync(PORT_FILE)) console.log(`port:     ${readFileSync(PORT_FILE, 'utf8').trim()}`);
-    return;
-  }
   const desc = await withPm2(() => pm2describe(PM2_NAME).catch(() => []));
   if (!desc || desc.length === 0) { console.log(`${PM2_NAME}: not found`); return; }
   const p = desc[0];
