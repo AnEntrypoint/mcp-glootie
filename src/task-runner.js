@@ -79,7 +79,7 @@ async function startExecProcess(taskId, code, runtime, workingDirectory) {
       CODE_FILE: codeFile,
     },
     cwd: workingDirectory || process.cwd(),
-    stdin: 'ignore',
+    stdin: 'pipe',
     stdout: 'pipe',
     stderr: 'pipe',
     windowsHide: true,
@@ -198,9 +198,8 @@ async function handleRPC(body) {
       const proc = activeProcesses.get(params.taskId);
       if (!proc || !proc.stdin) return { ok: false };
       try {
-        const writer = proc.stdin.getWriter();
-        await writer.write(new TextEncoder().encode(params.data));
-        writer.releaseLock();
+        proc.stdin.write(new TextEncoder().encode(params.data));
+        proc.stdin.flush();
         return { ok: true };
       } catch { return { ok: false }; }
     }

@@ -26,9 +26,9 @@ try { unlinkSync(CODE_FILE); } catch {}
 
 let activeChild = null;
 
-process.on('message', (msg) => {
-  if (msg?.data?.type === 'stdin' && activeChild?.stdin && !activeChild.stdin.destroyed) {
-    try { activeChild.stdin.write(msg.data.data); } catch {}
+process.stdin.on('data', (data) => {
+  if (activeChild?.stdin && !activeChild.stdin.destroyed) {
+    try { activeChild.stdin.write(data); } catch {}
   }
 });
 
