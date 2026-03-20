@@ -23,3 +23,5 @@ Thumbs.db
 test-*.mjs
 test-*.js
 .gm-stop-verified
+
+bun.lock
