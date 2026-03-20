@@ -130,7 +130,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
             ? ['-NoProfile', '-NonInteractive', '-File', scriptFile]
             : [scriptFile];
           child = spawn(spawnCmd, spawnArgs,
-            { cwd: workingDirectory, stdio: ['ignore', 'pipe', 'pipe'], timeout: processTimeout, detached: false }
+            { cwd: workingDirectory, stdio: ['pipe', 'pipe', 'pipe'], timeout: processTimeout, detached: false }
           );
         } catch (e) {
           cleanupTemp();
@@ -166,7 +166,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
           const command = runtime === 'go' ? GO : runtime === 'rust' ? RUSTC : runtime === 'c' ? GCC : GPP;
 
           execChild = spawn(command, args, {
-            cwd: workingDirectory, stdio: ['ignore', 'pipe', 'pipe'], timeout: processTimeout, detached: false
+            cwd: workingDirectory, stdio: ['pipe', 'pipe', 'pipe'], timeout: processTimeout, detached: false
           });
 
           activeChild = execChild;
@@ -223,7 +223,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
                 writeLog('stdout', execStdout);
                 writeLog('stderr', execStderr);
                 const exePath = path.join(tempDir, binName);
-                const runChild = spawn(exePath, [], { cwd: workingDirectory, stdio: ['ignore', 'pipe', 'pipe'], timeout: processTimeout, detached: false });
+                const runChild = spawn(exePath, [], { cwd: workingDirectory, stdio: ['pipe', 'pipe', 'pipe'], timeout: processTimeout, detached: false });
                 let runStdout = '';
                 let runStderr = '';
                 let runKilled = false;
@@ -343,7 +343,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
               const classpath = [tempDir, workingDirectory].join(cpSeparator);
 
               execChild = spawn(JAVA, ['-cp', classpath, className], {
-                cwd: workingDirectory, stdio: ['ignore', 'pipe', 'pipe'], timeout: processTimeout, detached: false
+                cwd: workingDirectory, stdio: ['pipe', 'pipe', 'pipe'], timeout: processTimeout, detached: false
               });
 
               activeChild = execChild;
@@ -427,7 +427,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
           const tsFile = path.join(tempDir, 'code.ts');
           writeFileSync(tsFile, code);
           child = spawn(config.command, [...config.args, tsFile], {
-            cwd: workingDirectory, stdio: ['ignore', 'pipe', 'pipe'], timeout: processTimeout, detached: false
+            cwd: workingDirectory, stdio: ['pipe', 'pipe', 'pipe'], timeout: processTimeout, detached: false
           });
         } catch (e) {
           cleanupTemp();
@@ -438,7 +438,7 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
         }
       } else {
         child = spawn(config.command, [...config.args, code], {
-          cwd: workingDirectory, stdio: ['ignore', 'pipe', 'pipe'], timeout: processTimeout, detached: false
+          cwd: workingDirectory, stdio: ['pipe', 'pipe', 'pipe'], timeout: processTimeout, detached: false
         });
       }
 
@@ -517,6 +517,12 @@ async function executeInProcess(code, runtime, workingDirectory, processTimeout)
 let currentJobId = null;
 
 parentPort.on('message', async (msg) => {
+  if (msg.type === 'stdin') {
+    if (activeChild && activeChild.stdin && !activeChild.stdin.destroyed) {
+      try { activeChild.stdin.write(msg.data); } catch (e) {}
+    }
+    return;
+  }
   const { jobId, code, runtime, workingDirectory, timeout = 30000 } = msg;
   currentJobId = jobId;
   try {
