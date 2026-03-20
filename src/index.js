@@ -76,6 +76,10 @@ async function healthCheck() {
 
 async function ensureRunner() {
   if (await healthCheck()) return false;
+  await new Promise(r => setTimeout(r, 1000));
+  if (await healthCheck()) return false;
+  await new Promise(r => setTimeout(r, 2000));
+  if (await healthCheck()) return false;
   process.stderr.write('Auto-starting runner...\n');
   await withPm2(async () => {
     await pm2delete(PM2_NAME).catch(() => {});

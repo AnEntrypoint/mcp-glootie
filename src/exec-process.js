@@ -72,11 +72,11 @@ async function runCompiled(spawnResult) {
   if (RUNTIME === 'java') {
     const { spawn } = await import('child_process');
     const JAVA = 'java';
-    runChild2 = spawn(JAVA, ['-cp', cp, className], { cwd: CWD, stdio: ['pipe','pipe','pipe'] });
+    runChild2 = spawn(JAVA, ['-cp', cp, className], { cwd: CWD, stdio: ['pipe','pipe','pipe'], windowsHide: true });
     runCleanup = cleanup;
   } else {
     const { spawn } = await import('child_process');
-    runChild2 = spawn(binPath, [], { cwd: CWD, stdio: ['pipe','pipe','pipe'] });
+    runChild2 = spawn(binPath, [], { cwd: CWD, stdio: ['pipe','pipe','pipe'], windowsHide: true });
     runCleanup = cleanup;
   }
   const result = await runChild(runChild2, runCleanup);

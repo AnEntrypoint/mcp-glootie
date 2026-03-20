@@ -6,7 +6,7 @@ import os from 'os';
 function findBin(...candidates) {
   const probe = process.platform === 'win32' ? b => `where ${b}` : b => `which ${b}`;
   for (const bin of candidates) {
-    try { execSync(probe(bin), { stdio: 'ignore', timeout: 3000 }); return bin; } catch {}
+    try { execSync(probe(bin), { stdio: 'ignore', timeout: 3000, windowsHide: true }); return bin; } catch {}
   }
   return candidates[0];
 }
@@ -15,6 +15,7 @@ const IS_WIN = process.platform === 'win32';
 const PYTHON = findBin('python3', 'python');
 const SHELL = IS_WIN ? 'cmd.exe' : findBin('bash', 'sh');
 const POWERSHELL = findBin('pwsh', 'powershell');
+const BASH = findBin('bash');
 const DENO = findBin('deno');
 const GO = findBin('go');
 const RUSTC = findBin('rustc');
@@ -27,7 +28,7 @@ const SIGTERM_TIMEOUT = 5000;
 
 function killChild(child) {
   try {
-    if (IS_WIN) spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' });
+    if (IS_WIN) spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore', windowsHide: true });
     else { child.kill('SIGTERM'); setTimeout(() => { try { if (!child.killed) child.kill('SIGKILL'); } catch {} }, SIGTERM_TIMEOUT); }
   } catch {}
 }
@@ -40,7 +41,7 @@ function makeTmp(ext, content) {
 }
 
 function spawnOpts(cwd, stdin = 'pipe') {
-  return { cwd: cwd || process.cwd(), stdio: [stdin, 'pipe', 'pipe'], detached: false };
+  return { cwd: cwd || process.cwd(), stdio: [stdin, 'pipe', 'pipe'], detached: false, windowsHide: true };
 }
 
 export function spawnProcess(runtime, code, cwd) {
@@ -64,13 +65,9 @@ export function spawnProcess(runtime, code, cwd) {
     return { child, cleanup };
   }
   if (runtime === 'bash') {
-    if (IS_WIN) {
-      const { dir, file } = makeTmp('.ps1', `$ErrorActionPreference = 'Continue'\n${code}`);
-      tmpDir = dir;
-      const child = spawn(POWERSHELL, ['-NoProfile', '-NonInteractive', '-File', file], spawnOpts(cwd));
-      return { child, cleanup };
-    }
-    const child = spawn(SHELL, ['-c', code], spawnOpts(cwd));
+    const { dir, file } = makeTmp('.sh', code);
+    tmpDir = dir;
+    const child = spawn(BASH, [file], spawnOpts(cwd));
     return { child, cleanup };
   }
   if (runtime === 'deno') {
