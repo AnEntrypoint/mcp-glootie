@@ -93,6 +93,10 @@ async function handleRPC(body) {
       const result = await backgroundStore.waitForOutput(params.taskId, params.timeoutMs);
       return result;
     }
+    case 'sendStdin': {
+      const ok = pool.sendStdin(params.taskId, params.data);
+      return { ok };
+    }
     case 'shutdown':
       setImmediate(gracefulShutdown);
       return { ok: true };
