@@ -27,7 +27,7 @@ function rpcCall(method, params, timeoutMs = 10000) {
           if (res.statusCode !== 200) return reject(new Error(`task runner HTTP ${res.statusCode}: ${data}`));
           try {
             const parsed = JSON.parse(data);
-            if (parsed.error) return reject(new Error(parsed.error));
+            if (parsed.error) return reject(new Error(typeof parsed.error === 'object' ? parsed.error.message : parsed.error));
             resolve(parsed.result);
           } catch {
             reject(new Error(`task runner invalid response: ${data}`));
