@@ -39,8 +39,8 @@ function makeTmp(ext, content) {
   return { dir, file };
 }
 
-function spawnOpts(cwd) {
-  return { cwd: cwd || process.cwd(), stdio: ['pipe', 'pipe', 'pipe'], detached: false };
+function spawnOpts(cwd, stdin = 'pipe') {
+  return { cwd: cwd || process.cwd(), stdio: [stdin, 'pipe', 'pipe'], detached: false };
 }
 
 export function spawnProcess(runtime, code, cwd) {
@@ -48,7 +48,7 @@ export function spawnProcess(runtime, code, cwd) {
   const cleanup = () => { if (tmpDir) { try { rmSync(tmpDir, { recursive: true, force: true }); } catch {} tmpDir = null; } };
 
   if (runtime === 'nodejs' || runtime === 'typescript') {
-    const child = spawn('bun', ['-e', code], spawnOpts(cwd));
+    const child = spawn('bun', ['-e', code], spawnOpts(cwd, 'ignore'));
     return { child, cleanup };
   }
   if (runtime === 'python') {

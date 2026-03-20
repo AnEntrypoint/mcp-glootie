@@ -38,11 +38,13 @@ async function runChild(child, cleanup) {
   child.stdout?.on('data', async (d) => {
     const str = d.toString('utf8');
     stdout += str;
+    process.stdout.write(str);
     await rpc('appendOutput', { taskId, type: 'stdout', data: str });
   });
   child.stderr?.on('data', async (d) => {
     const str = d.toString('utf8');
     stderr += str;
+    process.stderr.write(str);
     await rpc('appendOutput', { taskId, type: 'stderr', data: str });
   });
   return new Promise((resolve) => {
@@ -83,13 +85,16 @@ async function runCompiled(spawnResult) {
     : { taskId, error: result.stderr || 'Execution failed' });
 }
 
+process.stderr.write('[exec-process] task=' + taskId + ' runtime=' + RUNTIME + ' starting\n');
 const spawnResult = spawnProcess(RUNTIME, code, CWD);
 if (spawnResult.isCompile) {
   await runCompiled(spawnResult);
 } else {
   const result = await runChild(spawnResult.child, spawnResult.cleanup);
+  process.stderr.write('[exec-process] task=' + taskId + ' child exited code=' + result.exitCode + '\n');
   await rpc(result.ok ? 'completeTask' : 'failTask', result.ok
     ? { taskId, result: { success: true, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr } }
     : { taskId, error: result.error || result.stderr || 'Execution failed' });
 }
+process.stderr.write('[exec-process] task=' + taskId + ' done\n');
 process.exit(0);
