@@ -299,7 +299,10 @@ async function cmdSleep(taskId, timeoutSeconds, nextOutputMode) {
 
   while (Date.now() - startTime < timeout) {
     const task = await rpcCall('getTask', { taskId: rawId }).then(r => r?.task ?? r).catch(() => null);
-    if (!task) break;
+    if (!task) {
+      console.log('Task not found or already completed.');
+      return;
+    }
     await drainOutput();
     if (task.status !== 'running' && task.status !== 'pending') {
       if (task.result) {
@@ -334,6 +337,17 @@ async function cmdType(taskId, inputData) {
   } else {
     process.stderr.write(`Task ${taskId} not found or not running\n`);
     return 1;
+  }
+}
+
+async function cmdPm2list() {
+  await ensureRunner();
+  const res = await rpcCall('pm2list', {});
+  const procs = res?.processes ?? [];
+  if (procs.length === 0) { console.log('No PM2 processes found.'); return; }
+  for (const p of procs) {
+    const uptime = p.uptime != null ? p.uptime + 's' : 'n/a';
+    console.log(`${p.name}  status=${p.status}  pid=${p.pid ?? 'n/a'}  uptime=${uptime}`);
   }
 }
 
@@ -375,6 +389,7 @@ Commands:
                           Wait for task completion (default 30s timeout)
   type <task_id> <input>  Send input to stdin of a running background task
   close <task_id>         Delete a background task
+  pm2list                 List all PM2 processes (runner + exec tasks)
   runner start|stop|status
                           Manage the task runner process (PM2)
 
@@ -417,6 +432,8 @@ try {
     if (!rest[0]) { process.stderr.write('Task ID required\n'); exitCode = 1; }
     else if (!rest[1]) { process.stderr.write('Input required\n'); exitCode = 1; }
     else exitCode = (await cmdType(rest[0], rest.slice(1).join(' '))) ?? 0;
+  } else if (cmd === 'pm2list') {
+    await cmdPm2list();
   } else {
     process.stderr.write(`Unknown command: ${cmd}\n`);
     usage();

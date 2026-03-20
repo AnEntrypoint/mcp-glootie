@@ -26,7 +26,22 @@ async function tryListen(server, port) {
   return new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', () => resolve()); });
 }
 
+async function cleanupStaleProcesses() {
+  await withPm2(() => new Promise(res => {
+    pm2lib.list((err, list) => {
+      if (err || !list) return res();
+      const stale = list.filter(p => p.name && p.name.startsWith('gm-exec-task-'));
+      let pending = stale.length;
+      if (pending === 0) return res();
+      for (const p of stale) {
+        pm2lib.delete(p.name, () => { if (--pending === 0) res(); });
+      }
+    });
+  })).catch(() => {});
+}
+
 async function startServer() {
+  await cleanupStaleProcesses();
   const server = http.createServer(handleRequest);
   for (let i = 0; i < 10; i++) {
     const port = randomPort();
@@ -85,7 +100,12 @@ async function handleRPC(body) {
       const { code, runtime, workingDirectory, timeout, backgroundTaskId: taskId } = params;
       await startExecProcess(taskId, code, runtime, workingDirectory);
       const task = await pollForCompletion(taskId, timeout || 15000);
-      if (task) return { result: { success: task.status === 'completed', stdout: task.result?.stdout || '', stderr: task.result?.stderr || '', exitCode: task.result?.exitCode ?? 0, backgroundTaskId: taskId, completed: true } };
+      if (task) {
+        taskPm2Ids.delete(taskId);
+        backgroundStore.deleteTask(taskId);
+        await withPm2(() => new Promise(r => pm2lib.delete('gm-exec-task-' + taskId, () => r()))).catch(() => {});
+        return { result: { success: task.status === 'completed', stdout: task.result?.stdout || '', stderr: task.result?.stderr || '', exitCode: task.result?.exitCode ?? 0, backgroundTaskId: taskId, completed: true } };
+      }
       return { result: { backgroundTaskId: taskId, persisted: true } };
     }
     case 'createTask': {
@@ -112,6 +132,11 @@ async function handleRPC(body) {
     }
     case 'listTasks':
       return { tasks: backgroundStore.getAllTasks().map(t => ({ id: t.id, status: t.status })) };
+    case 'pm2list': {
+      const list = await withPm2(() => new Promise((res, rej) => pm2lib.list((err, l) => err ? rej(err) : res(l))));
+      const filtered = list.filter(p => p.name && p.name.startsWith('gm-exec-'));
+      return { processes: filtered.map(p => ({ name: p.name, status: p.pm2_env?.status, pid: p.pid, uptime: p.pm2_env?.pm_uptime ? Math.floor((Date.now() - p.pm2_env.pm_uptime) / 1000) : null })) };
+    }
     case 'appendOutput':
       backgroundStore.appendOutput(params.taskId, params.type, params.data);
       return {};
