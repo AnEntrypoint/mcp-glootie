@@ -65,6 +65,10 @@ export function spawnProcess(runtime, code, cwd) {
     return { child, cleanup };
   }
   if (runtime === 'bash') {
+    if (IS_WIN) {
+      const child = spawn(BASH, ['-c', code], spawnOpts(cwd));
+      return { child, cleanup };
+    }
     const { dir, file } = makeTmp('.sh', code);
     tmpDir = dir;
     const child = spawn(BASH, [file], spawnOpts(cwd));
