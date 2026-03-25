@@ -212,6 +212,18 @@ async function handleRequest(req, res) {
 }
 
 async function gracefulShutdown() {
+  for (const [taskId, proc] of activeProcesses) {
+    try {
+      const IS_WIN = process.platform === 'win32';
+      if (IS_WIN) {
+        const { spawnSync } = require('child_process');
+        spawnSync('taskkill', ['/pid', String(proc.pid), '/t', '/f'], { stdio: 'ignore', windowsHide: true });
+      } else {
+        proc.kill('SIGTERM');
+      }
+    } catch {}
+  }
+  activeProcesses.clear();
   backgroundStore.shutdown();
   if (server) server.close(() => process.exit(0));
   else process.exit(0);
