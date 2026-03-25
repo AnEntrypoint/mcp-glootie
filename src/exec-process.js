@@ -86,6 +86,9 @@ async function runCompiled(spawnResult) {
   await rpc('completeTask', { taskId, result: { success: result.ok, exitCode: result.exitCode ?? 1, stdout: result.stdout || '', stderr: result.stderr || '', error: result.error || null } });
 }
 
+// Keep Bun's event loop alive while child runs
+const _keepalive = setInterval(() => {}, 30000);
+
 process.stderr.write('[exec-process] task=' + taskId + ' runtime=' + RUNTIME + ' starting\n');
 const spawnResult = spawnProcess(RUNTIME, code, CWD);
 if (spawnResult.isCompile) {
@@ -95,5 +98,6 @@ if (spawnResult.isCompile) {
   process.stderr.write('[exec-process] task=' + taskId + ' child exited code=' + result.exitCode + '\n');
   await rpc('completeTask', { taskId, result: { success: result.ok, exitCode: result.exitCode ?? 1, stdout: result.stdout || '', stderr: result.stderr || '', error: result.error || null } });
 }
+clearInterval(_keepalive);
 process.stderr.write('[exec-process] task=' + taskId + ' done\n');
 process.exit(0);

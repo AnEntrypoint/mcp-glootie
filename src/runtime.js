@@ -70,7 +70,9 @@ export function spawnProcess(runtime, code, cwd) {
       const parts = code.match(/^\s*cd\s+(\S+)\s*&&\s*node\s+(.+)$/);
       const nodeCwd = parts ? parts[1].replace(/['"]/g, '') : cwd;
       const nodeArgs = (parts ? parts[2] : nodeMatch[1]).trim().split(/\s+/);
-      const child = spawn('node', nodeArgs, spawnOpts(nodeCwd || cwd));
+      const scriptPath = path.resolve(nodeCwd || cwd, nodeArgs[0]);
+      const wrapper = `await import(${JSON.stringify('file:///' + scriptPath.replace(/\\/g, '/'))});setInterval(()=>{},2147483647)`;
+      const child = spawn('bun', ['-e', wrapper], spawnOpts(nodeCwd || cwd));
       return { child, cleanup };
     }
     if (IS_WIN) {
