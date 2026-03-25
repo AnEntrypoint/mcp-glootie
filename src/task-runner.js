@@ -3,7 +3,6 @@ import { writeFileSync, unlinkSync, mkdirSync, readFileSync } from 'fs';
 import { join, resolve, dirname } from 'path';
 import { tmpdir, homedir } from 'os';
 import { fileURLToPath } from 'url';
-import { spawn as nodeSpawn } from 'child_process';
 import { backgroundStore } from './background-tasks.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -78,27 +77,40 @@ async function startExecProcess(taskId, code, runtime, workingDirectory) {
   childEnv.RUNTIME = runtime
   childEnv.CWD = workingDirectory
   childEnv.CODE_FILE = codeFile
-  const proc = nodeSpawn('node', [EXEC_PROCESS_SCRIPT], {
+  const proc = Bun.spawn(['bun', EXEC_PROCESS_SCRIPT], {
     env: childEnv,
     cwd: workingDirectory || process.cwd(),
-    stdio: ['pipe', 'pipe', 'pipe'],
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
     windowsHide: true,
   });
 
   activeProcesses.set(taskId, proc);
   backgroundStore.startTask(taskId);
 
-  const { createWriteStream } = await import('fs');
-  const outStream = createWriteStream(outLogPath, { flags: 'a' });
-  const errStream = createWriteStream(errLogPath, { flags: 'a' });
-  proc.stdout.on('data', (chunk) => { outStream.write(chunk); });
-  proc.stderr.on('data', (chunk) => { errStream.write(chunk); });
+  // Pipe stdout/stderr to log files
+  (async () => {
+    const outStream = Bun.file(outLogPath).writer();
+    for await (const chunk of proc.stdout) {
+      outStream.write(new TextDecoder().decode(chunk));
+    }
+    outStream.flush();
+  })().catch(() => {});
 
-  proc.on('close', (code) => {
+  (async () => {
+    const errStream = Bun.file(errLogPath).writer();
+    for await (const chunk of proc.stderr) {
+      errStream.write(new TextDecoder().decode(chunk));
+    }
+    errStream.flush();
+  })().catch(() => {});
+
+  // Handle process exit
+  proc.exited.then((code) => {
+    process.stderr.write('[runner] exec-process exited taskId=' + taskId + ' code=' + code + ' pid=' + proc.pid + '\n');
     activeProcesses.delete(taskId);
-    outStream.end();
-    errStream.end();
-  });
+  }).catch((e) => { process.stderr.write('[runner] exec-process error: ' + e + '\n'); });
 }
 
 async function pollForCompletion(taskId, timeoutMs) {
@@ -186,7 +198,8 @@ async function handleRPC(body) {
       const proc = activeProcesses.get(params.taskId);
       if (!proc || !proc.stdin) return { ok: false };
       try {
-        proc.stdin.write(params.data);
+        proc.stdin.write(new TextEncoder().encode(params.data));
+        proc.stdin.flush();
         return { ok: true };
       } catch { return { ok: false }; }
     }
