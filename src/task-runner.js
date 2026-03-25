@@ -3,6 +3,7 @@ import { writeFileSync, unlinkSync, mkdirSync, readFileSync } from 'fs';
 import { join, resolve, dirname } from 'path';
 import { tmpdir, homedir } from 'os';
 import { fileURLToPath } from 'url';
+import { spawn as nodeSpawn } from 'child_process';
 import { backgroundStore } from './background-tasks.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -69,48 +70,35 @@ async function startExecProcess(taskId, code, runtime, workingDirectory) {
   const outLogPath = join(logDir, 'gm-exec-task-' + taskId + '-out.log');
   const errLogPath = join(logDir, 'gm-exec-task-' + taskId + '-error.log');
 
-  const proc = Bun.spawn(['bun', EXEC_PROCESS_SCRIPT], {
-    env: {
-      ...process.env,
-      TASK_ID: String(taskId),
-      PORT: String(currentPort),
-      RUNTIME: runtime,
-      CWD: workingDirectory,
-      CODE_FILE: codeFile,
-    },
+  const childEnv = { ...process.env }
+  delete childEnv.PORT
+  process.stderr.write('[runner] childEnv.PORT=' + childEnv.PORT + ' process.env.PORT=' + process.env.PORT + ' rpcPort=' + currentPort + '\n')
+  childEnv.TASK_ID = String(taskId)
+  childEnv.GM_EXEC_RPC_PORT = String(currentPort)
+  childEnv.RUNTIME = runtime
+  childEnv.CWD = workingDirectory
+  childEnv.CODE_FILE = codeFile
+  const proc = nodeSpawn('bun', [EXEC_PROCESS_SCRIPT], {
+    env: childEnv,
     cwd: workingDirectory || process.cwd(),
-    stdin: 'pipe',
-    stdout: 'pipe',
-    stderr: 'pipe',
+    stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
   });
 
   activeProcesses.set(taskId, proc);
   backgroundStore.startTask(taskId);
 
-  // Pipe stdout to log file + let exec-process handle RPC
-  (async () => {
-    const outStream = Bun.file(outLogPath).writer();
-    for await (const chunk of proc.stdout) {
-      const str = new TextDecoder().decode(chunk);
-      outStream.write(str);
-    }
-    outStream.flush();
-  })().catch(() => {});
+  const { createWriteStream } = await import('fs');
+  const outStream = createWriteStream(outLogPath, { flags: 'a' });
+  const errStream = createWriteStream(errLogPath, { flags: 'a' });
+  proc.stdout.on('data', (chunk) => { outStream.write(chunk); });
+  proc.stderr.on('data', (chunk) => { errStream.write(chunk); });
 
-  (async () => {
-    const errStream = Bun.file(errLogPath).writer();
-    for await (const chunk of proc.stderr) {
-      const str = new TextDecoder().decode(chunk);
-      errStream.write(str);
-    }
-    errStream.flush();
-  })().catch(() => {});
-
-  // Handle process exit
-  proc.exited.then((code) => {
+  proc.on('close', (code) => {
     activeProcesses.delete(taskId);
-  }).catch(() => {});
+    outStream.end();
+    errStream.end();
+  });
 }
 
 async function pollForCompletion(taskId, timeoutMs) {
@@ -198,8 +186,7 @@ async function handleRPC(body) {
       const proc = activeProcesses.get(params.taskId);
       if (!proc || !proc.stdin) return { ok: false };
       try {
-        proc.stdin.write(new TextEncoder().encode(params.data));
-        proc.stdin.flush();
+        proc.stdin.write(params.data);
         return { ok: true };
       } catch { return { ok: false }; }
     }

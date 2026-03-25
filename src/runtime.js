@@ -65,6 +65,14 @@ export function spawnProcess(runtime, code, cwd) {
     return { child, cleanup };
   }
   if (runtime === 'bash') {
+    const nodeMatch = code.match(/^\s*(?:cd\s+\S+\s*&&\s*)?node\s+(\S+.*?)$/);
+    if (IS_WIN && nodeMatch) {
+      const parts = code.match(/^\s*cd\s+(\S+)\s*&&\s*node\s+(.+)$/);
+      const nodeCwd = parts ? parts[1].replace(/['"]/g, '') : cwd;
+      const nodeArgs = (parts ? parts[2] : nodeMatch[1]).trim().split(/\s+/);
+      const child = spawn('node', nodeArgs, spawnOpts(nodeCwd || cwd));
+      return { child, cleanup };
+    }
     if (IS_WIN) {
       const child = spawn(BASH, ['-c', code], spawnOpts(cwd));
       return { child, cleanup };

@@ -2,9 +2,9 @@ import http from 'http';
 import { readFileSync, unlinkSync } from 'fs';
 import { spawnProcess, killChild } from './runtime.js';
 
-const { TASK_ID, PORT, RUNTIME, CWD, CODE_FILE } = process.env;
+const { TASK_ID, GM_EXEC_RPC_PORT, PORT, RUNTIME, CWD, CODE_FILE } = process.env;
 const taskId = parseInt(TASK_ID, 10);
-const port = parseInt(PORT, 10);
+const port = parseInt(GM_EXEC_RPC_PORT || PORT, 10);
 
 function rpc(method, params) {
   return new Promise((resolve) => {
