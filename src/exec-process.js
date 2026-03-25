@@ -32,19 +32,22 @@ process.stdin.on('data', (data) => {
   }
 });
 
+const _logOut = process.env.GM_EXEC_LOG_OUT ? require('fs').createWriteStream(process.env.GM_EXEC_LOG_OUT, { flags: 'a' }) : null;
+const _logErr = process.env.GM_EXEC_LOG_ERR ? require('fs').createWriteStream(process.env.GM_EXEC_LOG_ERR, { flags: 'a' }) : null;
+
 async function runChild(child, cleanup) {
   activeChild = child;
   let stdout = '', stderr = '';
   child.stdout?.on('data', async (d) => {
     const str = d.toString('utf8');
     stdout += str;
-    process.stdout.write(str);
+    if (_logOut) _logOut.write(str);
     await rpc('appendOutput', { taskId, type: 'stdout', data: str });
   });
   child.stderr?.on('data', async (d) => {
     const str = d.toString('utf8');
     stderr += str;
-    process.stderr.write(str);
+    if (_logErr) _logErr.write(str);
     await rpc('appendOutput', { taskId, type: 'stderr', data: str });
   });
   return new Promise((resolve) => {

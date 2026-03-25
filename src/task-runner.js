@@ -78,7 +78,7 @@ async function startExecProcess(taskId, code, runtime, workingDirectory) {
   childEnv.RUNTIME = runtime
   childEnv.CWD = workingDirectory
   childEnv.CODE_FILE = codeFile
-  const proc = nodeSpawn('bun', [EXEC_PROCESS_SCRIPT], {
+  const proc = nodeSpawn('node', [EXEC_PROCESS_SCRIPT], {
     env: childEnv,
     cwd: workingDirectory || process.cwd(),
     stdio: ['pipe', 'pipe', 'pipe'],
