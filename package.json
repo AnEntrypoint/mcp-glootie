@@ -15,8 +15,7 @@
     "dev": "bun run src/index.js ./test"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.18.2",
-    "pm2": "^6.0.14"
+    "@modelcontextprotocol/sdk": "^1.18.2"
   },
   "engines": {
     "bun": ">=1.0.0"

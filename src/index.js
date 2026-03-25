@@ -4,58 +4,28 @@ import { existsSync, readFileSync } from 'fs';
 import { resolve, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { tmpdir } from 'os';
-
-const pm2lib = require('pm2');
+import * as bm2 from './bm2.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUNNER_SCRIPT = resolve(__dirname, 'task-runner.js');
 const PORT_FILE = join(tmpdir(), 'glootie-runner.port');
-const PM2_NAME = 'gm-exec-runner';
+const BM2_NAME = 'gm-exec-runner';
 const HARD_CEILING_MS = 15000;
-
-function pm2connect() {
-  return new Promise((res, rej) => pm2lib.connect(err => err ? rej(err) : res()));
-}
-function pm2disconnect() {
-  return new Promise(res => pm2lib.disconnect(res));
-}
-function pm2start(opts) {
-  return new Promise((res, rej) => pm2lib.start(opts, (err, apps) => err ? rej(err) : res(apps)));
-}
-function pm2delete(name) {
-  return new Promise((res, rej) => pm2lib.delete(name, (err) => err ? rej(err) : res()));
-}
-function pm2list() {
-  return new Promise((res, rej) => pm2lib.list((err, list) => err ? rej(err) : res(list)));
-}
-function pm2describe(name) {
-  return new Promise((res, rej) => pm2lib.describe(name, (err, list) => err ? rej(err) : res(list)));
-}
-
-async function withPm2(fn) {
-  await pm2connect();
-  try { return await fn(); }
-  finally { await pm2disconnect(); }
-}
 
 async function printRunningTools() {
   try {
-    await pm2connect();
-    const list = await pm2list();
-    await pm2disconnect();
-    const online = list.filter(p => p.pm2_env?.status === 'online');
-    if (online.length === 0) {
+    const procs = bm2.list().filter(p => p.status === 'online');
+    if (procs.length === 0) {
       process.stderr.write('\n[Running tools: none]\n');
     } else {
       process.stderr.write('\n[Running tools]\n');
-      for (const p of online) {
-        const uptime = Math.floor((Date.now() - (p.pm2_env.pm_uptime || Date.now())) / 1000);
-        process.stderr.write(`  ${p.name}  pid=${p.pid}  uptime=${uptime}s\n`);
+      for (const p of procs) {
+        process.stderr.write(`  ${p.name}  pid=${p.pid}\n`);
       }
       process.stderr.write(`  Tip: gm-exec sleep <task_id>   # wait for a task (default 30s timeout)\n`);
       process.stderr.write(`       gm-exec status <task_id>  # check task status\n`);
     }
-  } catch { /* pm2 not available */ }
+  } catch {}
 }
 
 async function healthCheck() {
@@ -81,10 +51,7 @@ async function ensureRunner() {
   await new Promise(r => setTimeout(r, 2000));
   if (await healthCheck()) return false;
   process.stderr.write('Auto-starting runner...\n');
-  await withPm2(async () => {
-    await pm2delete(PM2_NAME).catch(() => {});
-    await pm2start({ script: 'bun', args: RUNNER_SCRIPT, name: PM2_NAME, autorestart: false, watch: false });
-  });
+  bm2.start(BM2_NAME, RUNNER_SCRIPT);
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 500));
     if (await healthCheck()) return true;
@@ -93,7 +60,7 @@ async function ensureRunner() {
 }
 
 async function stopRunner() {
-  await withPm2(() => pm2delete(PM2_NAME).catch(() => {}));
+  bm2.kill(BM2_NAME);
 }
 
 function rpcCall(method, params, timeoutMs = 10000) {
@@ -158,7 +125,7 @@ async function runCode(code, runtime, workingDirectory) {
     console.log(`  gm-exec type ${id} <input>  # send stdin to running task`);
     console.log(`  gm-exec close ${id}       # delete task when done`);
     console.log(`  gm-exec runner stop       # stop runner when all tasks done`);
-    console.log(`\nRunner kept alive: ${PM2_NAME} (PM2)`);
+    console.log(`\nRunner kept alive: ${BM2_NAME} (bm2)`);
     return 0;
   }
 
@@ -181,10 +148,7 @@ async function cmdRunnerStart() {
     console.log(`Runner already healthy on port ${readFileSync(PORT_FILE, 'utf8').trim()}`);
     return;
   }
-  await withPm2(async () => {
-    await pm2delete(PM2_NAME).catch(() => {});
-    await pm2start({ script: 'bun', args: RUNNER_SCRIPT, name: PM2_NAME, autorestart: false, watch: false });
-  });
+  bm2.start(BM2_NAME, RUNNER_SCRIPT);
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 500));
     if (await healthCheck()) { console.log(`Runner started on port ${readFileSync(PORT_FILE, 'utf8').trim()}`); return; }
@@ -198,18 +162,13 @@ async function cmdRunnerStop() {
 }
 
 async function cmdRunnerStatus() {
-  const desc = await withPm2(() => pm2describe(PM2_NAME).catch(() => []));
-  if (!desc || desc.length === 0) { console.log(`${PM2_NAME}: not found`); return; }
-  const p = desc[0];
-  const env = p.pm2_env || {};
-  const uptime = env.pm_uptime ? Math.floor((Date.now() - env.pm_uptime) / 1000) + 's' : 'n/a';
-  console.log(`name:     ${p.name}`);
-  console.log(`status:   ${env.status}`);
-  console.log(`pid:      ${p.pid}`);
-  console.log(`uptime:   ${uptime}`);
-  console.log(`restarts: ${env.restart_time ?? 0}`);
+  const desc = bm2.describe(BM2_NAME);
+  if (!desc) { console.log(`${BM2_NAME}: not found`); return; }
+  console.log(`name:     ${desc.name}`);
+  console.log(`status:   ${desc.status}`);
+  console.log(`pid:      ${desc.pid}`);
   if (existsSync(PORT_FILE)) console.log(`port:     ${readFileSync(PORT_FILE, 'utf8').trim()}`);
-  if (env.status === 'online') {
+  if (desc.status === 'online') {
     console.log(`\nRunner is active. If you have background tasks:`);
     console.log(`  gm-exec sleep <task_id>      # wait for task completion (up to 30s)`);
     console.log(`  gm-exec status <task_id>     # check task status`);
@@ -348,10 +307,11 @@ async function cmdPm2list() {
   await ensureRunner();
   const res = await rpcCall('pm2list', {});
   const procs = res?.processes ?? [];
-  if (procs.length === 0) { console.log('No PM2 processes found.'); return; }
-  for (const p of procs) {
-    const uptime = p.uptime != null ? p.uptime + 's' : 'n/a';
-    console.log(`${p.name}  status=${p.status}  pid=${p.pid ?? 'n/a'}  uptime=${uptime}`);
+  const bm2Procs = bm2.list().filter(p => p.status === 'online');
+  const all = [...bm2Procs.map(p => ({ name: p.name, status: p.status, pid: p.pid })), ...procs];
+  if (all.length === 0) { console.log('No processes found.'); return; }
+  for (const p of all) {
+    console.log(`${p.name}  status=${p.status}  pid=${p.pid ?? 'n/a'}`);
   }
 }
 
@@ -393,9 +353,9 @@ Commands:
                           Wait for task completion (default 30s timeout)
   type <task_id> <input>  Send input to stdin of a running background task
   close <task_id>         Delete a background task
-  pm2list                 List all PM2 processes (runner + exec tasks)
+  pm2list                 List all processes (runner + exec tasks)
   runner start|stop|status
-                          Manage the task runner process (PM2)
+                          Manage the task runner process (bm2)
 
 Languages: nodejs (default), python, go, rust, c, cpp, java, deno, bash, cmd, powershell (Windows)
 `);
