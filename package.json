@@ -12,7 +12,8 @@
   },
   "scripts": {
     "start": "bun run src/index.js",
-    "dev": "bun run src/index.js ./test"
+    "dev": "bun run src/index.js ./test",
+    "test": "bun test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.2"
