@@ -107,7 +107,9 @@ export function spawnProcess(runtime, code, cwd) {
   }
   if (runtime === 'java') {
     const className = 'Main';
-    const { dir, file } = makeTmp('.java', `public class ${className} {\n  public static void main(String[] args) {\n${code.split('\n').map(l => '    ' + l).join('\n')}\n  }\n}`);
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'glootie_'));
+    const file = path.join(dir, `${className}.java`);
+    writeFileSync(file, `public class ${className} {\n  public static void main(String[] args) {\n${code.split('\n').map(l => '    ' + l).join('\n')}\n  }\n}`);
     tmpDir = dir;
     const cpSep = IS_WIN ? ';' : ':';
     const cp = [dir, cwd].join(cpSep);
