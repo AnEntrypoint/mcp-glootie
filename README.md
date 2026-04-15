@@ -1,5 +1,7 @@
 # gm-exec
 
+## NOTE: If you're looking fore mcp-repl or, glootie, or GM... its now at: http://github.com/anEntrypoint/gm
+
 Code execution tool for MCP clients and CLI. Multi-language support (JS/TS, Python, Go, Rust, C, C++, Deno, Java, bash). Built on Bun with PM2-managed process isolation.
 
 ## MCP Server
