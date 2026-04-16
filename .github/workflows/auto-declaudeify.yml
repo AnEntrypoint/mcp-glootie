@@ -17,31 +17,32 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check for Claude commits
+      - name: Check for Claude traces
         id: check
         run: |
-          CLAUDE_COMMITS=$(git log --all --author="Claude" --oneline | wc -l)
-          echo "count=$CLAUDE_COMMITS" >> $GITHUB_OUTPUT
-          if [ "$CLAUDE_COMMITS" -gt 0 ]; then
-            echo "Found $CLAUDE_COMMITS Claude commits, will filter"
-          else
-            echo "No Claude commits found"
-          fi
+          AUTHOR_COMMITS=$(git log --all --author="Claude" --oneline | wc -l)
+          COAUTHOR_COMMITS=$(git log --all --grep="Co-Authored-By.*[Cc]laude" --oneline | wc -l)
+          TOTAL=$((AUTHOR_COMMITS + COAUTHOR_COMMITS))
+          echo "count=$TOTAL" >> $GITHUB_OUTPUT
+          echo "Found $AUTHOR_COMMITS author commits, $COAUTHOR_COMMITS co-author commits"
 
-      - name: Filter Claude from history
+      - name: Remove Claude from history
         if: steps.check.outputs.count != '0'
         run: |
           git config user.name "lanmower"
           git config user.email "lanmower@lanmower.com"
-          git filter-branch --force --env-filter '
-            if [ "$GIT_AUTHOR_NAME" = "Claude" ]; then
-              export GIT_AUTHOR_NAME="lanmower"
-              export GIT_AUTHOR_EMAIL="lanmower@lanmower.com"
-            fi
-            if [ "$GIT_COMMITTER_NAME" = "Claude" ]; then
-              export GIT_COMMITTER_NAME="lanmower"
-              export GIT_COMMITTER_EMAIL="lanmower@lanmower.com"
-            fi' --tag-name-filter cat -- --all
+          git filter-branch --force \
+            --env-filter '
+              if [ "$GIT_AUTHOR_NAME" = "Claude" ]; then
+                export GIT_AUTHOR_NAME="lanmower"
+                export GIT_AUTHOR_EMAIL="lanmower@lanmower.com"
+              fi
+              if [ "$GIT_COMMITTER_NAME" = "Claude" ]; then
+                export GIT_COMMITTER_NAME="lanmower"
+                export GIT_COMMITTER_EMAIL="lanmower@lanmower.com"
+              fi' \
+            --msg-filter 'sed "/^Co-[Aa]uthored-[Bb]y:.*[Cc]laude/d"' \
+            --tag-name-filter cat -- --all
 
       - name: Force push filtered history
         if: steps.check.outputs.count != '0'
