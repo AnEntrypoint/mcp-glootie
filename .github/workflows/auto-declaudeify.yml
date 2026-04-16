@@ -1,0 +1,44 @@
+name: Auto-Declaudeify
+
+on:
+  push:
+    branches: ['**']
+
+jobs:
+  declaudeify:
+    if: contains(github.event.head_commit.author.name, 'Claude') || contains(github.event.head_commit.author.email, 'claude')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for Claude commits
+        id: check
+        run: |
+          CLAUDE_COMMITS=$(git log --all --author="Claude" --oneline | wc -l)
+          echo "count=$CLAUDE_COMMITS" >> $GITHUB_OUTPUT
+          if [ $CLAUDE_COMMITS -gt 0 ]; then
+            echo "Found $CLAUDE_COMMITS Claude commits, will filter"
+          fi
+
+      - name: Filter Claude from history
+        if: steps.check.outputs.count > 0
+        run: |
+          git filter-branch --force --env-filter \
+            'if [ "$GIT_AUTHOR_NAME" = "Claude" ]; then \
+              export GIT_AUTHOR_NAME="lanmower"; \
+              export GIT_AUTHOR_EMAIL="lanmower@lanmower.com"; \
+            fi; \
+            if [ "$GIT_COMMITTER_NAME" = "Claude" ]; then \
+              export GIT_COMMITTER_NAME="lanmower"; \
+              export GIT_COMMITTER_EMAIL="lanmower@lanmower.com"; \
+            fi' \
+            --tag-name-filter cat -- --all
+
+      - name: Force push filtered history
+        if: steps.check.outputs.count > 0
+        run: git push --all --force
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
